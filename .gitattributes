@@ -1,0 +1,4 @@
+# El volumen de arranque se copia a OpenComputers: mantener LF en el repo y en el árbol.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
