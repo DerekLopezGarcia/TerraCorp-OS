@@ -110,4 +110,4 @@ end
 print("")
 print("Siguiente paso:")
 print("  cd " .. filesystem.concat(target, "tools"))
-print("  ./install.lua " .. target .. " <direccionDelDisco> --eeprom")
+print("  ./install.lua " .. target .. " --eeprom")

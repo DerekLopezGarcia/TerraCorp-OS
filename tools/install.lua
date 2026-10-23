@@ -1,9 +1,12 @@
 -- Instalador de TerraCorp OS. Se ejecuta bajo OpenOS, no bajo TerraCorp OS.
 --
---   install <raizDelRepo> <direccionFilesystem> [--eeprom] [--yes]
+--   install <raizDelRepo> [direccionFilesystem] [--eeprom] [--yes] [--list]
 --
 -- Copia src/ a la raíz del filesystem indicado, prepara /etc y /var/log,
 -- fija el volumen de arranque y, opcionalmente, graba eeprom/init.lua.
+-- Sin dirección, detecta el volumen: escribible, distinto del disco de OpenOS
+-- y vacío o con una instalación previa de TerraCorp. Nunca elige un disco con
+-- datos ajenos.
 
 local component = require("component")
 local computer = require("computer")
@@ -16,9 +19,10 @@ local args, options = shell.parse(...)
 local repoRoot = args[1]
 local address = args[2]
 
-if not repoRoot or not address then
-  print("Uso: install <raizDelRepo> <direccionFilesystem> [--eeprom] [--yes]")
-  print("Ejemplo: install /home/TerraCorp-OS 1a2b3c4d-...")
+if not repoRoot then
+  print("Uso: install <raizDelRepo> [direccionFilesystem] [--eeprom] [--yes] [--list]")
+  print("Ejemplo: install /home/TerraCorp-OS")
+  print("         install /home/TerraCorp-OS 1a2b3c4d-... --eeprom")
   return
 end
 
@@ -31,10 +35,143 @@ if not filesystem.isDirectory(sourceRoot) then
   return
 end
 
-local proxy = component.proxy(address)
-if not proxy or proxy.type ~= "filesystem" then
-  io.stderr:write("La dirección no es un filesystem válido: " .. tostring(address) .. "\n")
+--------------------------------------------------------------------------------
+-- Detección del volumen de destino
+--------------------------------------------------------------------------------
+
+local function rootAddress()
+  local ok, proxy = pcall(filesystem.get, "/")
+  if ok and proxy and proxy.address then
+    return proxy.address
+  end
+  return nil
+end
+
+local function countEntries(proxy)
+  local ok, names = pcall(proxy.list, "")
+  if not ok or type(names) ~= "table" then
+    return 0
+  end
+  local total = 0
+  for _ in pairs(names) do
+    total = total + 1
+  end
+  return total
+end
+
+local function stateOf(proxy)
+  local ok, exists = pcall(proxy.exists, "/boot/kernel.lua")
+  if ok and exists then
+    return "instalación existente"
+  end
+  if countEntries(proxy) == 0 then
+    return "vacío"
+  end
+  return "con datos"
+end
+
+local function isWritable(proxy)
+  local ok, readOnly = pcall(proxy.isReadOnly)
+  return ok and readOnly == false
+end
+
+local function describe(item)
+  local size = "sin límite"
+  if item.size ~= math.huge then
+    size = string.format("%.1f MB", item.size / 1048576)
+  end
+  return string.format("%s  %-20s %-16s %10s", item.address:sub(1, 8), item.state, item.label, size)
+end
+
+local function candidates()
+  local root = rootAddress()
+  local found = {}
+
+  for candidate in component.list("filesystem") do
+    if candidate ~= root then
+      local proxy = component.proxy(candidate)
+      if proxy and proxy.type == "filesystem" and isWritable(proxy) then
+        local state = stateOf(proxy)
+        if state ~= "con datos" then
+          found[#found + 1] = {
+            address = candidate,
+            proxy = proxy,
+            state = state,
+            label = (proxy.getLabel and proxy.getLabel()) or "sin etiqueta",
+            size = proxy.spaceTotal() or 0,
+          }
+        end
+      end
+    end
+  end
+
+  table.sort(found, function(a, b)
+    return a.address < b.address
+  end)
+
+  return found
+end
+
+local function pick(found)
+  if #found == 1 then
+    print("Detectado: " .. describe(found[1]))
+    return found[1]
+  end
+
+  print("Volúmenes donde puedo instalar:")
+  for index, item in ipairs(found) do
+    print(string.format("  %d) %s", index, describe(item)))
+  end
+
+  if options.yes then
+    io.stderr:write("Hay varios candidatos: indica la dirección a mano.\n")
+    return nil
+  end
+
+  io.write("¿En cuál instalo? [1] ")
+  local answer = io.read("*l") or ""
+  local index = tonumber(answer) or 1
+  if not found[index] then
+    io.stderr:write("Opción no válida.\n")
+    return nil
+  end
+
+  return found[index]
+end
+
+local proxy
+
+if options.list then
+  local found = candidates()
+  if #found == 0 then
+    print("No hay volúmenes libres donde instalar.")
+  end
+  for _, item in ipairs(found) do
+    print(describe(item))
+  end
   return
+end
+
+if address then
+  proxy = component.proxy(address)
+  if not proxy or proxy.type ~= "filesystem" then
+    io.stderr:write("La dirección no es un filesystem válido: " .. tostring(address) .. "\n")
+    return
+  end
+else
+  local found = candidates()
+  if #found == 0 then
+    io.stderr:write("No encuentro un volumen libre donde instalar.\n")
+    io.stderr:write("Conecta un disquete o un disco vacío, o pasa la dirección: install <raiz> <direccion>\n")
+    return
+  end
+
+  local chosen = pick(found)
+  if not chosen then
+    return
+  end
+
+  proxy, address = chosen.proxy, chosen.address
 end
 
 print(string.format("Origen : %s", sourceRoot))
@@ -43,7 +180,7 @@ print(string.format("Destino: %s (%s)", address, proxy.getLabel and (proxy.getLa
 local used = proxy.spaceUsed()
 local total = proxy.spaceTotal()
 if used and total then
-  print(string.format("Disco  : %.1f / %.1f MB usados", used / 1048576, total / 1048576))
+  print(string.format("Disco  : %.1f / %.1f MB usados · %s", used / 1048576, total / 1048576, stateOf(proxy)))
 end
 
 if not options.yes then
