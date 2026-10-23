@@ -7,6 +7,7 @@
   "scripts": {
     "check": "node tools/harness/check.js",
     "sim": "node tools/harness/simulate.js all",
+    "sim:oc": "node tools/harness/simulate-oc.js",
     "sim:dashboard": "node tools/harness/simulate.js dashboard",
     "sim:console": "node tools/harness/simulate.js console",
     "sim:files": "node tools/harness/simulate.js files",

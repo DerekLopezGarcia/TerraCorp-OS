@@ -3,6 +3,8 @@
 -- en una matriz y señales guionizadas. Detecta errores de ejecución.
 
 local files = BUNDLE
+local STRICT = STRICT == true
+local stats = { listCalls = 0, listReturned = 0, spaceCalls = 0 }
 local written = {}
 local directories = { ["/"] = true, ["/etc"] = true, ["/var"] = true, ["/var/log"] = true }
 local handles = {}
@@ -47,6 +49,33 @@ end
 
 local fsApi = {}
 
+-- El sistema de ficheros real exige que el directorio padre exista para
+-- abrir en escritura; sin esto el arnés oculta fallos de `ensureDir`.
+local function isDirectoryPath(path)
+  if path == "/" or directories[path] then
+    return true
+  end
+  local prefix = path .. "/"
+  for full in pairs(files) do
+    if full:sub(1, #prefix) == prefix then return true end
+  end
+  for full in pairs(written) do
+    if full:sub(1, #prefix) == prefix then return true end
+  end
+  for full in pairs(directories) do
+    if full:sub(1, #prefix) == prefix then return true end
+  end
+  return false
+end
+
+local function parentOf(path)
+  local parent = path:match("^(.*)/[^/]+$")
+  if not parent or parent == "" then
+    return "/"
+  end
+  return parent
+end
+
 function fsApi.open(path, mode)
   mode = mode or "r"
   nextHandle = nextHandle + 1
@@ -59,9 +88,15 @@ function fsApi.open(path, mode)
     end
     handle = { kind = "r", content = content, position = 1 }
   elseif mode == "w" or mode == "wb" then
+    if not isDirectoryPath(parentOf(path)) then
+      return nil, "no such file or directory: " .. tostring(path)
+    end
     written[path] = ""
     handle = { kind = "w", path = path }
   elseif mode == "a" or mode == "ab" then
+    if not isDirectoryPath(parentOf(path)) then
+      return nil, "no such file or directory: " .. tostring(path)
+    end
     written[path] = readReal(path) or ""
     handle = { kind = "a", path = path }
   else
@@ -117,13 +152,13 @@ function fsApi.isDirectory(path)
   return #entriesUnder(path) > 0
 end
 
+-- El componente `filesystem` real devuelve una tabla 1..n con los nombres
+-- (`list` es `String[]` en FileSystem.scala y se convierte a tabla Lua).
 function fsApi.list(path)
   local names = entriesUnder(path)
-  local index = 0
-  return function()
-    index = index + 1
-    return names[index]
-  end
+  stats.listCalls = stats.listCalls + 1
+  stats.listReturned = stats.listReturned + #names
+  return names
 end
 
 function fsApi.size(path)
@@ -134,12 +169,14 @@ function fsApi.size(path)
   return #content
 end
 
-function fsApi.space()
-  return 128
+-- OpenComputers expone `spaceUsed`/`spaceTotal`, en bytes. `space()` no existe.
+function fsApi.spaceUsed()
+  stats.spaceCalls = stats.spaceCalls + 1
+  return 131072
 end
 
 function fsApi.spaceTotal()
-  return 4096
+  return 4194304
 end
 
 function fsApi.makeDirectory(path)
@@ -403,7 +440,8 @@ end
 local chunk, loadError = load(files["/init.lua"], "=/init.lua")
 if not chunk then
   print("NO SE PUDO COMPILAR /init.lua: " .. tostring(loadError))
-  os.exit(1)
+  TC_ERRORS = 1
+  return
 end
 
 local ok, failure = pcall(chunk)
@@ -413,6 +451,7 @@ print("resultado : " .. (ok and "ok" or ("ERROR: " .. tostring(failure))))
 print("apagado   : " .. tostring(shutdownFlag))
 print("llamadas gpu.set: " .. setCalls)
 print("resolución: " .. width .. "x" .. height)
+print("escenario : " .. tostring(scenario) .. (STRICT and " (estricto)" or ""))
 
 print("")
 print("=== PANTALLA FINAL ===")
@@ -436,6 +475,37 @@ if setCalls == 0 then
   errors = errors + 1
 end
 
+-- Comprobaciones estrictas: verifican el resultado visible, no solo que se
+-- llamó al componente. Si el OS deja de hablar la API real, el error acaba
+-- pintado en pantalla y esto lo detecta.
+if STRICT then
+  local rows = {}
+  for y = 1, height do
+    rows[#rows + 1] = table.concat(cells[y])
+  end
+  local screen = table.concat(rows, "\n")
+
+  if screen:find("no se pudo listar", 1, true) then
+    errors = errors + 1
+    print("FALLO: la app Ficheros no pudo listar (¿se espera un iterador en vez de tabla?)")
+  end
+  if screen:find("No se pudo leer el disco", 1, true) then
+    errors = errors + 1
+    print("FALLO: el panel no pudo leer el volumen (spaceUsed/spaceTotal)")
+  end
+  if scenario == "files" and stats.listReturned == 0 then
+    errors = errors + 1
+    print("FALLO: el escenario de Ficheros no listó ningún directorio")
+  end
+  if scenario == "dashboard" and stats.spaceCalls == 0 then
+    errors = errors + 1
+    print("FALLO: el panel no consultó spaceUsed")
+  end
+end
+
 print("")
 print("=== VEREDICTO ===")
+print("list: " .. stats.listCalls .. " llamadas, " .. stats.listReturned .. " entradas · spaceUsed: " .. stats.spaceCalls)
 print(errors == 0 and "sin errores" or (errors .. " problema(s)"))
+
+TC_ERRORS = errors
