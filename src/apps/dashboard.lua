@@ -99,7 +99,7 @@ function dashboard:draw(ctx)
     },
   }
 
-  if self.energyStored then
+  if type(self.energyStored) == "number" and type(self.energyMaximum) == "number" and self.energyMaximum > 0 then
     cards[#cards + 1] = {
       title = "ENERGÍA",
       value = string.format("%.1f / %.1f kJ", self.energyStored / 1000, self.energyMaximum / 1000),

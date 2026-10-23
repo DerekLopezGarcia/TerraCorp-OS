@@ -183,6 +183,11 @@ function kernel:energy()
   if not ok or type(stored) ~= "number" then
     return nil
   end
+  -- Algunos nodos reportan solo `stored` o un `maximum` inválido. Se trata
+  -- como "sin lectura de energía" en vez de reventar al dividir por nil.
+  if type(maximum) ~= "number" or maximum <= 0 then
+    return nil
+  end
   return stored, maximum
 end
 
@@ -292,9 +297,32 @@ function kernel:poweroff(reboot)
   computer.shutdown(reboot == true)
 end
 
+-- Último recurso: si el escritorio no se puede pintar, se avisa con la GPU en
+-- crudo. Sin esto, un fallo de render deja una pantalla negra sin explicación.
+function kernel:emergency(reason)
+  local gpu = self.gfx and self.gfx.gpu
+  if not gpu then
+    return
+  end
+
+  local ok, width, height = pcall(gpu.getResolution)
+  if not ok or not width or not height then
+    width, height = 80, 25
+  end
+
+  local message = tostring(reason or "sin detalle")
+  pcall(gpu.setBackground, 15)
+  pcall(gpu.setForeground, 14)
+  pcall(gpu.fill, 1, 1, width, math.min(7, height), " ")
+  pcall(gpu.set, 2, 2, "TerraCorp OS: no se pudo pintar el escritorio")
+  pcall(gpu.set, 2, 4, string.sub(message, 1, math.max(1, width - 4)))
+  pcall(gpu.set, 2, 5, "Detalle completo en /var/log/tc.log")
+end
+
 function kernel:loop()
   local lastTick = computer.uptime()
   local renderErrors = 0
+  local gpuFailures = 0
 
   while true do
     local pack = table.pack(pcall(computer.pullSignal, 0.2))
@@ -321,12 +349,29 @@ function kernel:loop()
       pcall(self.ui.tick, self.ui)
     end
 
-    local okRender, reason = pcall(self.ui.render, self.ui, false)
+    local okRender, reason, failed = pcall(self.ui.render, self.ui, false)
+
+    -- La GPU rechaza tramos si no tiene energía suficiente. No es un error de
+    -- Lua: las celdas quedan pendientes y se reintentan en el frame siguiente.
+    if okRender and type(failed) == "number" and failed > 0 then
+      gpuFailures = gpuFailures + 1
+      if gpuFailures == 1 or gpuFailures % 20 == 0 then
+        self.log.warn("gpu: " .. failed .. " tramos sin escribir (¿energía?) en " .. gpuFailures .. " frames")
+      end
+    elseif okRender and gpuFailures > 0 then
+      self.log.info("gpu recuperada tras " .. gpuFailures .. " frames")
+      gpuFailures = 0
+    end
+
     if not okRender then
       renderErrors = renderErrors + 1
       -- El render marca `dirty = false` antes de pintar: si falla a medias hay
       -- que volver a pedirlo o la pantalla se queda congelada.
       self.ui:markDirty()
+      if renderErrors == 1 then
+        -- Se avisa por pantalla: una negra sin texto no dice nada.
+        self:emergency(reason)
+      end
       -- Sin límite esto escribe en disco por frame si se retira la pantalla;
       -- se registra el primero y luego uno cada 30 intentos.
       if renderErrors == 1 or renderErrors % 30 == 0 then
@@ -558,6 +603,14 @@ function kernel.start(boot)
     pcall(os.sleep, 0.4)
     drawSplash(1, "Sesión lista")
     pcall(os.sleep, 0.35)
+  end
+
+  -- Primera composición controlada: si el escritorio no se puede pintar, se
+  -- dice en pantalla en vez de arrancar con el framebuffer en negro.
+  local okPaint, paintReason = pcall(instance.ui.render, instance.ui, true)
+  if not okPaint then
+    instance:emergency(paintReason)
+    log.error("primer render: " .. tostring(paintReason))
   end
 
   instance:loop()
