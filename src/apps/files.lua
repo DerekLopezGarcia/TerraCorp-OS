@@ -33,10 +33,13 @@ function files:reload(ctx)
   local entries = {}
   for _, name in ipairs(names) do
     local path = ctx.util.join(self.cwd, name)
+    local isDir = vfs.isDirectory(path)
     entries[#entries + 1] = {
       name = name,
       path = path,
-      isDir = vfs.isDirectory(path),
+      isDir = isDir,
+      -- El tamaño se lee una vez por recarga, no en cada frame.
+      size = isDir and nil or vfs.size(path),
     }
   end
 
@@ -64,7 +67,12 @@ function files:select(ctx, index)
   end
 
   local vfs = ctx.kernel.vfs
-  local size = vfs.size(entry.path)
+  local size = entry.size
+  if size == nil then
+    -- Fichero aparecido después de la última recarga: se pregunta una vez.
+    size = vfs.size(entry.path)
+    entry.size = size
+  end
   if size and size > MAX_PREVIEW_BYTES then
     self.preview = { tooLarge = true }
     self.previewName = entry.name
@@ -160,7 +168,7 @@ function files:draw(ctx)
     local label = entry.isDir and (entry.name .. "/") or entry.name
     local size = ""
     if not entry.isDir then
-      local bytes = ctx.kernel.vfs.size(entry.path)
+      local bytes = entry.size
       if bytes and listWidth > 30 then
         if bytes < 1024 then
           size = ctx.util.padLeft(string.format("%d B", bytes), 9)

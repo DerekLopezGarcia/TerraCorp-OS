@@ -98,14 +98,6 @@ function text.padRight(value, width)
   return value .. string.rep(" ", width - length)
 end
 
-function text.padLeft(value, width)
-  local length = text.width(value)
-  if length >= width then
-    return text.truncate(value, width)
-  end
-  return string.rep(" ", width - length) .. value
-end
-
 -- Tramo de `from` a `to` contando puntos de código (1-based, inclusivo).
 function text.slice(value, from, to)
   local parts = {}

@@ -40,10 +40,10 @@ end
 print(string.format("Origen : %s", sourceRoot))
 print(string.format("Destino: %s (%s)", address, proxy.getLabel and (proxy.getLabel() or "sin etiqueta") or "sin etiqueta"))
 
-local used = proxy.space()
+local used = proxy.spaceUsed()
 local total = proxy.spaceTotal()
 if used and total then
-  print(string.format("Disco  : %.1f / %.1f MB usados", used / 1024, total / 1024))
+  print(string.format("Disco  : %.1f / %.1f MB usados", used / 1048576, total / 1048576))
 end
 
 if not options.yes then
@@ -115,7 +115,19 @@ end
 
 print(string.format("Copiados %d ficheros (%d errores).", copied, failed))
 
-local bootOk, bootReason = pcall(computer.setBootAddress, address)
+-- `pcall` solo detecta errores Lua: `component.invoke` devuelve `nil, motivo`
+-- cuando el componente rechaza la llamada. Hay que mirar también el resultado.
+local function succeeded(ok, value, reason)
+  if not ok or value == false then
+    return false, tostring(reason or value)
+  end
+  if value == nil and reason ~= nil then
+    return false, tostring(reason)
+  end
+  return true
+end
+
+local bootOk, bootReason = succeeded(pcall(computer.setBootAddress, address))
 if bootOk then
   print("Volumen de arranque fijado: " .. address)
 else
@@ -138,19 +150,32 @@ if options.eeprom then
   local code = input:read("*a")
   input:close()
 
-  local flashed = pcall(component.invoke, eepromAddress, "set", code)
+  local function flash(value)
+    local ok, reason = succeeded(pcall(component.invoke, eepromAddress, "set", value))
+    if ok then
+      return true
+    end
+    return false, reason
+  end
+
+  local flashed, flashReason = flash(code)
   if not flashed then
     local bytes = {}
     for index = 1, #code do
       bytes[index] = code:byte(index)
     end
-    flashed = pcall(component.invoke, eepromAddress, "set", bytes)
+    local secondOk, secondReason = flash(bytes)
+    if secondOk then
+      flashed = true
+    else
+      flashReason = secondReason or flashReason
+    end
   end
 
   if flashed then
     print("EEPROM grabada con el gestor de arranque de TerraCorp OS.")
   else
-    io.stderr:write("No se pudo grabar la EEPROM. Copia eeprom/init.lua a mano.\n")
+    io.stderr:write("No se pudo grabar la EEPROM (" .. tostring(flashReason) .. "). Copia eeprom/init.lua a mano.\n")
   end
 end
 

@@ -56,14 +56,6 @@ function gfx:resize()
   return true
 end
 
-function gfx:invalidate()
-  for cell = 1, self.w * self.h do
-    self.pch[cell] = "\0"
-    self.pfg[cell] = -1
-    self.pbg[cell] = -1
-  end
-end
-
 function gfx:clear(bg, fg)
   bg = bg or FALLBACK_BG
   fg = fg or FALLBACK_FG
@@ -72,14 +64,6 @@ function gfx:clear(bg, fg)
     self.fg[cell] = fg
     self.bg[cell] = bg
   end
-end
-
-function gfx:cell(x, y)
-  if x < 1 or y < 1 or x > self.w or y > self.h then
-    return nil
-  end
-  local cell = (y - 1) * self.w + x
-  return self.ch[cell], self.fg[cell], self.bg[cell]
 end
 
 -- Escribe `value` en (x, y) recortando por ambos lados. Devuelve el ancho usado.
@@ -130,14 +114,6 @@ function gfx:fill(x, y, width, height, character, fg, bg)
       self.bg[cell] = bg
     end
   end
-end
-
-function gfx:hline(x, y, width, character, fg, bg)
-  self:fill(x, y, width, 1, character or "─", fg, bg)
-end
-
-function gfx:vline(x, y, height, character, fg, bg)
-  self:fill(x, y, 1, height, character or "│", fg, bg)
 end
 
 -- Marco con relleno y título opcional en el borde superior.
@@ -235,16 +211,20 @@ function view:fill(x, y, width, height, character, fg, bg)
   self.buf:fill(self.x + x1 - 1, self.y + y1 - 1, x2 - x1 + 1, y2 - y1 + 1, character, fg, bg)
 end
 
+-- Marco recortado al área de la subvista: nunca pinta fuera de la ventana.
 function view:box(x, y, width, height, opts)
-  self.buf:box(self.x + x - 1, self.y + y - 1, width, height, opts)
+  local x1 = math.max(1, x)
+  local y1 = math.max(1, y)
+  local x2 = math.min(self.w, x + width - 1)
+  local y2 = math.min(self.h, y + height - 1)
+  if x2 < x1 or y2 < y1 then
+    return
+  end
+  self.buf:box(self.x + x1 - 1, self.y + y1 - 1, x2 - x1 + 1, y2 - y1 + 1, opts)
 end
 
 function view:hline(x, y, width, character, fg, bg)
   self:fill(x, y, width, 1, character, fg, bg)
-end
-
-function view:vline(x, y, height, character, fg, bg)
-  self:fill(x, y, 1, height, character, fg, bg)
 end
 
 function view:bar(x, y, width, ratio, fg, bg, glyph)

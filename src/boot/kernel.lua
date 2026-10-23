@@ -42,7 +42,9 @@ local function makeVfs(volume)
     local chunks = {}
     while true do
       local data, why = packCall(volume.read, handle, 4096)
-      if not data then
+      -- Un driver que devuelva "" en vez de nil al llegar al final colgaría
+      -- el bucle: se corta también con cadena vacía.
+      if type(data) ~= "string" or data == "" then
         packCall(volume.close, handle)
         if why then
           return nil, why
@@ -92,21 +94,40 @@ local function makeVfs(volume)
     return tonumber(value)
   end
 
+  -- El componente devuelve una tabla 1..n con los nombres (ver
+  -- docs/opencomputers.md). Algunos drivers antiguos devuelven un iterador:
+  -- se aceptan las dos formas.
   function vfs.list(path)
-    local iterator, reason = packCall(volume.list, path)
-    if not iterator then
-      return nil, reason
+    local result, reason = packCall(volume.list, path)
+
+    if type(result) == "function" then
+      local names = {}
+      local ok = pcall(function()
+        for name in result do
+          names[#names + 1] = tostring(name)
+        end
+      end)
+      if not ok then
+        return nil, "no se pudo listar " .. tostring(path)
+      end
+      table.sort(names)
+      return names
+    end
+
+    if type(result) ~= "table" then
+      return nil, reason or ("no se pudo listar " .. tostring(path))
     end
 
     local names = {}
-    local ok = pcall(function()
-      for name in iterator do
-        names[#names + 1] = name
-      end
-    end)
+    for _, name in ipairs(result) do
+      names[#names + 1] = tostring(name)
+    end
 
-    if not ok then
-      return nil, "no se pudo listar " .. tostring(path)
+    -- Tabla con claves no secuenciales: recorrerla como conjunto.
+    if #names == 0 and next(result) ~= nil then
+      for _, name in pairs(result) do
+        names[#names + 1] = tostring(name)
+      end
     end
 
     table.sort(names)
@@ -135,13 +156,15 @@ local function makeVfs(volume)
     return packCall(volume.rename, from, to)
   end
 
+  -- OpenComputers expone spaceUsed/spaceTotal en bytes; el resto del OS
+  -- trabaja en kilobytes (ver docs/arquitectura.md).
   function vfs.space()
-    local used = packCall(volume.space)
+    local used = packCall(volume.spaceUsed)
     local total = packCall(volume.spaceTotal)
     if type(used) ~= "number" or type(total) ~= "number" then
       return nil
     end
-    return used, total
+    return used / 1024, total / 1024
   end
 
   return vfs
@@ -271,6 +294,7 @@ end
 
 function kernel:loop()
   local lastTick = computer.uptime()
+  local renderErrors = 0
 
   while true do
     local pack = table.pack(pcall(computer.pullSignal, 0.2))
@@ -299,8 +323,19 @@ function kernel:loop()
 
     local okRender, reason = pcall(self.ui.render, self.ui, false)
     if not okRender then
-      self.log.error("render: " .. tostring(reason))
-      pcall(os.sleep, 0.5)
+      renderErrors = renderErrors + 1
+      -- El render marca `dirty = false` antes de pintar: si falla a medias hay
+      -- que volver a pedirlo o la pantalla se queda congelada.
+      self.ui:markDirty()
+      -- Sin límite esto escribe en disco por frame si se retira la pantalla;
+      -- se registra el primero y luego uno cada 30 intentos.
+      if renderErrors == 1 or renderErrors % 30 == 0 then
+        self.log.error("render (" .. renderErrors .. " fallos): " .. tostring(reason))
+      end
+      pcall(os.sleep, math.min(1, 0.05 * renderErrors))
+    elseif renderErrors > 0 then
+      self.log.info("render recuperado tras " .. renderErrors .. " fallos")
+      renderErrors = 0
     end
   end
 end
@@ -405,6 +440,11 @@ function kernel.start(boot)
   local gfxModule = requireModule("tc.gfx")
   local uiModule = requireModule("tc.ui")
 
+  -- /etc y /var/log deben existir antes de leer preferencias y abrir el
+  -- registro: una instalación manual (copiar src/*) no los crea.
+  vfs.ensureDir("/etc")
+  vfs.ensureDir("/var/log")
+
   config.load(vfs)
   log.setLevel(config.get("logLevel"))
 
@@ -459,7 +499,6 @@ function kernel.start(boot)
     drawSplash(0.25, "Montando servicios base")
   end
 
-  vfs.ensureDir("/var/log")
   log.setSink(function(line)
     local size = vfs.size("/var/log/tc.log") or 0
     if size > 131072 then

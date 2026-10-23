@@ -23,7 +23,7 @@ local function read(address, path)
   local chunks = {}
   while true do
     local data, why = invoke(address, "read", handle, 4096)
-    if not data then
+    if type(data) ~= "string" or data == "" then
       invoke(address, "close", handle)
       if why then
         return nil, why

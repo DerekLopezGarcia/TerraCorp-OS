@@ -167,7 +167,7 @@ function console:command(ctx, line)
         else
           size = ctx.util.humanSize(bytes / 1024)
         end
-        self:push("  " .. entry .. string.rep(" ", math.max(1, 24 - #entry)) .. size, "out")
+        self:push(ctx.text.padRight("  " .. entry, 26) .. size, "out")
       end
     end
     return
@@ -264,11 +264,12 @@ function console:command(ctx, line)
   end
 
   if name == "open" then
-    if rest == "" then
+    local id = ctx.util.trim(rest)
+    if id == "" then
       self:push("open: falta el id de la aplicación", "err")
       return
     end
-    ctx.ui:open(rest)
+    ctx.ui:open(id)
     return
   end
 
@@ -334,11 +335,17 @@ function console:submit(ctx)
   end
 end
 
+-- Líneas visibles que quedan por encima del final del buffer.
+function console:maxScroll(ctx)
+  local rows = math.max(1, ctx.h - 2)
+  return math.max(0, #self:reflow(ctx) - rows)
+end
+
 function console:handle(ctx, name, a, b, c)
   if name == "scroll" then
     local direction = c
     if direction and direction > 0 then
-      self.scroll = self.scroll + 1
+      self.scroll = math.min(self:maxScroll(ctx), self.scroll + 1)
     else
       self.scroll = math.max(0, self.scroll - 1)
     end
@@ -381,7 +388,7 @@ function console:handle(ctx, name, a, b, c)
   end
 
   if code == 0xC9 then
-    self.scroll = self.scroll + math.max(1, ctx.h - 3)
+    self.scroll = math.min(self:maxScroll(ctx), self.scroll + math.max(1, ctx.h - 3))
     return true
   end
 

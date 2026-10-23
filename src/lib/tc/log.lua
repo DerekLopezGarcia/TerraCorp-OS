@@ -74,23 +74,4 @@ function log.tail(count)
   return result
 end
 
-function log.count(level)
-  local numeric = LEVELS[level]
-  if not numeric then
-    return 0
-  end
-
-  local total = 0
-  for _, entry in ipairs(log.entries) do
-    if entry.level == numeric then
-      total = total + 1
-    end
-  end
-  return total
-end
-
-function log.clear()
-  log.entries = {}
-end
-
 return log

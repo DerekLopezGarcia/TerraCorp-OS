@@ -26,8 +26,9 @@ function settings:apply(ctx, message)
   ctx.ui:notify("info", message)
 end
 
+-- El botón se dibuja como " etiqueta ": dos columnas más que el texto.
 local function buttonWidth(label)
-  return #label + 4
+  return #label + 2
 end
 
 function settings:draw(ctx)
@@ -94,12 +95,13 @@ function settings:draw(ctx)
 
     v:put(2, y, option.label, c.dim, c.deep)
     local valueLabel = " [ " .. option.value .. " ] "
-    local x = ctx.w - #valueLabel - 1
+    local valueWidth = ctx.text.width(valueLabel)
+    local x = ctx.w - valueWidth - 1
     v:put(x, y, valueLabel, c.onAccent, c.accent)
     self.hits[#self.hits + 1] = {
-      x = math.max(1, x - 1),
+      x = math.max(1, x),
       y = y,
-      w = #valueLabel + 2,
+      w = valueWidth,
       h = 1,
       action = option.action,
     }
@@ -132,7 +134,7 @@ function settings:draw(ctx)
     for _, action in ipairs(actions) do
       local label = " " .. action.label .. " "
       local width = buttonWidth(action.label)
-      if x + width > ctx.w then
+      if x + width - 1 > ctx.w then
         break
       end
       v:put(x, actionsY, label, c.onAccent, c.accent)
@@ -143,7 +145,7 @@ function settings:draw(ctx)
         h = 1,
         action = action.action,
       }
-      x = x + width + 2
+      x = x + width + 1
     end
   end
 

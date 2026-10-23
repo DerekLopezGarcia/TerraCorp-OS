@@ -47,7 +47,6 @@ function ui.new(env)
   self.dragging = nil
   self.notice = nil
   self.dirty = true
-  self.appliedTheme = self.theme
 
   self:resize()
   return self
@@ -560,7 +559,9 @@ function ui:dispatch(name, a, b, c, d, e)
   elseif name == "key_down" then
     self:onKey(b, c)
   elseif name == "screen_resized" then
-    self.kernel.rebindScreen()
+    -- `rebindScreen` es un método del kernel: se invoca con `:` para que
+    -- `self` sea la instancia y no la tabla del módulo.
+    self.kernel:rebindScreen()
   end
   local _ = a, e
 end

@@ -28,13 +28,4 @@ local keys = {
   F10 = 0x44,
 }
 
-local names = {}
-for name, code in pairs(keys) do
-  names[code] = name
-end
-
-function keys.name(code)
-  return names[code]
-end
-
 return keys

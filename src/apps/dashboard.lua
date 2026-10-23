@@ -47,26 +47,6 @@ function dashboard:draw(ctx)
   local gap = 1
   local cardWidth = math.floor((ctx.w - gap * (columns - 1)) / columns)
 
-  local function card(column, row, title, value, detail, ratio, tint)
-    local x = 1 + (column - 1) * (cardWidth + gap)
-    local y = 1 + (row - 1) * (CARD_HEIGHT + gap)
-
-    v:box(x, y, cardWidth, CARD_HEIGHT, {
-      glyphs = g,
-      fg = c.panel,
-      bg = c.deep,
-      title = title,
-      titleFg = c.dim,
-      titleBg = c.deep,
-    })
-
-    v:put(x + 2, y + 2, ctx.text.truncate(value, cardWidth - 4), tint or c.accent, c.deep)
-    if ratio then
-      v:bar(x + 2, y + 3, math.max(1, cardWidth - 4), ratio, tint or c.accent, c.deep, g.block)
-    end
-    v:put(x + 2, y + CARD_HEIGHT - 2, ctx.text.truncate(detail or "", cardWidth - 4), c.dim, c.deep)
-  end
-
   local memoryRatio = 0
   if self.memoryTotal > 0 then
     memoryRatio = self.memoryUsed / self.memoryTotal
@@ -95,37 +75,97 @@ function dashboard:draw(ctx)
     topKinds[#topKinds + 1] = entry.kind .. " x" .. entry.count
   end
 
-  card(1, 1, "NODO", ctx.kernel.hostname,
-    ctx.kernel.address:sub(1, 8) .. " · " .. ctx.version.version, nil, c.text)
-
-  card(2, 1, "ACTIVIDAD", ctx.util.humanTime(self.uptime),
-    "Sesión en curso", nil, c.text)
-
-  card(1, 2, "MEMORIA", string.format("%.1f / %.1f MB", self.memoryUsed, self.memoryTotal),
-    string.format("%.0f%% ocupada", memoryRatio * 100), memoryRatio, c.accent)
+  -- Tarjetas en orden de lectura; se colocan en columnas y, si no caben,
+  -- siguen en la fila siguiente (nunca fuera de la ventana).
+  local cards = {
+    {
+      title = "NODO",
+      value = ctx.kernel.hostname,
+      detail = ctx.kernel.address:sub(1, 8) .. " · " .. ctx.version.version,
+      tint = c.text,
+    },
+    {
+      title = "ACTIVIDAD",
+      value = ctx.util.humanTime(self.uptime),
+      detail = "Sesión en curso",
+      tint = c.text,
+    },
+    {
+      title = "MEMORIA",
+      value = string.format("%.1f / %.1f MB", self.memoryUsed, self.memoryTotal),
+      detail = string.format("%.0f%% ocupada", memoryRatio * 100),
+      ratio = memoryRatio,
+      tint = c.accent,
+    },
+  }
 
   if self.energyStored then
-    card(2, 2, "ENERGÍA",
-      string.format("%.1f / %.1f kJ", self.energyStored / 1000, self.energyMaximum / 1000),
-      string.format("%.0f%% disponible", energyRatio * 100), energyRatio, energyColor)
+    cards[#cards + 1] = {
+      title = "ENERGÍA",
+      value = string.format("%.1f / %.1f kJ", self.energyStored / 1000, self.energyMaximum / 1000),
+      detail = string.format("%.0f%% disponible", energyRatio * 100),
+      ratio = energyRatio,
+      tint = energyColor,
+    }
   else
-    card(2, 2, "ENERGÍA", "sin lectura", "El nodo no reporta energía", nil, c.warn)
+    cards[#cards + 1] = {
+      title = "ENERGÍA",
+      value = "sin lectura",
+      detail = "El nodo no reporta energía",
+      tint = c.warn,
+    }
   end
 
   if not dense then
-    card(1, 3, "ENLACES", tostring(self.components.total) .. " componentes",
-      table.concat(topKinds, " · "), nil, c.text)
+    cards[#cards + 1] = {
+      title = "ENLACES",
+      value = tostring(self.components.total) .. " componentes",
+      detail = table.concat(topKinds, " · "),
+      tint = c.text,
+    }
 
     if self.storageTotal then
-      card(2, 3, "ALMACENAMIENTO",
-        ctx.util.humanSize(self.storageUsed) .. " / " .. ctx.util.humanSize(self.storageTotal),
-        string.format("%.0f%% del volumen", storageRatio * 100), storageRatio, c.accent)
+      cards[#cards + 1] = {
+        title = "ALMACENAMIENTO",
+        value = ctx.util.humanSize(self.storageUsed) .. " / " .. ctx.util.humanSize(self.storageTotal),
+        detail = string.format("%.0f%% del volumen", storageRatio * 100),
+        ratio = storageRatio,
+        tint = c.accent,
+      }
     else
-      card(2, 3, "ALMACENAMIENTO", "sin volumen", "No se pudo leer el disco", nil, c.warn)
+      cards[#cards + 1] = {
+        title = "ALMACENAMIENTO",
+        value = "sin volumen",
+        detail = "No se pudo leer el disco",
+        tint = c.warn,
+      }
     end
   end
 
-  local cardsBottom = dense and (1 + 2 * (CARD_HEIGHT + gap)) or (1 + 3 * (CARD_HEIGHT + gap))
+  for index, card in ipairs(cards) do
+    local column = ((index - 1) % columns) + 1
+    local row = math.floor((index - 1) / columns) + 1
+    local x = 1 + (column - 1) * (cardWidth + gap)
+    local y = 1 + (row - 1) * (CARD_HEIGHT + gap)
+
+    v:box(x, y, cardWidth, CARD_HEIGHT, {
+      glyphs = g,
+      fg = c.panel,
+      bg = c.deep,
+      title = card.title,
+      titleFg = c.dim,
+      titleBg = c.deep,
+    })
+
+    v:put(x + 2, y + 2, ctx.text.truncate(card.value, cardWidth - 4), card.tint or c.accent, c.deep)
+    if card.ratio then
+      v:bar(x + 2, y + 3, math.max(1, cardWidth - 4), card.ratio, card.tint or c.accent, c.deep, g.block)
+    end
+    v:put(x + 2, y + CARD_HEIGHT - 2, ctx.text.truncate(card.detail or "", cardWidth - 4), c.dim, c.deep)
+  end
+
+  local rowsUsed = math.ceil(#cards / columns)
+  local cardsBottom = 1 + rowsUsed * (CARD_HEIGHT + gap)
   local logTop = cardsBottom + 1
   if logTop + 3 <= ctx.h then
     local logHeight = ctx.h - logTop + 1

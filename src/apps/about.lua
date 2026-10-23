@@ -63,7 +63,7 @@ function about:draw(ctx)
   end
 
   if row <= ctx.h then
-    v:put(1, ctx.h, "Repositorio: github.com/dereklopezagarcia/TerraCorp-OS", c.dim, c.deep)
+    v:put(1, ctx.h, "Repositorio: github.com/DerekLopezGarcia/TerraCorp-OS", c.dim, c.deep)
   end
 end
 

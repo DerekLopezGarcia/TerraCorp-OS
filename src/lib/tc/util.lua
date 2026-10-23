@@ -12,10 +12,6 @@ function util.clamp(value, minimum, maximum)
   return value
 end
 
-function util.startsWith(text, prefix)
-  return text:sub(1, #prefix) == prefix
-end
-
 function util.trim(text)
   return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -62,13 +58,6 @@ function util.join(base, name)
   return "/" .. table.concat(stack, "/")
 end
 
-function util.basename(path)
-  if path == "/" then
-    return "/"
-  end
-  return path:match("([^/]+)/*$") or path
-end
-
 function util.parent(path)
   if path == "/" then
     return "/"
@@ -82,14 +71,6 @@ function util.padLeft(text, width)
     return text
   end
   return string.rep(" ", width - #text) .. text
-end
-
-function util.padRight(text, width)
-  text = tostring(text)
-  if #text >= width then
-    return text
-  end
-  return text .. string.rep(" ", width - #text)
 end
 
 -- Duración en formato de planta: "3d 04h", "2h 07m", "58s".
@@ -130,23 +111,6 @@ function util.formatClock(clock24)
     return real
   end
   return "--:--"
-end
-
-function util.count(tbl)
-  local total = 0
-  for _ in pairs(tbl) do
-    total = total + 1
-  end
-  return total
-end
-
-function util.contains(list, value)
-  for _, item in ipairs(list) do
-    if item == value then
-      return true
-    end
-  end
-  return false
 end
 
 return util
