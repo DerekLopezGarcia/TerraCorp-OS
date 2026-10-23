@@ -36,8 +36,9 @@ src/                  volumen de arranque
 eeprom/init.lua       gestor de arranque para la EEPROM
 tools/install.lua     instalador bajo OpenOS
 tools/check.lua       comprobador de sintaxis bajo OpenOS
+tools/spike-rc.lua    banco de pruebas del enlace Redstone Control (spike)
 tools/harness/        arnés Node (fengari) + comprobador
-docs/                 arquitectura, opencomputers, roadmap
+docs/                 arquitectura, opencomputers, roadmap, distribuido, larga-distancia
 ```
 
 ## Comandos
@@ -52,6 +53,10 @@ En el juego: `install <raizDelRepo> <direccionFilesystem> [--eeprom] [--yes]`.
 
 ## Convenciones
 
+- **Núcleo mínimo**: el OS debe arrancar y ser útil en un solo nodo, sin red y con 1 MB. Nada entra en
+  el núcleo si puede ser un servicio o una app opcional.
+- Fase actual y criterios de salida: `docs/roadmap.md`. Modelo distribuido y límites del mod:
+  `docs/distribuido.md`. No adelantar fases.
 - Cada módulo devuelve una tabla; se carga con `require("tc.x")` / `require("apps.x")` **del kernel**,
   nunca con el `require` de OpenOS.
 - Rutas de módulos: `tc.*` → `/lib/tc/*.lua`, `apps.*` → `/apps/*.lua`.

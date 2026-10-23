@@ -101,6 +101,13 @@ matriz. No sustituye a probarlo en el juego.
 - **16 colores**: el tema es una asignación de tokens a la paleta de Minecraft, no colores libres.
 - **Un carácter = una celda**: no hay soporte de ancho doble (CJK/emoji); ver `docs/opencomputers.md`.
 
+## Plan
+
+Fase actual: **F0 — prototipo congelado**. No se añaden funciones: se prueba en partida, se mide y se
+recorta. La evolución (núcleo mínimo → servicios → red → CPD → cluster ligero) está en
+[`docs/roadmap.md`](docs/roadmap.md); el modelo distribuido, los límites reales de OpenComputers y la
+topología del CPD, en [`docs/distribuido.md`](docs/distribuido.md).
+
 ## Licencia y créditos
 
 MIT (ver `LICENSE`).
