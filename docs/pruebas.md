@@ -46,11 +46,17 @@ tier 2.
 1. Instalar:
 
    ```
-   wget https://raw.githubusercontent.com/dereklopezagarcia/TerraCorp-OS/main/tools/fetch.lua /tmp/fetch.lua
+   wget https://raw.githubusercontent.com/DerekLopezGarcia/TerraCorp-OS/main/tools/fetch.lua /tmp/fetch.lua
    lua /tmp/fetch.lua
    cd /home/TerraCorp-OS/tools
    ./install.lua /home/TerraCorp-OS [dir] --eeprom --yes
    ```
+
+   La descarga termina en una sola línea: `RESULTADO: OK - 21/21 ficheros, N bytes`. Si dice
+   `INCOMPLETO` o `ERROR`, no instales: el mensaje de esa misma línea dice si es un 404 (ruta o
+   mayúsculas del propietario), un fichero corto (disco lleno) o falta de tarjeta de red. El
+   descargador comprueba el tamaño en disco, así que un `OK` significa que los ficheros están
+   completos aunque el terminal se vea mal.
 
 2. Rearrancar el ordenador y **cronometrar hasta ver el escritorio**. Apuntar los segundos.
 3. Leer la traza de arranque:

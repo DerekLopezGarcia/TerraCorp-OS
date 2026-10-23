@@ -10,7 +10,9 @@ El OS se instala en los ordenadores del jugador; no modifica el pack.
 
 ## Referencia
 
-- GitHub (personal): `https://github.com/dereklopezagarcia/TerraCorp-OS`
+- GitHub (personal): `https://github.com/DerekLopezGarcia/TerraCorp-OS`. **Ojo:** `raw.githubusercontent.com`
+  distingue mayúsculas en el propietario; con `dereklopezagarcia` devuelve 404 y en juego se ve como
+  «HTTP request failed» (2026-10-23).
 - Rama base: `main`
 - Entorno objetivo: Supersymmetry · `https://github.com/SymmetricDevs/Supersymmetry`
   (coremod `https://github.com/SymmetricDevs/Susy-Core`, GPLv3)
@@ -53,6 +55,7 @@ npm run manifest   # regenera tools/manifest.txt (lo que descarga fetch.lua)
 npm run sim        # ejecuta el OS con componentes falsos y vuelca pantalla
 npm run sim:oc     # gate estricto: 4 escenarios con la API real de OpenComputers
 npm run test:install # detección de volumen y copia del instalador (OpenOS simulado)
+npm run test:fetch  # descargador: 404, fichero corto, disco lleno, sin tarjeta
 npm run test:boot  # gestor de arranque de la EEPROM (sandbox 1.7.x y 1.8+)
 npm run test:faults # GPU sin energía: la pantalla debe quedar igual que sin fallos
 npm run test:screens # mismo OS de 160x50 a 40x16, siempre a la resolución de la pantalla
@@ -144,6 +147,12 @@ uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
   (2026-10-23).
 - Los guiones del arnés se anclan a la resolución simulada (`dockY = maxHeight - 1`) y navegan con
   teclado; antes usaban filas fijas de 118x44 y dejaban de funcionar con otro tamaño (2026-10-23).
+- `tools/fetch.lua` resume en una línea `RESULTADO: OK|INCOMPLETO|ERROR` y verifica en disco
+  (`filesystem.size`) lo que acaba de escribir, en vez de fiarse de la escritura. Su salida es ASCII y
+  de ≤ 60 caracteres a propósito: en juego el terminal pinta mal (columnas corridas, colores cruzados)
+  y lo único legible es una línea corta. Distingue `HTTP 404` (ruta o mayúsculas del propietario) de un
+  fallo de red. Gate: `npm run test:fetch`, 6 escenarios; con el `fetch.lua` anterior fallan todos, así
+  que el gate no es vacuo (2026-10-23).
 - `npm run test:faults` inyecta fallos de GPU (`--fault=N`, las N primeras escrituras devuelven
   `nil, "not enough energy"`) y exige que la pantalla final sea **idéntica** a la del mismo escenario
   sin fallos. Es el gate que demuestra que el volcado por diferencias reintenta lo rechazado; con el

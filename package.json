@@ -17,7 +17,8 @@
     "test:boot": "node tools/harness/test-boot.js",
     "test:faults": "node tools/harness/test-faults.js",
     "test:screens": "node tools/harness/test-screens.js",
-    "measure": "node tools/harness/measure.js"
+    "measure": "node tools/harness/measure.js",
+    "test:fetch": "node tools/harness/test-fetch.js"
   },
   "devDependencies": {
     "fengari": "^0.1.4"
