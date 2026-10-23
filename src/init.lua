@@ -51,15 +51,34 @@ local function isBootable(address)
   return true
 end
 
+local function bootAddress()
+  if type(computer.getBootAddress) ~= "function" then
+    return nil
+  end
+  local ok, value = pcall(computer.getBootAddress)
+  if not ok then
+    return nil
+  end
+  return value
+end
+
+local function setBootAddress(address)
+  if type(computer.setBootAddress) ~= "function" then
+    return false
+  end
+  local ok, result = pcall(computer.setBootAddress, address)
+  return ok and result ~= false
+end
+
 local function findVolume()
-  local preferred = computer.getBootAddress()
+  local preferred = bootAddress()
   if isBootable(preferred) then
     return preferred
   end
 
   for address in component.list("filesystem") do
     if isBootable(address) then
-      pcall(computer.setBootAddress, address)
+      setBootAddress(address)
       return address
     end
   end

@@ -16,6 +16,35 @@ local function invoke(address, method, ...)
   return table.unpack(result, 2, result.n)
 end
 
+-- En OpenComputers 1.7.x el entorno de la EEPROM NO trae
+-- `computer.getBootAddress`/`setBootAddress`: las define el BIOS estándar al
+-- arrancar (guardando el volumen en la propia EEPROM con getData/setData). Si
+-- la EEPROM lleva este gestor, hay que crearlas aquí o el arranque revienta.
+local eepromAddress = component.list("eeprom")()
+
+if type(computer.getBootAddress) ~= "function" then
+  computer.getBootAddress = function()
+    if not eepromAddress then
+      return nil
+    end
+    local data = invoke(eepromAddress, "getData")
+    return data
+  end
+end
+
+if type(computer.setBootAddress) ~= "function" then
+  computer.setBootAddress = function(address)
+    if not eepromAddress then
+      return nil, "sin EEPROM"
+    end
+    local ok, reason = invoke(eepromAddress, "setData", address)
+    if ok == nil then
+      return nil, reason
+    end
+    return true
+  end
+end
+
 local function read(address, path)
   local handle, reason = invoke(address, "open", path, "r")
   if not handle then

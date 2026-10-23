@@ -298,6 +298,11 @@ if options.eeprom then
     return
   end
 
+  print("")
+  print("Aviso: grabar la EEPROM sustituye el BIOS del ordenador.")
+  print("       Si el gestor falla, hay que poner una EEPROM (Lua BIOS) nueva.")
+  print("       Normalmente NO hace falta: basta con fijar el volumen de arranque.")
+
   local input = filesystem.open(eepromSource, "rb")
   if not input then
     io.stderr:write("No se encontró " .. eepromSource .. "\n")
