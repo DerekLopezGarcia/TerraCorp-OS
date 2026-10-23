@@ -5,7 +5,6 @@ local log = {}
 
 local LEVELS = { debug = 1, info = 2, warn = 3, error = 4 }
 local TAGS = { [1] = "DBG", [2] = "INF", [3] = "AVS", [4] = "ERR" }
-
 log.levels = LEVELS
 log.tags = TAGS
 log.threshold = LEVELS.info
@@ -45,6 +44,28 @@ function log.write(level, message)
   end
 
   if log.sink and numeric >= LEVELS.warn then
+    pcall(log.sink, string.format("%s %s %s", entry.time, entry.tag, entry.message))
+  end
+end
+
+-- Traza de arranque: se escribe SIEMPRE al disco, aunque el nivel sea info.
+-- Sirve para saber hasta dónde llegó un arranque que acaba en pantalla negra;
+-- el resto de mensajes info sigue viviendo sólo en memoria para no castigar
+-- al sistema de ficheros.
+function log.trace(message)
+  local entry = {
+    level = LEVELS.info,
+    tag = "TRZ",
+    time = now(),
+    message = tostring(message),
+  }
+
+  log.entries[#log.entries + 1] = entry
+  if #log.entries > log.capacity then
+    table.remove(log.entries, 1)
+  end
+
+  if log.sink then
     pcall(log.sink, string.format("%s %s %s", entry.time, entry.tag, entry.message))
   end
 end

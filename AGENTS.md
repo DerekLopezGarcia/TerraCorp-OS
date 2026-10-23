@@ -119,6 +119,11 @@ uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
 - El registro se abre justo después de `ensureDir /var/log` y antes de crear la GPU: si el arranque se
   cuelga en vídeo o en el splash, `/var/log/tc.log` ya tiene la línea `arranque ...`, así que la pantalla
   negra se puede diagnosticar sin adivinar (2026-10-23).
+- `log.trace` escribe **siempre** al disco aunque el nivel sea info; `log.info` solo vive en memoria y
+  warn/error sí se persisten. Los hitos de arranque usan `trace` para poder diagnosticar una pantalla
+  negra sin adivinar (2026-10-23).
+- No escribir ficheros de `src/` con `Set-Content -Encoding UTF8` en PowerShell 5.1: añade BOM y el
+  `load` del kernel lo rechaza con `unexpected symbol near '<\239>'` (2026-10-23).
 - `util.split(texto, "")` devuelve el texto entero: un separador vacío colgaba el bucle para siempre
   (2026-10-23).
 - `npm run test:faults` inyecta fallos de GPU (`--fault=N`, las N primeras escrituras devuelven
