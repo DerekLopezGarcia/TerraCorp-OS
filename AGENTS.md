@@ -35,6 +35,8 @@ src/                  volumen de arranque
   apps/*.lua          dashboard, files, console, settings, about
 eeprom/init.lua       gestor de arranque para la EEPROM
 tools/install.lua     instalador bajo OpenOS
+tools/fetch.lua       descargador para OpenOS (sigue tools/manifest.txt)
+tools/make-manifest.js genera tools/manifest.txt desde el árbol
 tools/check.lua       comprobador de sintaxis bajo OpenOS
 tools/spike-rc.lua    banco de pruebas del enlace Redstone Control (spike)
 tools/harness/        arnés Node (fengari) + comprobador
@@ -45,12 +47,15 @@ docs/                 arquitectura, opencomputers, roadmap, distribuido, larga-d
 
 ```bash
 npm install        # solo para el arnés local
-npm run check      # sintaxis de todos los .lua (Lua 5.3)
+npm run check      # sintaxis de todos los .lua (Lua 5.3) + manifiesto en sync
+npm run manifest   # regenera tools/manifest.txt (lo que descarga fetch.lua)
 npm run sim        # ejecuta el OS con componentes falsos y vuelca pantalla
 npm run sim:oc     # gate estricto: 4 escenarios con la API real de OpenComputers
 ```
 
-En el juego: `install <raizDelRepo> <direccionFilesystem> [--eeprom] [--yes]`.
+En el juego: `wget .../tools/fetch.lua /tmp/fetch.lua` → `lua /tmp/fetch.lua` →
+`cd /home/TerraCorp-OS/tools && ./install.lua /home/TerraCorp-OS <dir> [--eeprom] [--yes]`.
+Ojo: `install` a secas es el instalador de OpenOS.
 
 ## Convenciones
 
@@ -76,6 +81,8 @@ En el juego: `install <raizDelRepo> <direccionFilesystem> [--eeprom] [--yes]`.
   lo no verificado se documenta como pendiente.
 - Los componentes falsos del arnés deben replicar la API real: `list` devuelve tabla y el espacio se lee
   con `spaceUsed`/`spaceTotal` en bytes. Un arnés que invente la API da gates verdes falsos.
+- Si añades o quitas un `.lua` en `src/`, `eeprom/` o `tools/`, ejecuta `npm run manifest`: `npm run
+  check` falla si el manifiesto se desfasa, porque de él depende la instalación en partida.
 - Mantener el arnés pasando (`npm run check`, `npm run sim` y `npm run sim:oc`) antes de dar un cambio por hecho.
 - No escribir este proyecto en la memoria de neXacom.
 

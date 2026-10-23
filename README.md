@@ -39,18 +39,31 @@ comprimidos.
 El volumen de arranque es el contenido de `src/`. El BIOS de OpenComputers ejecuta `/init.lua` del
 volumen marcado como de arranque, así que no hace falta OpenOS para que funcione.
 
-1. Consigue una copia del repo dentro del ordenador (tarjeta de red + `wget`, disquete o `edit`).
-2. Ejecuta el instalador bajo OpenOS:
+1. Arranca el ordenador con un disquete de OpenOS y descarga el árbol (necesita tarjeta de red):
 
    ```lua
-   install /home/TerraCorp-OS <direccionDelDisco> --eeprom
+   wget https://raw.githubusercontent.com/DerekLopezGarcia/TerraCorp-OS/main/tools/fetch.lua /tmp/fetch.lua
+   lua /tmp/fetch.lua
    ```
 
-   - `<direccionDelDisco>` es la dirección del componente `filesystem` de destino (`df` o
-     `components` la muestran).
+   Copia `src/`, `eeprom/` y las herramientas en `/home/TerraCorp-OS` (21 ficheros, con progreso y
+   recuento final). Para otro destino: `lua /tmp/fetch.lua /home/otra/ruta`. Si el ordenador no tiene
+   salida a internet, sirve el repo en tu red (`python -m http.server 8000`) y pasa la URL como segundo
+   argumento.
+2. Ejecuta el instalador bajo OpenOS. **`install` a secas es el instalador de OpenOS**, así que se llama
+   al script por ruta:
+
+   ```lua
+   cd /home/TerraCorp-OS/tools
+   ./install.lua /home/TerraCorp-OS <direccionDelDisco> --eeprom
+   ```
+
+   - `<direccionDelDisco>` es la dirección del componente `filesystem` de destino (`components` la
+     muestra).
    - Sin `--eeprom` solo copia los ficheros y fija el volumen de arranque.
    - Con `--eeprom` graba `eeprom/init.lua` en la EEPROM; si el flasheo falla, el propio instalador
-     avisa y puedes grabar ese fichero a mano.
+     avisa del motivo y puedes grabar ese fichero a mano.
+   - `--yes` salta la confirmación.
 3. Reinicia el ordenador (`reboot` o palanca).
 
 Sin instalador: copia `src/*` a la raíz del disco, deja `/boot/kernel.lua` en su sitio y arranca desde
@@ -74,6 +87,7 @@ src/                    volumen de arranque (lo que se copia al disco)
   lib/tc/               version, util, text, log, config, theme, gfx, ui, keys
   apps/                 dashboard, files, console, settings, about
 eeprom/init.lua         gestor de arranque para grabar en la EEPROM
+tools/fetch.lua         descargador para OpenOS (usa tools/manifest.txt)
 tools/install.lua       instalador (se ejecuta bajo OpenOS)
 tools/check.lua         comprobador de sintaxis dentro de OpenComputers
 tools/harness/          arnés de simulación y comprobador local (Node)
@@ -86,7 +100,8 @@ El código no necesita compilación. Para validarlo sin abrir Minecraft:
 
 ```bash
 npm install
-npm run check          # compila todos los .lua con Lua 5.3 (fengari)
+npm run check          # sintaxis + coherencia de tools/manifest.txt
+npm run manifest       # regenera tools/manifest.txt (lo usa fetch.lua)
 npm run sim            # ejecuta el OS, reproduce eventos y vuelca la pantalla
 npm run sim:oc         # gate estricto: los 4 escenarios con la API real de OC
 npm run sim:dashboard  # escenarios: dashboard, console, files, settings
