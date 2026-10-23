@@ -41,7 +41,9 @@ function bundleSource() {
 
 // Ejecuta un escenario y devuelve el número de problemas detectados.
 // Lanza si el arnés no se puede cargar o revienta.
-function runScenario(scenario, strict) {
+// `faultSet` inyecta fallos de GPU: las primeras N llamadas a `gpu.set`
+// devuelven nil, "not enough energy", como el componente real sin energía.
+function runScenario(scenario, strict, faultSet) {
   const L = lauxlib.luaL_newstate();
   lualib.luaL_openlibs(L);
 
@@ -58,6 +60,13 @@ function runScenario(scenario, strict) {
 
   lua.lua_pushboolean(L, strict ? 1 : 0);
   lua.lua_setglobal(L, to_luastring("STRICT"));
+
+  if (faultSet > 0) {
+    lua.lua_newtable(L);
+    lua.lua_pushinteger(L, faultSet);
+    lua.lua_setfield(L, -2, to_luastring("set"));
+    lua.lua_setglobal(L, to_luastring("FAULT"));
+  }
 
   if (lauxlib.luaL_loadfile(L, to_luastring(harnessPath)) !== lua.LUA_OK) {
     throw new Error("No se pudo cargar el arnés: " + to_jsstring(lua.lua_tostring(L, -1)));

@@ -71,6 +71,11 @@ el OS no depende de ellos para los atajos.
 - `gpu.set(x, y, text)` escribe una cadena; `gpu.fill(x, y, w, h, ch)` rellena.
 - Los colores son 16 índices fijos (paleta de Minecraft), no RGB.
 - `gpu.bind(screen)` asocia una GPU a una pantalla; el BIOS ya lo hace, pero se repite al arrancar.
+- **Valor de retorno** (verificado en `GraphicsCard.scala`, rama `master-MC1.12`): `gpu.set`, `gpu.fill`
+  y `gpu.copy` devuelven `true` si escriben y `nil, "not enough energy"` si la GPU no tiene energía.
+  `gpu.setBackground`/`gpu.setForeground` devuelven el color anterior. Una escritura rechazada no se
+  puede dar por pintada: el volcado por diferencias tiene que reintentarla o deja huecos permanentes.
+  `npm run test:faults` lo comprueba comparando la pantalla con y sin fallos inyectados.
 
 ## Trampas que afectan al diseño
 

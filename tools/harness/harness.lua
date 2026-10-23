@@ -4,6 +4,12 @@
 
 local files = BUNDLE
 local STRICT = STRICT == true
+-- Inyección de fallos: la GPU real devuelve nil, "not enough energy" cuando no
+-- tiene energía. FAULT.set = N hace que las primeras N escrituras fallen, para
+-- comprobar que el OS reintenta y acaba pintando la pantalla.
+local FAULT = rawget(_G, "FAULT") or {}
+local faultsLeft = tonumber(FAULT.set) or 0
+local faultsInjected = 0
 local stats = { listCalls = 0, listReturned = 0, spaceCalls = 0 }
 local written = {}
 local directories = { ["/"] = true, ["/etc"] = true, ["/var"] = true, ["/var/log"] = true }
@@ -252,6 +258,11 @@ end
 
 function gpu.set(x, y, value)
   setCalls = setCalls + 1
+  if faultsLeft > 0 then
+    faultsLeft = faultsLeft - 1
+    faultsInjected = faultsInjected + 1
+    return nil, "not enough energy"
+  end
   if not cells[y] then
     return true
   end
@@ -456,6 +467,9 @@ print("=== EJECUCIÓN ===")
 print("resultado : " .. (ok and "ok" or ("ERROR: " .. tostring(failure))))
 print("apagado   : " .. tostring(shutdownFlag))
 print("llamadas gpu.set: " .. setCalls)
+if faultsInjected > 0 then
+  print("fallos inyectados: " .. faultsInjected .. " (sin energía)")
+end
 print("resolución: " .. width .. "x" .. height)
 print("escenario : " .. tostring(scenario) .. (STRICT and " (estricto)" or ""))
 
@@ -506,6 +520,24 @@ if STRICT then
   if scenario == "dashboard" and stats.spaceCalls == 0 then
     errors = errors + 1
     print("FALLO: el panel no consultó spaceUsed")
+  end
+
+  -- Tras inyectar fallos de GPU la pantalla debe acabar pintada: si el OS da
+  -- por buenas las escrituras que la GPU rechazó, se queda en negro para
+  -- siempre porque el volcado por diferencias nunca las reintenta.
+  if faultsInjected > 0 then
+    local visible = 0
+    for y = 1, height do
+      for x = 1, width do
+        if cells[y][x] ~= " " then
+          visible = visible + 1
+        end
+      end
+    end
+    if visible == 0 then
+      errors = errors + 1
+      print("FALLO: pantalla en negro después de que la GPU rechazara escrituras")
+    end
   end
 end
 

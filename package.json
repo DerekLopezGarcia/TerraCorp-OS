@@ -14,7 +14,8 @@
     "sim:files": "node tools/harness/simulate.js files",
     "sim:settings": "node tools/harness/simulate.js settings",
     "test:install": "node tools/harness/test-install.js",
-    "test:boot": "node tools/harness/test-boot.js"
+    "test:boot": "node tools/harness/test-boot.js",
+    "test:faults": "node tools/harness/test-faults.js"
   },
   "devDependencies": {
     "fengari": "^0.1.4"

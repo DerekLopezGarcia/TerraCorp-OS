@@ -53,6 +53,7 @@ npm run sim        # ejecuta el OS con componentes falsos y vuelca pantalla
 npm run sim:oc     # gate estricto: 4 escenarios con la API real de OpenComputers
 npm run test:install # detección de volumen y copia del instalador (OpenOS simulado)
 npm run test:boot  # gestor de arranque de la EEPROM (sandbox 1.7.x y 1.8+)
+npm run test:faults # GPU sin energía: la pantalla debe quedar igual que sin fallos
 ```
 
 En el juego: `wget .../tools/fetch.lua /tmp/fetch.lua` → `lua /tmp/fetch.lua` →
@@ -115,6 +116,10 @@ uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
   anterior y se pinta una banda de error; una app que falla 3 veces al dibujar se congela con aviso
   en vez de reintentar el error cada frame (2026-10-23).
 - Referencia de arquitectura de MineOS estudiada en `docs/mineos-referencia.md` (2026-10-23).
+- `npm run test:faults` inyecta fallos de GPU (`--fault=N`, las N primeras escrituras devuelven
+  `nil, "not enough energy"`) y exige que la pantalla final sea **idéntica** a la del mismo escenario
+  sin fallos. Es el gate que demuestra que el volcado por diferencias reintenta lo rechazado; con el
+  código anterior las cuatro pantallas quedaban con huecos (2026-10-23).
 
 ## Memoria relacionada
 
