@@ -55,7 +55,16 @@ volumen marcado como de arranque, así que no hace falta OpenOS para que funcion
 
    ```lua
    cd /home/TerraCorp-OS/tools
-   ./install.lua /home/TerraCorp-OS <direccionDelDisco> --eeprom
+   ./install.lua /home/TerraCorp-OS --eeprom
+   ```
+
+   Sin dirección, detecta el volumen de destino: escribible, distinto del disco de OpenOS y **vacío o con
+   una instalación previa de TerraCorp**. Nunca elige un disco con datos ajenos. Si hay varios candidatos
+   (dos discos vacíos), pregunta cuál; con `--yes` exige que se pase la dirección a mano.
+
+   ```lua
+   ./install.lua /home/TerraCorp-OS 1a2b3c4d-... --eeprom   -- forzar un volumen concreto
+   ./install.lua /home/TerraCorp-OS --list                 -- ver qué volúmenes detecta
    ```
 
    - `<direccionDelDisco>` es la dirección del componente `filesystem` de destino (`components` la
@@ -105,6 +114,7 @@ npm run manifest       # regenera tools/manifest.txt (lo usa fetch.lua)
 npm run sim            # ejecuta el OS, reproduce eventos y vuelca la pantalla
 npm run sim:oc         # gate estricto: los 4 escenarios con la API real de OC
 npm run sim:dashboard  # escenarios: dashboard, console, files, settings
+npm run test:install   # detección de volumen y copia del instalador (OpenOS simulado)
 ```
 
 El arnés sirve como prueba de humo: componentes falsos, disco en memoria y GPU que rasteriza en una

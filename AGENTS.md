@@ -51,11 +51,13 @@ npm run check      # sintaxis de todos los .lua (Lua 5.3) + manifiesto en sync
 npm run manifest   # regenera tools/manifest.txt (lo que descarga fetch.lua)
 npm run sim        # ejecuta el OS con componentes falsos y vuelca pantalla
 npm run sim:oc     # gate estricto: 4 escenarios con la API real de OpenComputers
+npm run test:install # detección de volumen y copia del instalador (OpenOS simulado)
 ```
 
 En el juego: `wget .../tools/fetch.lua /tmp/fetch.lua` → `lua /tmp/fetch.lua` →
-`cd /home/TerraCorp-OS/tools && ./install.lua /home/TerraCorp-OS <dir> [--eeprom] [--yes]`.
-Ojo: `install` a secas es el instalador de OpenOS.
+`cd /home/TerraCorp-OS/tools && ./install.lua /home/TerraCorp-OS [dir] [--eeprom] [--yes] [--list]`.
+Sin `dir` detecta un volumen escribible, distinto del disco de OpenOS y vacío o ya TerraCorp; nunca
+uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
 
 ## Convenciones
 
