@@ -116,6 +116,11 @@ uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
   anterior y se pinta una banda de error; una app que falla 3 veces al dibujar se congela con aviso
   en vez de reintentar el error cada frame (2026-10-23).
 - Referencia de arquitectura de MineOS estudiada en `docs/mineos-referencia.md` (2026-10-23).
+- El registro se abre justo después de `ensureDir /var/log` y antes de crear la GPU: si el arranque se
+  cuelga en vídeo o en el splash, `/var/log/tc.log` ya tiene la línea `arranque ...`, así que la pantalla
+  negra se puede diagnosticar sin adivinar (2026-10-23).
+- `util.split(texto, "")` devuelve el texto entero: un separador vacío colgaba el bucle para siempre
+  (2026-10-23).
 - `npm run test:faults` inyecta fallos de GPU (`--fault=N`, las N primeras escrituras devuelven
   `nil, "not enough energy"`) y exige que la pantalla final sea **idéntica** a la del mismo escenario
   sin fallos. Es el gate que demuestra que el volcado por diferencias reintenta lo rechazado; con el

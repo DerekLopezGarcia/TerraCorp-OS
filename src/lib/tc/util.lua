@@ -18,6 +18,9 @@ end
 
 function util.split(text, separator)
   local parts = {}
+  if separator == "" then
+    return { text }
+  end
   local from = 1
   while true do
     local at = text:find(separator, from, true)

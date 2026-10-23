@@ -493,6 +493,26 @@ function kernel.start(boot)
   config.load(vfs)
   log.setLevel(config.get("logLevel"))
 
+  -- El registro se abre antes de tocar la GPU: si el arranque se cuelga al
+  -- inicializar vídeo o el splash, la primera línea ya está escrita y se sabe
+  -- que el fallo no es del volumen.
+  log.setSink(function(line)
+    local size = vfs.size("/var/log/tc.log") or 0
+    if size > 131072 then
+      vfs.write("/var/log/tc.log", "")
+    end
+    vfs.append("/var/log/tc.log", line .. "\n")
+  end)
+
+  local address = computer.address()
+  local configured = config.get("hostname")
+  local hostname = configured
+  if hostname == "" then
+    hostname = "TC-" .. tostring(address):sub(1, 4):upper()
+  end
+
+  log.info("arranque " .. version.product .. " " .. version.version .. " en " .. hostname)
+
   local gpuAddress = component.list("gpu")()
   if not gpuAddress then
     error("TerraCorp OS: se necesita una GPU para arrancar", 0)
@@ -541,22 +561,8 @@ function kernel.start(boot)
 
   local splash = config.get("splash") == true
   if splash then
+    log.info("splash")
     drawSplash(0.25, "Montando servicios base")
-  end
-
-  log.setSink(function(line)
-    local size = vfs.size("/var/log/tc.log") or 0
-    if size > 131072 then
-      vfs.write("/var/log/tc.log", "")
-    end
-    vfs.append("/var/log/tc.log", line .. "\n")
-  end)
-
-  local address = computer.address()
-  local configured = config.get("hostname")
-  local hostname = configured
-  if hostname == "" then
-    hostname = "TC-" .. tostring(address):sub(1, 4):upper()
   end
 
   local instance = setmetatable({
@@ -575,7 +581,6 @@ function kernel.start(boot)
     hostname = hostname,
   }, { __index = kernel })
 
-  log.info("arranque " .. version.product .. " " .. version.version .. " en " .. hostname)
   -- Diagnóstico de arranque: si la pantalla acaba negra, el registro dice con
   -- qué GPU, qué pantalla y qué resolución se estaba trabajando.
   log.info(string.format(
