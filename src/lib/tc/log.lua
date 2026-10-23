@@ -17,6 +17,19 @@ local function now()
   return ok and stamp or "--:--:--"
 end
 
+-- Uptime del ordenador. En juego da el tiempo real de arranque (segundos desde
+-- que arrancó el nodo), así que `cat /var/log/tc.log` mide F0 sin cronómetro.
+local function uptime()
+  if type(computer) ~= "table" or type(computer.uptime) ~= "function" then
+    return nil
+  end
+  local ok, seconds = pcall(computer.uptime)
+  if ok and type(seconds) == "number" then
+    return string.format("%.2fs", seconds)
+  end
+  return nil
+end
+
 function log.setLevel(name)
   log.threshold = LEVELS[name] or LEVELS.info
 end
@@ -66,7 +79,12 @@ function log.trace(message)
   end
 
   if log.sink then
-    pcall(log.sink, string.format("%s %s %s", entry.time, entry.tag, entry.message))
+    local up = uptime()
+    local line = string.format("%s %s %s", entry.time, entry.tag, entry.message)
+    if up then
+      line = line .. " [" .. up .. "]"
+    end
+    pcall(log.sink, line)
   end
 end
 

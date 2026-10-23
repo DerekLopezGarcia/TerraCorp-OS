@@ -6,7 +6,7 @@ lo modifica ni lo redistribuye: se instala en los ordenadores del jugador.
 
 Estado: **0.1.0 "Foundry"** — arranca, monta escritorio, 5 aplicaciones, configuración persistente y
 registro. Validado con un arnés que ejecuta el OS en un intérprete Lua 5.3 real; **pendiente de
-prueba en partida**.
+prueba en partida** (protocolo y medidas en `docs/pruebas.md`).
 
 ## Qué incluye
 

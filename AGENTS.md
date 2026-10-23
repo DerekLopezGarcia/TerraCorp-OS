@@ -41,7 +41,7 @@ tools/make-manifest.js genera tools/manifest.txt desde el árbol
 tools/check.lua       comprobador de sintaxis bajo OpenOS
 tools/spike-rc.lua    banco de pruebas del enlace Redstone Control (spike)
 tools/harness/        arnés Node (fengari) + comprobador
-docs/                 arquitectura, opencomputers, roadmap, distribuido, larga-distancia
+docs/                 arquitectura, opencomputers, roadmap, distribuido, larga-distancia, pruebas
 ```
 
 ## Comandos
@@ -56,6 +56,7 @@ npm run test:install # detección de volumen y copia del instalador (OpenOS simu
 npm run test:boot  # gestor de arranque de la EEPROM (sandbox 1.7.x y 1.8+)
 npm run test:faults # GPU sin energía: la pantalla debe quedar igual que sin fallos
 npm run test:screens # mismo OS de 160x50 a 40x16, siempre a la resolución de la pantalla
+npm run measure    # líneas/bytes del código y coste de pintado (cifras para docs/pruebas.md)
 ```
 
 En el juego: `wget .../tools/fetch.lua /tmp/fetch.lua` → `lua /tmp/fetch.lua` →
@@ -123,12 +124,18 @@ uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
   negra se puede diagnosticar sin adivinar (2026-10-23).
 - `log.trace` escribe **siempre** al disco aunque el nivel sea info; `log.info` solo vive en memoria y
   warn/error sí se persisten. Los hitos de arranque usan `trace` para poder diagnosticar una pantalla
-  negra sin adivinar (2026-10-23).
+  negra sin adivinar. Cada traza acaba en `[Ns]`, el uptime (`computer.uptime`) en ese instante, así
+  que el arranque real se lee de `/var/log/tc.log` sin cronómetro (2026-10-23).
+- El arnés **no mide** tiempo de arranque ni memoria: arranca de forma síncrona (el primer frame se
+  pinta antes de consumir señales) y fengari no implementa `lua_gc`, así que `collectgarbage("count")`
+  revienta con `lua_gc not implemented`. Mide líneas/bytes y coste de pintado (`npm run measure`); el
+  resto se lee en juego. Las cifras y el protocolo están en `docs/pruebas.md` (2026-10-23).
 - **No editar `src/*.lua` con `Get-Content`/`Set-Content` en PowerShell 5.1**: sin BOM lee UTF-8 como
   CP1252 (duplica la codificación de los acentos) y `Set-Content -Encoding UTF8` añade BOM, que el
   `load` del kernel rechaza (`unexpected symbol near '<\239>'`). Usar las herramientas de edición del
   agente, que respetan UTF-8 sin BOM (2026-10-23). `npm run check` rechaza BOM y codificación
-  duplicada, así que la regresión no pasa desapercibida.
+  duplicada, así que la regresión no pasa desapercibida. `Get-Content` también **muestra** mal un
+  fichero correcto (`Núcleo` sale como `Nǧcleo`): no «arregles» lo que sólo está mal en pantalla.
 - `util.split(texto, "")` devuelve el texto entero: un separador vacío colgaba el bucle para siempre
   (2026-10-23).
 - El kernel aplica `gpu.maxResolution()` **sin tope** (antes recortaba a 118x44): el escritorio ocupa

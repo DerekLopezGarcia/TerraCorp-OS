@@ -212,6 +212,7 @@ local maxWidth = tonumber(rawget(_G, "MAX_WIDTH")) or 160
 local maxHeight = tonumber(rawget(_G, "MAX_HEIGHT")) or 50
 local cells = {}
 local setCalls = 0
+local clock = 0
 
 local function resetScreen()
   cells = {}
@@ -349,7 +350,6 @@ function component.invoke(address, method, ...)
   return true
 end
 
-local clock = 0
 local shutdownFlag = false
 local scripted = {}
 
@@ -490,6 +490,7 @@ if not chunk then
 end
 
 local ok, failure = pcall(chunk)
+
 print("")
 print("=== EJECUCIÓN ===")
 print("resultado : " .. (ok and "ok" or ("ERROR: " .. tostring(failure))))
@@ -500,6 +501,26 @@ if faultsInjected > 0 then
 end
 print("resolución: " .. width .. "x" .. height)
 print("escenario : " .. tostring(scenario) .. (STRICT and " (estricto)" or ""))
+
+-- Medidas para F0 (ver docs/pruebas.md). En el arnés el arranque es síncrono:
+-- el primer frame se pinta antes de consumir ninguna señal, así que el tiempo
+-- real de arranque y la memoria sólo se pueden medir en juego (uptime y
+-- computer.freeMemory, que el kernel apunta en /var/log/tc.log). Aquí se mide
+-- el coste de pintado, que sí es comparable entre versiones.
+local painted = 0
+for y = 1, height do
+  for x = 1, width do
+    if cells[y][x] ~= " " then
+      painted = painted + 1
+    end
+  end
+end
+local totalCells = width * height
+
+print("")
+print("=== MEDIDAS ===")
+print(string.format("pintado   : %d de %d celdas (%.1f %%) en %d llamadas a gpu.set · %d señales",
+  painted, totalCells, painted * 100 / totalCells, setCalls, clock / 0.25))
 
 print("")
 print("=== PANTALLA FINAL ===")

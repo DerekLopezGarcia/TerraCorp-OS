@@ -18,7 +18,7 @@ Cada fase tiene un criterio de salida medible. No se abre la siguiente sin cumpl
 - Probar en Supersymmetry con CPU tier 2 y pantalla tier 2/3.
 - Medir: memoria libre, tiempo de arranque, celdas redibujadas por segundo.
 - Corregir lo que salga; decidir qué apps sobran.
-- Escribir `docs/pruebas.md` con el resultado real.
+- Rellenar `docs/pruebas.md` con el resultado real (protocolo y medidas del arnés ya están allí).
 
 **Salida:** 30 min de sesión sin errores, ≥ 250 KB libres en tier 2, arranque ≤ 2 s.
 
