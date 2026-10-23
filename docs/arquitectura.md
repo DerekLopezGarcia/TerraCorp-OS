@@ -71,7 +71,8 @@ Consecuencias:
 - Redibujar el escritorio cuesta proporcional a lo que cambia, no a la pantalla completa.
 - Un cambio de resolución o de GPU crea un framebuffer nuevo (`gfx:resize()` reinicia la caché de
   celdas), así que la siguiente composición repinta todo.
-- El coste de memoria es de tres tablas de `w*h` (118x44 ≈ 15 500 celdas).
+- El coste de memoria es de tres tablas de `w*h` con la resolución real de la pantalla (160x50
+  ≈ 24 000 celdas).
 
 Las apps nunca escriben en el framebuffer raíz: reciben `ctx.view`, una subvista con origen y recorte.
 Sus coordenadas son locales (`1..w`, `1..h`), lo que permite mover o redimensionar la ventana sin tocar

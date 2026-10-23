@@ -43,7 +43,8 @@ function bundleSource() {
 // Lanza si el arnés no se puede cargar o revienta.
 // `faultSet` inyecta fallos de GPU: las primeras N llamadas a `gpu.set`
 // devuelven nil, "not enough energy", como el componente real sin energía.
-function runScenario(scenario, strict, faultSet) {
+// `screen` fija la resolución máxima de la pantalla simulada.
+function runScenario(scenario, strict, faultSet, screen) {
   const L = lauxlib.luaL_newstate();
   lualib.luaL_openlibs(L);
 
@@ -66,6 +67,13 @@ function runScenario(scenario, strict, faultSet) {
     lua.lua_pushinteger(L, faultSet);
     lua.lua_setfield(L, -2, to_luastring("set"));
     lua.lua_setglobal(L, to_luastring("FAULT"));
+  }
+
+  if (screen && screen.width > 0 && screen.height > 0) {
+    lua.lua_pushinteger(L, screen.width);
+    lua.lua_setglobal(L, to_luastring("MAX_WIDTH"));
+    lua.lua_pushinteger(L, screen.height);
+    lua.lua_setglobal(L, to_luastring("MAX_HEIGHT"));
   }
 
   if (lauxlib.luaL_loadfile(L, to_luastring(harnessPath)) !== lua.LUA_OK) {

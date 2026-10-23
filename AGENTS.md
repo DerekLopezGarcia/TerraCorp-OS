@@ -20,7 +20,8 @@ El OS se instala en los ordenadores del jugador; no modifica el pack.
 
 - Runtime: **Lua 5.3** (el de OpenComputers). No hay build.
 - OpenComputers: 1.7.x probado a nivel de API; objetivo 1.8.x.
-- Pantalla mínima 80x25; resolución objetivo 118x44.
+- La resolución es **la de la pantalla**: el kernel no impone medidas (probado de 40x16 a 160x50). Por
+  debajo de 80x25 la UI queda comprimida pero funcional.
 - Idioma del producto y de los docs: español.
 - Licencia: MIT.
 - Verificación local: `npm run check` y `npm run sim` (Node 20+, fengari como devDependency).
@@ -54,6 +55,7 @@ npm run sim:oc     # gate estricto: 4 escenarios con la API real de OpenComputer
 npm run test:install # detección de volumen y copia del instalador (OpenOS simulado)
 npm run test:boot  # gestor de arranque de la EEPROM (sandbox 1.7.x y 1.8+)
 npm run test:faults # GPU sin energía: la pantalla debe quedar igual que sin fallos
+npm run test:screens # mismo OS de 160x50 a 40x16, siempre a la resolución de la pantalla
 ```
 
 En el juego: `wget .../tools/fetch.lua /tmp/fetch.lua` → `lua /tmp/fetch.lua` →
@@ -129,6 +131,12 @@ uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
   duplicada, así que la regresión no pasa desapercibida.
 - `util.split(texto, "")` devuelve el texto entero: un separador vacío colgaba el bucle para siempre
   (2026-10-23).
+- El kernel aplica `gpu.maxResolution()` **sin tope** (antes recortaba a 118x44): el escritorio ocupa
+  la pantalla real. La geometría de ventanas es proporcional (74% de ancho, 84% del escritorio) y
+  `clampWindow` recorta; `npm run test:screens` lo verifica en 160x50, 120x40, 80x25, 60x20 y 40x16
+  (2026-10-23).
+- Los guiones del arnés se anclan a la resolución simulada (`dockY = maxHeight - 1`) y navegan con
+  teclado; antes usaban filas fijas de 118x44 y dejaban de funcionar con otro tamaño (2026-10-23).
 - `npm run test:faults` inyecta fallos de GPU (`--fault=N`, las N primeras escrituras devuelven
   `nil, "not enough energy"`) y exige que la pantalla final sea **idéntica** a la del mismo escenario
   sin fallos. Es el gate que demuestra que el volcado por diferencias reintenta lo rechazado; con el

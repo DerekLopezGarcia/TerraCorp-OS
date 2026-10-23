@@ -246,12 +246,15 @@ mucho más simple de auditar.
 | Interrupción | Ctrl+Alt+C | ninguna |
 | Tamaño | ~111 ficheros Lua, GUI 162 KB | 15 ficheros Lua, ~85 KB total |
 
-## 10. Preguntas abiertas (verificar contra el código de OpenComputers)
+## 10. Preguntas abiertas — resueltas
 
-- ¿`gpu.set()` devuelve `true` o `nil` en éxito? Afecta a `gfx:flush` (ver §4).
-- ¿`gpu.setBackground()` devuelve el color anterior? Si devuelve `nil` en algún caso, `flush` marcaría
-  el tramo como fallido y reintentaría indefinidamente → **posible causa de parpadeo**.
-- ¿Qué tamaño de pantalla real tiene el nodo del usuario? (80x25 y 118x44 simulados: ambos OK.)
+- ¿`gpu.set()` devuelve `true` o `nil` en éxito? **Resuelto** en `GraphicsCard.scala` (rama
+  `master-MC1.12`): devuelve `true`, y `nil, "not enough energy"` si la GPU no tiene energía. `fill` y
+  `copy` igual. `gfx:flush` sólo da el tramo por pintado con `true`.
+- ¿`gpu.setBackground()` devuelve el color anterior? **Resuelto**: sí, el color previo. Si no hay
+  pantalla enlazada devuelve `nil`, así que `flush` reintenta el tramo.
+- ¿Qué tamaño de pantalla real tiene el nodo del usuario? **Ya no importa**: el escritorio adopta la
+  resolución que tenga la pantalla (ver `npm run test:screens`, de 40x16 a 160x50).
 
 ## Referencias
 

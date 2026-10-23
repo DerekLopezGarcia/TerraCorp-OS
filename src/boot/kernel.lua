@@ -526,12 +526,14 @@ function kernel.start(boot)
   local theme = themeModule.build(config)
   local gfx = gfxModule.new(gpuAddress)
 
+  -- La resolución es la de la pantalla que haya: no se fuerza ninguna medida.
+  -- En una pantalla grande se aprovecha entera y en una pequeña el escritorio
+  -- se recoloca, porque la geometría de las ventanas es proporcional y el
+  -- recorte lo hace `clampWindow`.
   local okLimits, maxWidth, maxHeight = pcall(gfx.gpu.maxResolution)
   if okLimits and maxWidth and maxHeight then
-    local targetWidth = math.min(maxWidth, 118)
-    local targetHeight = math.min(maxHeight, 44)
-    if targetWidth ~= gfx.w or targetHeight ~= gfx.h then
-      if pcall(gfx.gpu.setResolution, targetWidth, targetHeight) then
+    if maxWidth ~= gfx.w or maxHeight ~= gfx.h then
+      if pcall(gfx.gpu.setResolution, maxWidth, maxHeight) then
         gfx:resize()
       end
     end

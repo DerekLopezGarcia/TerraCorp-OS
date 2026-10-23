@@ -206,6 +206,10 @@ end
 -- ---------------------------------------------------------------------------
 
 local width, height = 80, 25
+-- Resolución máxima de la pantalla simulada; el guion puede cambiarla para
+-- probar el mismo OS en monitores pequeños y grandes.
+local maxWidth = tonumber(rawget(_G, "MAX_WIDTH")) or 160
+local maxHeight = tonumber(rawget(_G, "MAX_HEIGHT")) or 50
 local cells = {}
 local setCalls = 0
 
@@ -226,11 +230,11 @@ function gpu.getResolution()
 end
 
 function gpu.maxResolution()
-  return 160, 50
+  return maxWidth, maxHeight
 end
 
 function gpu.setResolution(w, h)
-  if w < 1 or h < 1 or w > 160 or h > 50 then
+  if w < 1 or h < 1 or w > maxWidth or h > maxHeight then
     return false
   end
   width, height = w, h
@@ -402,7 +406,7 @@ function computer.shutdown()
 end
 
 -- ---------------------------------------------------------------------------
--- Guion de interacción (pantalla final 118x44, dock en la fila 43)
+-- Guion de interacción (anclado a la resolución simulada, no a filas fijas)
 -- ---------------------------------------------------------------------------
 
 local scenario = SCENARIO or "all"
@@ -419,8 +423,26 @@ local function typeText(value)
   end
 end
 
+-- Los guiones se anclan a la resolución simulada, no a columnas fijas: el dock
+-- está en la penúltima fila y las ventanas son proporcionales a la pantalla.
+local dockY = maxHeight - 1
+
+-- Misma geometría que `ui:defaultGeometry` para la primera ventana (offset 0).
+-- Sólo sirve para apuntar los gestos del ratón; si el diseño cambia, el gesto
+-- puede caer fuera y el escenario deja de cubrirlo, pero no falla en falso.
+local function windowRect()
+  local desktopTop = 3
+  local desktopBottom = dockY - 1
+  local usable = desktopBottom - desktopTop + 1
+  local w = math.min(maxWidth - 4, math.max(34, math.floor(maxWidth * 0.74)))
+  local h = math.min(usable - 1, math.max(10, math.floor(usable * 0.84)))
+  local x = math.floor((maxWidth - w) / 2)
+  local y = desktopTop + math.max(0, math.floor((usable - h) / 2))
+  return x, y, w, h
+end
+
 if scenario == "dashboard" then
-  ev("touch", "screen-1", 3, 43, 0, "tester")
+  ev("touch", "screen-1", 3, dockY, 0, "tester")
   idle(12)
 elseif scenario == "console" then
   ev("key_down", "screen-1", nil, 0x3D, "tester")
@@ -428,26 +450,32 @@ elseif scenario == "console" then
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(2)
 elseif scenario == "files" then
-  ev("touch", "screen-1", 14, 43, 0, "tester")   -- abre Ficheros
-  ev("touch", "screen-1", 20, 13, 0, "tester")   -- selecciona /lib (4.º: las carpetas van primero)
-  ev("touch", "screen-1", 20, 13, 0, "tester")   -- entra en /lib
-  ev("touch", "screen-1", 20, 10, 0, "tester")   -- selecciona /lib/tc
-  ev("touch", "screen-1", 20, 10, 0, "tester")   -- entra en /lib/tc
-  ev("touch", "screen-1", 20, 12, 0, "tester")   -- selecciona un módulo
+  -- Teclado: la lista se navega igual en cualquier tamaño de pantalla.
+  ev("key_down", "screen-1", nil, 0x3C, "tester")   -- F2 abre Ficheros
+  idle(1)
+  ev("key_down", "screen-1", nil, 0xD0, "tester")   -- abajo x3 hasta /lib
+  ev("key_down", "screen-1", nil, 0xD0, "tester")
+  ev("key_down", "screen-1", nil, 0xD0, "tester")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")   -- entra
+  idle(1)
+  ev("key_down", "screen-1", nil, 0xD0, "tester")   -- baja un nivel más
+  ev("key_down", "screen-1", nil, 0x1C, "tester")   -- entra
+  ev("key_down", "screen-1", nil, 0x0E, "tester")   -- vuelve atrás
   idle(2)
 elseif scenario == "settings" then
-  ev("touch", "screen-1", 40, 43, 0, "tester")
+  ev("touch", "screen-1", 40, dockY, 0, "tester")
   idle(3)
 else
-  ev("touch", "screen-1", 3, 43, 0, "tester")
+  local wx, wy = windowRect()
+  ev("touch", "screen-1", 3, dockY, 0, "tester")     -- abre Panel
+  ev("touch", "screen-1", wx + 2, wy, 0, "tester")   -- agarra la barra de título
+  ev("drop", "screen-1", wx + 3, wy + 1, 0, "tester")
+  ev("scroll", "screen-1", wx + 2, wy + 1, 1, "tester")
   ev("key_down", "screen-1", "r", 0x13, "tester")
   ev("key_down", "screen-1", nil, 0x3D, "tester")
   typeText("help")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   ev("key_down", "screen-1", nil, 0x3F, "tester")
-  ev("touch", "screen-1", 40, 8, 0, "tester")
-  ev("drop", "screen-1", 41, 9, 0, "tester")
-  ev("scroll", "screen-1", 40, 8, 1, "tester")
 end
 
 -- ---------------------------------------------------------------------------

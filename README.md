@@ -27,12 +27,13 @@ prueba en partida**.
 | Modpack | Supersymmetry | Supersymmetry |
 | OpenComputers | 1.7.x | 1.8.x |
 | CPU | Tier 2 | Tier 3 |
-| Pantalla | Tier 2 (80x25) | Tier 3 (hasta 118x44) |
+| Pantalla | Tier 2 (80x25) | Tier 3 (hasta 160x50) |
 | Disco | 1 MB libre | 2 MB |
 | Memoria | 1 MB | 2 MB |
 
-La UI se adapta al tamaño de pantalla, pero por debajo de 80x25 el dock y las tarjetas quedan muy
-comprimidos.
+El escritorio usa **la resolución real de la pantalla**: no impone ninguna medida. Las ventanas son
+proporcionales y se recortan al escritorio, así que se adapta desde 40x16 hasta 160x50 (probado en
+`npm run test:screens`); por debajo de 80x25 las tarjetas quedan comprimidas.
 
 ## Instalación
 
