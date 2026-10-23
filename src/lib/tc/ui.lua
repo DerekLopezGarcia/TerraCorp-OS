@@ -328,12 +328,28 @@ function ui:drawWindow(win)
   self.gfx:put(win.x + win.w - 6, win.y, "[-]", barFg, barBg)
   self.gfx:put(win.x + win.w - 3, win.y, "[x]", barFg, barBg)
 
+  -- Una app que falla al dibujar no debe dejar el marco vacío ni reintentar el
+  -- error en cada frame: se avisa en la ventana y, tras varios fallos
+  -- consecutivos, se congela el marco en vez de seguir llamándola.
+  if win.broken then
+    self.gfx:put(win.x + 2, win.y + 2, "Aplicación detenida por errores.", c.danger, c.deep)
+    self.gfx:put(win.x + 2, win.y + 3, tostring(win.broken):sub(1, win.w - 4), c.dim, c.deep)
+    return
+  end
+
   if win.instance and win.instance.draw then
     local ctx = self:context(win)
     local ok, reason = pcall(win.instance.draw, win.instance, ctx)
     if not ok then
-      self.log.error("draw " .. win.id .. ": " .. tostring(reason))
+      win.failures = (win.failures or 0) + 1
+      self.log.error("draw " .. win.id .. " (" .. win.failures .. "): " .. tostring(reason))
       self.gfx:put(win.x + 2, win.y + 2, "Error de dibujo: " .. tostring(reason), c.danger, c.deep)
+      if win.failures >= 3 then
+        win.broken = tostring(reason)
+        self:notify("error", win.title .. " detenida: falla al dibujar")
+      end
+    else
+      win.failures = 0
     end
   end
 end
@@ -368,7 +384,31 @@ function ui:render(force)
   end
   self.dirty = false
 
-  self.gfx:clear(self.colors.bg, self.colors.dim)
+  -- No se limpia el framebuffer entero a negro antes de dibujar. Si una
+  -- sección falla, el frame anterior sigue en pantalla en lugar de dejar un
+  -- hueco negro; y si TODO falla, el kernel puede pintar su aviso encima de
+  -- algo visible en vez de sobre negro. El fondo del escritorio se pinta
+  -- explícitamente.
+  local failures = {}
+
+  local function section(name, fn)
+    local ok, reason = pcall(fn)
+    if not ok then
+      failures[#failures + 1] = name .. ": " .. tostring(reason)
+    end
+  end
+
+  section("escritorio", function()
+    self.gfx:fill(
+      1,
+      self.desktopTop,
+      self.w,
+      self.desktopBottom - self.desktopTop + 1,
+      " ",
+      self.colors.dim,
+      self.colors.bg
+    )
+  end)
 
   local ordered = {}
   for _, win in ipairs(self.windows) do
@@ -380,17 +420,40 @@ function ui:render(force)
 
   for _, win in ipairs(ordered) do
     if not win.minimized then
-      self:drawWindow(win)
+      section("ventana " .. tostring(win.id), function()
+        self:drawWindow(win)
+      end)
     end
   end
 
   if #self.windows == 0 then
-    self:drawEmptyState()
+    section("escritorio vacío", function()
+      self:drawEmptyState()
+    end)
   end
 
-  self:drawTopbar()
-  self:drawDock()
-  self:drawNotice()
+  section("barra superior", function()
+    self:drawTopbar()
+  end)
+  section("dock", function()
+    self:drawDock()
+  end)
+  section("aviso", function()
+    self:drawNotice()
+  end)
+
+  if #failures > 0 then
+    self.failures = failures
+    self.log.error("render: " .. table.concat(failures, " | "))
+    -- Aviso visible sin depender del framebuffer completo.
+    pcall(function()
+      local strip = " ERROR " .. table.concat(failures, " | ")
+      self.gfx:fill(1, self.h, self.w, 1, " ", self.colors.onDanger, self.colors.danger)
+      self.gfx:put(1, self.h, text.truncate(strip, self.w), self.colors.onDanger, self.colors.danger)
+    end)
+  else
+    self.failures = nil
+  end
 
   return self.gfx:flush()
 end

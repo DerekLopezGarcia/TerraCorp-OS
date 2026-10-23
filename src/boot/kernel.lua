@@ -576,6 +576,16 @@ function kernel.start(boot)
   }, { __index = kernel })
 
   log.info("arranque " .. version.product .. " " .. version.version .. " en " .. hostname)
+  -- Diagnóstico de arranque: si la pantalla acaba negra, el registro dice con
+  -- qué GPU, qué pantalla y qué resolución se estaba trabajando.
+  log.info(string.format(
+    "gpu %s · pantalla %s · %dx%d · %d KB libres",
+    tostring(gpuAddress):sub(1, 4),
+    tostring(screenAddress or "-"):sub(1, 4),
+    gfx.w,
+    gfx.h,
+    math.floor(computer.freeMemory() / 1024)
+  ))
 
   local apps = {}
   for _, id in ipairs(APP_IDS) do
@@ -607,10 +617,15 @@ function kernel.start(boot)
 
   -- Primera composición controlada: si el escritorio no se puede pintar, se
   -- dice en pantalla en vez de arrancar con el framebuffer en negro.
+  log.info("primer render")
   local okPaint, paintReason = pcall(instance.ui.render, instance.ui, true)
   if not okPaint then
     instance:emergency(paintReason)
     log.error("primer render: " .. tostring(paintReason))
+  elseif instance.ui.failures then
+    log.error("primer render con avisos: " .. table.concat(instance.ui.failures, " | "))
+  else
+    log.info("primer render ok")
   end
 
   instance:loop()

@@ -232,10 +232,14 @@ function gpu.setResolution(w, h)
   return true
 end
 
+-- Igual que el componente: devuelven true si escriben y nil, motivo si la GPU
+-- no tiene energía. El OS usa ese valor para reintentar el tramo.
 function gpu.setBackground()
+  return true
 end
 
 function gpu.setForeground()
+  return true
 end
 
 function gpu.getBackground()
@@ -249,7 +253,7 @@ end
 function gpu.set(x, y, value)
   setCalls = setCalls + 1
   if not cells[y] then
-    return
+    return true
   end
   local column = x
   for _, code in utf8.codes(value) do
@@ -258,6 +262,7 @@ function gpu.set(x, y, value)
     end
     column = column + 1
   end
+  return true
 end
 
 function gpu.fill(x, y, w, h, character)
@@ -270,6 +275,7 @@ function gpu.fill(x, y, w, h, character)
       end
     end
   end
+  return true
 end
 
 resetScreen()

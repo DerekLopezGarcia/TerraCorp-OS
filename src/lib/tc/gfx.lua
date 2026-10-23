@@ -249,6 +249,8 @@ function gfx:flush()
   local gpu = self.gpu
   local width = self.w
   local written = 0
+  local failed = 0
+  local lastFg, lastBg = nil, nil
 
   for row = 1, self.h do
     local base = (row - 1) * width
@@ -281,24 +283,46 @@ function gfx:flush()
           cursor = cursor + 1
         end
 
-        gpu.setBackground(bg)
-        gpu.setForeground(fg)
-        gpu.set(column, row, table.concat(run))
-
-        for index = column, cursor - 1 do
-          local current = base + index
-          self.pch[current] = self.ch[current]
-          self.pfg[current] = self.fg[current]
-          self.pbg[current] = self.bg[current]
+        -- La GPU puede rechazar la escritura (sin energía o sin pantalla):
+        -- devuelve nil. Solo entonces no se marca como pintado, para volver a
+        -- intentarlo en el siguiente frame en vez de dejar el hueco.
+        local colorsOk = true
+        if bg ~= lastBg then
+          local callOk, result = pcall(gpu.setBackground, bg)
+          colorsOk = callOk and result ~= nil and result ~= false
+          if colorsOk then lastBg = bg else lastBg = nil end
+        end
+        if fg ~= lastFg then
+          local callOk, result = pcall(gpu.setForeground, fg)
+          colorsOk = colorsOk and callOk and result ~= nil and result ~= false
+          if callOk and result ~= nil and result ~= false then lastFg = fg else lastFg = nil end
         end
 
-        written = written + (cursor - column)
+        local callOk, result = pcall(gpu.set, column, row, table.concat(run))
+        local wrote = colorsOk and callOk and result ~= nil and result ~= false
+
+        if wrote then
+          for index = column, cursor - 1 do
+            local current = base + index
+            self.pch[current] = self.ch[current]
+            self.pfg[current] = self.fg[current]
+            self.pbg[current] = self.bg[current]
+          end
+
+          written = written + (cursor - column)
+        else
+          failed = failed + 1
+          -- El estado de color de la GPU queda indeterminado: se fuerza a
+          -- reenviarlo en el siguiente tramo.
+          lastFg, lastBg = nil, nil
+        end
+
         column = cursor
       end
     end
   end
 
-  return written
+  return written, failed
 end
 
 return gfx

@@ -106,6 +106,15 @@ uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
   (`eeprom/init.lua`) y el `init.lua` del volumen debe tolerar que falten (2026-10-23).
 - Un fallo de render vuelve a marcar el escritorio sucio y se registra con límite: nunca se deja la
   pantalla congelada ni se escribe un error por frame (2026-10-23).
+- Contrato real de la GPU, verificado en `GraphicsCard.scala` (rama `master-MC1.12`):
+  `gpu.set`/`fill`/`copy` devuelven `true` al escribir y `nil, "not enough energy"` si no hay energía;
+  `setBackground`/`setForeground` devuelven el color anterior. El volcado por diferencias solo se da
+  por bueno cuando el retorno es `true` (2026-10-23).
+- `ui:render` no limpia el framebuffer a negro antes de dibujar: pinta el fondo del escritorio y cada
+  sección (barra, dock, ventanas, aviso) con `pcall` independiente. Si una falla, queda el frame
+  anterior y se pinta una banda de error; una app que falla 3 veces al dibujar se congela con aviso
+  en vez de reintentar el error cada frame (2026-10-23).
+- Referencia de arquitectura de MineOS estudiada en `docs/mineos-referencia.md` (2026-10-23).
 
 ## Memoria relacionada
 
