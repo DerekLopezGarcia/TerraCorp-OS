@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "check": "node tools/harness/check.js",
+    "manifest": "node tools/make-manifest.js",
     "sim": "node tools/harness/simulate.js all",
     "sim:oc": "node tools/harness/simulate-oc.js",
     "sim:dashboard": "node tools/harness/simulate.js dashboard",

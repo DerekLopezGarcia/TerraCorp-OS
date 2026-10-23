@@ -1,9 +1,11 @@
-// Comprueba que todos los ficheros Lua compilan con Lua 5.3 (fengari).
+// Comprueba que todos los ficheros Lua compilan con Lua 5.3 (fengari) y que
+// tools/manifest.txt (lo que descarga fetch.lua) coincide con el árbol real.
 // No ejecuta el código: solo valida sintaxis, como haría `load` en OpenComputers.
 
 const fs = require("fs");
 const path = require("path");
 const { lua, lauxlib, lualib, to_luastring, to_jsstring } = require("fengari");
+const { list } = require("../make-manifest");
 
 const repoRoot = path.resolve(__dirname, "../..");
 const targets = ["src", "eeprom", "tools"];
@@ -39,5 +41,37 @@ for (const file of files) {
   lua.lua_settop(L, 0);
 }
 
+// El manifiesto es lo que descarga tools/fetch.lua dentro del juego: si no
+// coincide con el árbol, la instalación se queda a medias sin avisar.
+const manifestPath = path.join(repoRoot, "tools", "manifest.txt");
+const expected = list();
+let manifest = null;
+
+try {
+  manifest = fs.readFileSync(manifestPath, "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+} catch (error) {
+  errors++;
+  console.error("FALTA tools/manifest.txt (ejecuta: npm run manifest)");
+}
+
+if (manifest) {
+  for (const file of expected) {
+    if (!manifest.includes(file)) {
+      errors++;
+      console.error("FUERA DEL MANIFIESTO " + file + " (ejecuta: npm run manifest)");
+    }
+  }
+  for (const file of manifest) {
+    if (!expected.includes(file)) {
+      errors++;
+      console.error("EN EL MANIFIESTO PERO NO EN EL ÁRBOL " + file);
+    }
+  }
+}
+
 console.log(files.length + " ficheros comprobados, " + errors + " errores");
+console.log("manifiesto: " + (manifest ? manifest.length : "ausente") + " ficheros");
 process.exit(errors ? 1 : 0);
