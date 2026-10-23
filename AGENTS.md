@@ -84,6 +84,8 @@ En el juego: `install <raizDelRepo> <direccionFilesystem> [--eeprom] [--yes]`.
 - `computer.pullSignal` es la API cruda de señales; `event` es de OpenOS y no se usa.
 - Ancho de carácter = 1. Sin CJK/emoji; los acentos ocupan una celda.
 - Las ventanas se apilan con desplazamiento 2; los bordes de la ventana inferior asoman un sliver.
+- CPD: arranque automático siempre, con SAI (capacitores) y central propia; descarte por escalones y el
+  core es el último en apagarse.
 
 ## Memoria relacionada
 

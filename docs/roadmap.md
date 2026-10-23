@@ -83,13 +83,17 @@ principal no deja la base sin control. Ver `larga-distancia.md`.
 
 - Inventario: nodos, discos, energía y red.
 - Roles por nodo: `core`, `storage`, `worker`, `edge`.
-- Arranque y apagado ordenados; política ante falta de energía.
+- SAI y central propia: lectura de producción/consumo, presupuesto de respaldo y descarte por escalones.
+- Arranque automático escalonado al superar la SAI el 60 %, con verificación por nodo y watchdog.
+- Apagado ordenado: workers → terminales → storage → core (el último).
+- Chunkloader permanente como requisito documentado.
 - `storage` remoto sobre RAID, con copia en segundo nodo.
 - Atribución de operador (nombre en barra y registro, sin cuentas).
-- Mapa del CPD y alertas: nodo caído, disco lleno, relay saturado.
+- Mapa del CPD y alertas: nodo caído, disco lleno, relay saturado, SAI baja.
 
-**Salida:** 2 racks / 6 nodos inventariados y arrancados en orden; una terminal lee y escribe ficheros del
-storage; caída de un nodo sin corromper datos ni tumbar el resto.
+**Salida:** 2 racks / 6 nodos inventariados; el CPD arranca solo tras recargar el mundo al superar la SAI
+el 60 %; una terminal lee y escribe ficheros del storage; caída de un nodo sin corromper datos ni tumbar
+el resto.
 
 ### F5 — Cluster ligero (0.6)
 
@@ -132,6 +136,8 @@ No se planifica más hasta probarlo en partida.
 | 14 | Spike de RC: ancho, tick y Adapter de OC | F3.5 | S |
 | 15 | Transporte RC (tramas de 32 bits + ACK) | F3.5 | M |
 | 16 | Cliente de tablet con reanudación | F3.5 | M |
+| 17 | Política de energía: SAI, escalones y alertas | F4 | M |
+| 18 | Arranque automático escalonado + watchdog | F4 | M |
 
 ## Decisiones
 
@@ -140,7 +146,8 @@ No se planifica más hasta probarlo en partida.
    **Decidido.**
 3. **Terminales:** Remote Terminal nativa para administrar el rack y terminal propia para las fábricas.
    **Decidido.**
-4. **Autonomía del CPD:** pendiente (arranque automático con chunkloader o manual por operador).
+4. **Autonomía del CPD:** arranque automático siempre, con SAI y central propia. **Decidido.** La SAI
+   cubre el arranque y permite apagar en orden; el descarte es por escalones.
 5. **Apps núcleo:** propuesta Shell, Ficheros y Editor; Panel y Ajustes como apps del sistema. Pendiente
    de confirmar en F1.
 

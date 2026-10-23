@@ -140,13 +140,34 @@ telemetry.push("produccion", { hierro = 128 })
                  [ Linked Card ] ─── terminal de otra base
 ```
 
-- **Alimentación:** racks y capacitores. Apagado en orden inverso al arranque: worker → storage →
-  core; el core es lo último.
-- **Arranque:** ordenado y verificando respuesta de cada nodo antes del siguiente.
-- **Chunkloading:** sin chunks cargados no hay CPD. Depende del pack (FTB Utilities u otro): requisito
-  externo y riesgo.
+### Energía: central propia + SAI
+
+- El CPD tiene **central propia**; la SAI (capacitores + cargadores) cubre huecos y transitorios.
+- La SAI no es para seguir produciendo: es para **apagar en orden** y para absorber el pico de arranque.
+- Presupuesto: ≥ 3 minutos de consumo a plena carga y ≥ 2× el pico de arranque.
+- Medición: cada nodo reporta `computer.energy()`; la planta se lee con Adapter (producción/consumo).
+- Descarte por escalones si la SAI baja del umbral:
+  1. workers
+  2. terminales no críticas
+  3. storage (solo tras cerrar ficheros)
+  4. core (el último, y con aviso)
+- Nunca se apaga storage a mitad de escritura: primero se detiene el servicio, después el nodo.
+
+### Arranque automático (decidido)
+
+- El CPD arranca **siempre**, sin operador, en cuanto la SAI supera el 60 % de carga.
+- Orden: red → storage → core → workers → terminales.
+- **Arranque escalonado** (un nodo cada ~5 s) para no vaciar la SAI de golpe ni disparar el pico.
+- Tras cada nodo: responder al `PING` antes de arrancar el siguiente.
+- Requisito duro: **chunkloader permanente**. Sin chunks cargados no hay arranque automático posible.
+- Watchdog: si el core no responde tras N intentos, se reinicia el nodo si el rack lo permite y se
+  registra; si no, alerta al operador.
+- Apagado: solo por orden del operador o por SAI por debajo del mínimo; nunca por un corte transitorio.
+
+### Operación
+
 - **Inventario:** nodos, discos, energía y red. El mod no expone temperaturas.
-- **Alertas:** nodo caído, disco lleno, relay saturado, energía baja.
+- **Alertas:** nodo caído, disco lleno, relay saturado, SAI baja, planta por debajo del consumo.
 
 ## 9. Seguridad y sesión
 
