@@ -55,23 +55,23 @@ volumen marcado como de arranque, así que no hace falta OpenOS para que funcion
 
    ```lua
    cd /home/TerraCorp-OS/tools
-   ./install.lua /home/TerraCorp-OS --eeprom
+   ./install.lua /home/TerraCorp-OS
    ```
 
-   Sin dirección, detecta el volumen de destino: escribible, distinto del disco de OpenOS y **vacío o con
-   una instalación previa de TerraCorp**. Nunca elige un disco con datos ajenos. Si hay varios candidatos
-   (dos discos vacíos), pregunta cuál; con `--yes` exige que se pase la dirección a mano.
+   Sin dirección, detecta el volumen de destino: escribible, distinto del disco de OpenOS, de al menos
+   1 MB y **vacío o con una instalación previa de TerraCorp**. Nunca elige un disco con datos ajenos. Si
+   hay varios candidatos, pregunta cuál; con `--yes` exige que se pase la dirección a mano.
 
    ```lua
-   ./install.lua /home/TerraCorp-OS 1a2b3c4d-... --eeprom   -- forzar un volumen concreto
-   ./install.lua /home/TerraCorp-OS --list                 -- ver qué volúmenes detecta
+   ./install.lua /home/TerraCorp-OS 1a2b3c4d-...   -- forzar un volumen concreto
+   ./install.lua /home/TerraCorp-OS --list         -- ver qué volúmenes detecta
    ```
 
    - `<direccionDelDisco>` es la dirección del componente `filesystem` de destino (`components` la
      muestra).
-   - Sin `--eeprom` solo copia los ficheros y fija el volumen de arranque.
-   - Con `--eeprom` graba `eeprom/init.lua` en la EEPROM; si el flasheo falla, el propio instalador
-     avisa del motivo y puedes grabar ese fichero a mano.
+   - Basta con fijar el volumen de arranque: el BIOS estándar arranca TerraCorp sin tocar la EEPROM.
+   - `--eeprom` graba `eeprom/init.lua` en la EEPROM. Solo hace falta si la EEPROM no tiene BIOS, y
+     **sustituye el BIOS**: si ese gestor falla, hay que poner una EEPROM nueva. El instalador avisa.
    - `--yes` salta la confirmación.
 3. Reinicia el ordenador (`reboot` o palanca).
 

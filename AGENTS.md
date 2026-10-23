@@ -52,6 +52,7 @@ npm run manifest   # regenera tools/manifest.txt (lo que descarga fetch.lua)
 npm run sim        # ejecuta el OS con componentes falsos y vuelca pantalla
 npm run sim:oc     # gate estricto: 4 escenarios con la API real de OpenComputers
 npm run test:install # detección de volumen y copia del instalador (OpenOS simulado)
+npm run test:boot  # gestor de arranque de la EEPROM (sandbox 1.7.x y 1.8+)
 ```
 
 En el juego: `wget .../tools/fetch.lua /tmp/fetch.lua` → `lua /tmp/fetch.lua` →
@@ -100,6 +101,9 @@ uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
   core es el último en apagarse.
 - `filesystem.list` devuelve una tabla y el espacio se lee con `spaceUsed`/`spaceTotal` en bytes;
   `vfs.space()` los convierte a KB (2026-10-23).
+- En OC 1.7.x el sandbox de la EEPROM no trae `computer.getBootAddress`/`setBootAddress`: las define
+  `bios.lua` en tiempo de ejecución sobre `eeprom.getData`/`setData`. Un gestor propio debe crearlas
+  (`eeprom/init.lua`) y el `init.lua` del volumen debe tolerar que falten (2026-10-23).
 - Un fallo de render vuelve a marcar el escritorio sucio y se registra con límite: nunca se deja la
   pantalla congelada ni se escribe un error por frame (2026-10-23).
 

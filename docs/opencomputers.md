@@ -9,6 +9,9 @@ base de las decisiones del proyecto; si algo cambia, actualizar este documento.
   de arranque con `load(buffer, "=init")`.
 - El volumen de arranque puede ser cualquier componente `filesystem`, no solo un disquete.
 - `computer.getBootAddress()` / `computer.setBootAddress(address)` permiten fijar el volumen.
+- En 1.7.x **esas dos funciones no existen en el entorno de la EEPROM**: las define `bios.lua` al
+  arrancar, guardando el volumen en la propia EEPROM (`eeprom.getData`/`setData`). Un gestor de arranque
+  propio debe crearlas o falla con `bios:NN: attempt to call a nil value (field 'getBootAddress')`.
 - En el entorno del BIOS solo están garantizados `component`, `computer`, `load` y las librerías
   estándar de Lua. **No** hay `require`, `event`, `fs` ni `shell`: son de OpenOS.
 - `computer.beep(frequency, duration)` está disponible antes de cargar OpenOS.
