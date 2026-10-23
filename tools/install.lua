@@ -39,6 +39,24 @@ end
 -- Detección del volumen de destino
 --------------------------------------------------------------------------------
 
+-- El OS necesita su hueco: por debajo de 1 MB no cabe. Esto descarta el tmpfs
+-- de OpenOS (0.1 MB), que aparece como un filesystem vacío y escribible.
+local MIN_BYTES = 1048576
+
+-- Los handles de `filesystem` son los del componente: `read` espera un entero,
+-- no acepta el formato "*a" de `io`.
+local function readAll(handle)
+  local chunks = {}
+  while true do
+    local chunk = handle:read(4096)
+    if not chunk or chunk == "" then
+      break
+    end
+    chunks[#chunks + 1] = chunk
+  end
+  return table.concat(chunks)
+end
+
 local function rootAddress()
   local ok, proxy = pcall(filesystem.get, "/")
   if ok and proxy and proxy.address then
@@ -91,14 +109,15 @@ local function candidates()
     if candidate ~= root then
       local proxy = component.proxy(candidate)
       if proxy and proxy.type == "filesystem" and isWritable(proxy) then
+        local total = proxy.spaceTotal() or 0
         local state = stateOf(proxy)
-        if state ~= "con datos" then
+        if state ~= "con datos" and total >= MIN_BYTES then
           found[#found + 1] = {
             address = candidate,
             proxy = proxy,
             state = state,
             label = (proxy.getLabel and proxy.getLabel()) or "sin etiqueta",
-            size = proxy.spaceTotal() or 0,
+            size = total,
           }
         end
       end
@@ -162,6 +181,7 @@ else
   local found = candidates()
   if #found == 0 then
     io.stderr:write("No encuentro un volumen libre donde instalar.\n")
+    io.stderr:write("Se ignoran los discos con datos y los de menos de 1 MB.\n")
     io.stderr:write("Conecta un disquete o un disco vacío, o pasa la dirección: install <raiz> <direccion>\n")
     return
   end
@@ -221,7 +241,7 @@ local function copyTree(from, to)
         failed = failed + 1
         io.stderr:write("No se pudo leer " .. source .. "\n")
       else
-        local data = input:read("*a")
+        local data = readAll(input)
         input:close()
 
         local output = filesystem.open(target, "wb")
@@ -284,7 +304,7 @@ if options.eeprom then
     return
   end
 
-  local code = input:read("*a")
+  local code = readAll(input)
   input:close()
 
   local function flash(value)

@@ -8,7 +8,7 @@ const fs = require("fs");
 const { lua, lauxlib, lualib, to_luastring, to_jsstring } = require("fengari");
 
 const repoRoot = path.resolve(__dirname, "../..");
-const scenarios = ["floppy", "varios", "varios_yes", "datos", "explicito", "list"];
+const scenarios = ["floppy", "varios", "varios_yes", "datos", "explicito", "pequeno", "list"];
 
 const sources = {
   "src/init.lua": fs.readFileSync(path.join(repoRoot, "src/init.lua"), "utf8"),

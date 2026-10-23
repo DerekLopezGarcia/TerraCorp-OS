@@ -145,12 +145,18 @@ function filesystem.open(path, mode)
   if mode == "rb" then
     local content = v.files[rel]
     if not content then return nil, "no such file" end
-    local served = false
+    local position = 1
     return {
-      read = function(self)
-        if served then return nil end
-        served = true
-        return content
+      -- Igual que el componente: `read` exige un entero y devuelve nil al
+      -- final. Con "*a" el instalador fallaría, como en el juego.
+      read = function(self, count)
+        if type(count) ~= "number" then
+          error("bad argument #2 (integer expected, got " .. type(count) .. ")", 2)
+        end
+        if position > #content then return nil end
+        local chunk = content:sub(position, position + count - 1)
+        position = position + #chunk
+        return chunk
       end,
       close = function() return true end,
     }
@@ -291,6 +297,13 @@ elseif scenario == "explicito" then
   answers = { "s" }
   order = { "root-0000", "hdd-02" }
   volume("hdd-02", { label = "datos", files = { ["hola.txt"] = "x" } })
+elseif scenario == "pequeno" then
+  -- tmpfs de OpenOS (0.1 MB) junto al disco bueno: debe ignorarlo.
+  ARGS, OPTIONS = { "/home/TerraCorp-OS" }, {}
+  answers = { "s" }
+  order = { "root-0000", "tmpfs-03", "hdd-02" }
+  volume("tmpfs-03", { label = "tmpfs", size = 102400 })
+  volume("hdd-02", { label = "nuevo", size = 4194304 })
 elseif scenario == "list" then
   ARGS, OPTIONS = { "/home/TerraCorp-OS" }, { list = true }
   order = { "root-0000", "floppy-01" }
@@ -339,6 +352,10 @@ elseif scenario == "explicito" then
 elseif scenario == "list" then
   assert(has(text, "floppy-0"), "no listó:\n" .. text)
   assert(volumes["floppy-01"].files["init.lua"] == nil, "no debería copiar con --list")
+elseif scenario == "pequeno" then
+  assert(not has(text, "tmpfs-03") and not has(text, "tmpfs"), "coló el tmpfs:\n" .. text .. errorText)
+  assert(copiedInto("hdd-02"), "no copió al disco bueno")
+  assert(bootAddress == "hdd-02", "boot address = " .. tostring(bootAddress))
 end
 
 rawPrint("OK " .. scenario)

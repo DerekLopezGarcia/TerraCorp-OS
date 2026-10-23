@@ -12,6 +12,19 @@ end
 
 local isOpenOS = type(require) == "function" and pcall(require, "filesystem")
 
+-- Los handles de `filesystem` son los del componente: `read` espera un entero.
+local function readHandle(handle)
+  local chunks = {}
+  while true do
+    local chunk = handle:read(4096)
+    if not chunk or chunk == "" then
+      break
+    end
+    chunks[#chunks + 1] = chunk
+  end
+  return table.concat(chunks)
+end
+
 local list, readFile, isDir, concat
 
 if isOpenOS then
@@ -22,7 +35,7 @@ if isOpenOS then
     if not handle then
       return nil
     end
-    local data = handle:read("*a")
+    local data = readHandle(handle)
     handle:close()
     return data
   end
