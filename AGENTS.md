@@ -125,7 +125,8 @@ uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
 - **No editar `src/*.lua` con `Get-Content`/`Set-Content` en PowerShell 5.1**: sin BOM lee UTF-8 como
   CP1252 (duplica la codificación de los acentos) y `Set-Content -Encoding UTF8` añade BOM, que el
   `load` del kernel rechaza (`unexpected symbol near '<\239>'`). Usar las herramientas de edición del
-  agente, que respetan UTF-8 sin BOM (2026-10-23).
+  agente, que respetan UTF-8 sin BOM (2026-10-23). `npm run check` rechaza BOM y codificación
+  duplicada, así que la regresión no pasa desapercibida.
 - `util.split(texto, "")` devuelve el texto entero: un separador vacío colgaba el bucle para siempre
   (2026-10-23).
 - `npm run test:faults` inyecta fallos de GPU (`--fault=N`, las N primeras escrituras devuelven
