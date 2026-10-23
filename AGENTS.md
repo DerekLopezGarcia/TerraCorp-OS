@@ -47,6 +47,7 @@ docs/                 arquitectura, opencomputers, roadmap, distribuido, larga-d
 npm install        # solo para el arnés local
 npm run check      # sintaxis de todos los .lua (Lua 5.3)
 npm run sim        # ejecuta el OS con componentes falsos y vuelca pantalla
+npm run sim:oc     # gate estricto: 4 escenarios con la API real de OpenComputers
 ```
 
 En el juego: `install <raizDelRepo> <direccionFilesystem> [--eeprom] [--yes]`.
@@ -73,7 +74,9 @@ En el juego: `install <raizDelRepo> <direccionFilesystem> [--eeprom] [--yes]`.
 - No tocar `node_modules/` ni añadir dependencias de runtime: el OS debe correr sin OpenOS.
 - Cualquier API de OpenComputers que se use debe estar verificada (ver `docs/opencomputers.md`);
   lo no verificado se documenta como pendiente.
-- Mantener el arnés pasando (`npm run check` y `npm run sim`) antes de dar un cambio por hecho.
+- Los componentes falsos del arnés deben replicar la API real: `list` devuelve tabla y el espacio se lee
+  con `spaceUsed`/`spaceTotal` en bytes. Un arnés que invente la API da gates verdes falsos.
+- Mantener el arnés pasando (`npm run check`, `npm run sim` y `npm run sim:oc`) antes de dar un cambio por hecho.
 - No escribir este proyecto en la memoria de neXacom.
 
 ## Decisiones y trampas conocidas
@@ -86,6 +89,10 @@ En el juego: `install <raizDelRepo> <direccionFilesystem> [--eeprom] [--yes]`.
 - Las ventanas se apilan con desplazamiento 2; los bordes de la ventana inferior asoman un sliver.
 - CPD: arranque automático siempre, con SAI (capacitores) y central propia; descarte por escalones y el
   core es el último en apagarse.
+- `filesystem.list` devuelve una tabla y el espacio se lee con `spaceUsed`/`spaceTotal` en bytes;
+  `vfs.space()` los convierte a KB (2026-10-23).
+- Un fallo de render vuelve a marcar el escritorio sucio y se registra con límite: nunca se deja la
+  pantalla congelada ni se escribe un error por frame (2026-10-23).
 
 ## Memoria relacionada
 

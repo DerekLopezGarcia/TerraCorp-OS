@@ -54,10 +54,11 @@ vfs.write(path, data) / vfs.append(path, data)
 vfs.exists(path) / vfs.isDirectory(path) / vfs.size(path) -> bytes
 vfs.list(path) -> lista ordenada | nil, motivo
 vfs.ensureDir(path) / vfs.remove(path) / vfs.rename(from, to)
-vfs.space() -> usado, total (KB)
+vfs.space() -> usado, total (KB; el componente los da en bytes)
 ```
 
 Toda llamada va protegida con `pcall`: un disco desconectado devuelve error, no rompe el OS.
+`vfs.list` acepta la tabla que devuelve el componente (`String[]`) y, por compatibilidad, un iterador.
 
 ## Framebuffer y volcado
 
@@ -68,7 +69,8 @@ un único `gpu.set` por tramo. Solo se escriben celdas distintas del frame anter
 Consecuencias:
 
 - Redibujar el escritorio cuesta proporcional a lo que cambia, no a la pantalla completa.
-- Hay que llamar a `gfx:invalidate()` tras un cambio de resolución o de GPU.
+- Un cambio de resolución o de GPU crea un framebuffer nuevo (`gfx:resize()` reinicia la caché de
+  celdas), así que la siguiente composición repinta todo.
 - El coste de memoria es de tres tablas de `w*h` (118x44 ≈ 15 500 celdas).
 
 Las apps nunca escriben en el framebuffer raíz: reciben `ctx.view`, una subvista con origen y recorte.

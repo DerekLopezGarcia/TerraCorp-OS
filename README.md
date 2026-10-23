@@ -88,11 +88,14 @@ El código no necesita compilación. Para validarlo sin abrir Minecraft:
 npm install
 npm run check          # compila todos los .lua con Lua 5.3 (fengari)
 npm run sim            # ejecuta el OS, reproduce eventos y vuelca la pantalla
+npm run sim:oc         # gate estricto: los 4 escenarios con la API real de OC
 npm run sim:dashboard  # escenarios: dashboard, console, files, settings
 ```
 
 El arnés sirve como prueba de humo: componentes falsos, disco en memoria y GPU que rasteriza en una
-matriz. No sustituye a probarlo en el juego.
+matriz. Los componentes falsos replican la API real (`list` devuelve tabla, `spaceUsed`/`spaceTotal` en
+bytes); `npm run sim:oc` añade comprobaciones de contrato y falla si el OS deja de hablarles. Aun así
+no sustituye a probarlo en el juego.
 
 ## Decisiones de diseño
 
@@ -106,7 +109,8 @@ matriz. No sustituye a probarlo en el juego.
 Fase actual: **F0 — prototipo congelado**. No se añaden funciones: se prueba en partida, se mide y se
 recorta. La evolución (núcleo mínimo → servicios → red → CPD → cluster ligero) está en
 [`docs/roadmap.md`](docs/roadmap.md); el modelo distribuido, los límites reales de OpenComputers y la
-topología del CPD, en [`docs/distribuido.md`](docs/distribuido.md).
+topología del CPD, en [`docs/distribuido.md`](docs/distribuido.md). Lo corregido en la auditoría de
+0.1.0 y los contratos de API verificados, en [`docs/auditoria-0.1.0.md`](docs/auditoria-0.1.0.md).
 
 ## Licencia y créditos
 

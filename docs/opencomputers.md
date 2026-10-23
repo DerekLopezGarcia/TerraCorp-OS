@@ -55,7 +55,10 @@ el OS no depende de ellos para los atajos.
   servicios.
 - `computer.energy()` devuelve `stored, maximum`; puede fallar si el ordenador no tiene bloque de
   energía. Siempre con `pcall`.
-- `computer.totalMemory()` / `freeMemory()` en bytes; `filesystem.space()` / `spaceTotal()` en kilobytes.
+- `computer.totalMemory()` / `freeMemory()` en bytes; `filesystem.spaceUsed()` / `spaceTotal()` también en
+  bytes (no existe `filesystem.space()`). `vfs.space()` del kernel convierte a kilobytes.
+- `filesystem.list(path)` devuelve una **tabla 1..n** con los nombres, no un iterador. OpenOS la envuelve
+  en un iterador en `lib/filesystem.lua`; el kernel de TerraCorp trabaja con la tabla directamente.
 - Los handles de `filesystem` (`open` → `read`/`write`/`close`) se pasan a `component.invoke` como
   valores opacos. Un `read` al final del fichero devuelve `nil` sin motivo.
 
