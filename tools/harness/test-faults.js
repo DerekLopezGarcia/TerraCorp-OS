@@ -20,7 +20,7 @@ function run(scenario, extra) {
   const end = output.indexOf("=== PERSISTED LOG ===");
   const raw = start >= 0 && end > start ? output.slice(start, end) : null;
   // Mask the clock so separate runs do not differ only by time.
-  const screen = raw === null ? null : raw.replace(/\d{2}:\d{2}:\d{2}/g, "HH:MM:SS").trimEnd();
+  const screen = raw === null ? null : raw.replace(/\d{2}:\d{2}(?::\d{2})?/g, "HH:MM").trimEnd();
 
   return { code: result.status, screen, output };
 }
