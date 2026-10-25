@@ -213,6 +213,10 @@ local maxHeight = tonumber(rawget(_G, "MAX_HEIGHT")) or 50
 local cells = {}
 local setCalls = 0
 local clock = 0
+local palette = {}
+local paletteWrites = 0
+local backgroundIsPalette = false
+local foregroundIsPalette = false
 
 local function resetScreen()
   cells = {}
@@ -245,12 +249,23 @@ end
 
 -- Igual que el componente: devuelven true si escriben y nil, motivo si la GPU
 -- no tiene energía. El OS usa ese valor para reintentar el tramo.
-function gpu.setBackground()
+function gpu.setBackground(_, isPaletteIndex)
+  backgroundIsPalette = isPaletteIndex == true
   return true
 end
 
-function gpu.setForeground()
+function gpu.setForeground(_, isPaletteIndex)
+  foregroundIsPalette = isPaletteIndex == true
   return true
+end
+
+function gpu.setPaletteColor(index, color)
+  local previous = palette[index]
+  if previous == nil then
+    paletteWrites = paletteWrites + 1
+  end
+  palette[index] = color
+  return previous or 0
 end
 
 function gpu.getBackground()
@@ -569,6 +584,15 @@ if STRICT then
   if scenario == "dashboard" and stats.spaceCalls == 0 then
     errors = errors + 1
     print("FALLO: el panel no consultó spaceUsed")
+  end
+
+  if not backgroundIsPalette or not foregroundIsPalette then
+    errors = errors + 1
+    print("FALLO: la GPU recibió colores como RGB en vez de índices de paleta")
+  end
+  if paletteWrites ~= 16 then
+    errors = errors + 1
+    print("FALLO: no se inicializaron los 16 colores de la paleta OpenComputers")
   end
 
   -- Tras inyectar fallos de GPU la pantalla debe acabar pintada: si el OS da

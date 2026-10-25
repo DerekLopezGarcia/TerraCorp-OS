@@ -76,6 +76,11 @@ el OS no depende de ellos para los atajos.
   `gpu.setBackground`/`gpu.setForeground` devuelven el color anterior. Una escritura rechazada no se
   puede dar por pintada: el volcado por diferencias tiene que reintentarla o deja huecos permanentes.
   `npm run test:faults` lo comprueba comparando la pantalla con y sin fallos inyectados.
+- `gpu.setBackground(color, isPaletteIndex)` y `gpu.setForeground(color, isPaletteIndex)` interpretan
+  `color` como RGB de 24 bits si `isPaletteIndex` es `nil` o `false`; para índices 0..15 hay que pasar
+  `true`. La paleta editable de una pantalla T3 empieza en escala de grises, así que TerraCorp inicializa
+  los 16 índices con la paleta clásica de OpenComputers cuando el hardware permite editarla. Sin esto,
+  los índices 0..15 se interpretarían como RGB muy oscuros y el escritorio sería casi negro.
 
 ## Trampas que afectan al diseño
 

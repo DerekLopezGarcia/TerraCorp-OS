@@ -5,6 +5,7 @@
 -- de 120x45 no cuesta 5400 llamadas por frame.
 
 local text = require("tc.text")
+local theme = require("tc.theme")
 
 local gfx = {}
 local view = {}
@@ -27,6 +28,12 @@ function gfx.new(address)
   local self = setmetatable({}, { __index = gfx })
   self.address = address
   self.gpu = component.proxy(address)
+  -- Tier 3 empieza con una paleta editable en escala de grises, a diferencia
+  -- de la paleta Minecraft de tier 2. Configura los colores clásicos de OC
+  -- cuando el hardware permite editarla.
+  for index, color in pairs(theme.paletteRGB) do
+    pcall(self.gpu.setPaletteColor, index, color)
+  end
   if not self:resize() then
     error("TerraCorp OS: la GPU " .. tostring(address) .. " no responde", 0)
   end
@@ -288,12 +295,12 @@ function gfx:flush()
         -- intentarlo en el siguiente frame en vez de dejar el hueco.
         local colorsOk = true
         if bg ~= lastBg then
-          local callOk, result = pcall(gpu.setBackground, bg)
+          local callOk, result = pcall(gpu.setBackground, bg, true)
           colorsOk = callOk and result ~= nil and result ~= false
           if colorsOk then lastBg = bg else lastBg = nil end
         end
         if fg ~= lastFg then
-          local callOk, result = pcall(gpu.setForeground, fg)
+          local callOk, result = pcall(gpu.setForeground, fg, true)
           colorsOk = colorsOk and callOk and result ~= nil and result ~= false
           if callOk and result ~= nil and result ~= false then lastFg = fg else lastFg = nil end
         end

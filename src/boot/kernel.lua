@@ -311,8 +311,8 @@ function kernel:emergency(reason)
   end
 
   local message = tostring(reason or "sin detalle")
-  pcall(gpu.setBackground, 15)
-  pcall(gpu.setForeground, 14)
+  pcall(gpu.setBackground, 15, true)
+  pcall(gpu.setForeground, 14, true)
   pcall(gpu.fill, 1, 1, width, math.min(7, height), " ")
   pcall(gpu.set, 2, 2, "TerraCorp OS: no se pudo pintar el escritorio")
   pcall(gpu.set, 2, 4, string.sub(message, 1, math.max(1, width - 4)))
