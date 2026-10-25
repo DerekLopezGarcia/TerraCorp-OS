@@ -83,3 +83,10 @@ Verified scan-code subset:
   display widths and slices.
 - GPU writes are budget/energy constrained. Difference rendering reduces the
   number of direct writes; measure the real target hardware in-game.
+- OpenComputers documents screen resolution and color depth, but no fixed
+  screen refresh rate in Hz. The screen retains its text buffer until changed;
+  visible updates are subject to the Minecraft client's render rate and GPU
+  operation budget. TerraCorp requests a 1/30-second idle signal wait to target
+  30 loop iterations per second; this is not a guarantee of 30 visible frames,
+  and input signals can wake the loop sooner. The 10 Hz figure in the
+  distributed design is only a proposed network traffic cap.

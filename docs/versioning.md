@@ -44,7 +44,7 @@ current installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.1.1. Existing 0.1.0 installations do not contain the
-updater, so they need one manual OpenOS installation of 0.1.1. The updater test
-uses a mocked next-patch release; a real in-game update test requires publishing
-a newer stable tag such as v0.1.2 after v0.1.1.
+The current build is 0.1.2. Existing 0.1.0 installations do not contain the
+updater; install 0.1.1 manually from OpenOS first, then update to 0.1.2 from
+About. The automated updater tests use a mocked next-patch release. The real
+0.1.1-to-0.1.2 in-game update remains a required F0 validation.

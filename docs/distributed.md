@@ -42,7 +42,8 @@ Reuse the local row-delta renderer. Send spans as
 
 - Full 80x25 redraw on connect/app change: a few KB, once.
 - Pointer/key input: typically 1-3 spans.
-- Maximum refresh: 10 Hz; group spans for each frame.
+- Proposed remote-session refresh target: up to 10 Hz, grouped into spans. This
+  is a network bandwidth policy, not an OpenComputers screen refresh limit.
 - RLE may encode repeated row backgrounds; do not send video or images.
 
 F2 introduces `tc.display.local`, `tc.display.remote`, and

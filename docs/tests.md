@@ -16,7 +16,9 @@ npm run check
 npm run sim
 npm run sim:oc
 npm run test:dashboard-tick
+npm run test:refresh-rate
 npm run test:updater
+npm run test:updater-rollback
 npm run test:faults
 npm run test:screens
 ```
@@ -32,7 +34,9 @@ and regression test, not a replacement for the game test.
 3. Read `/var/log/tc.log` from TerraCorp's boot volume. Record the `gpu` line's
    resolution/free-memory values and the uptime on `First render OK`.
 4. Run a 30-minute session. Open all five apps; in Dashboard, verify uptime
-   advances once per second. In Console, try `help`, `ls`, `pwd`, and
+   advances once per second. Check that UI input/render response feels smooth
+   at the 30 Hz loop target (the harness cannot measure game-client FPS). In
+   Console, try `help`, `ls`, `pwd`, and
    `echo test`. Move/minimize/close windows and change screen resolution from
    OpenOS, then return to TerraCorp.
 5. Check the log:
@@ -43,9 +47,9 @@ and regression test, not a replacement for the game test.
 
    It must return no lines. Record warnings separately.
 6. Repeat with Tier 2 CPU/GPU and a Tier 2 screen at 80x25.
-7. For updater testing, publish a newer stable GitHub Release with a matching
-   `vMAJOR.MINOR.PATCH` tag, open About, check for updates, install, and restart.
-   Confirm the version changes, settings persist, and the EEPROM is unchanged.
+7. Install/publish 0.1.1, then publish 0.1.2 with a matching tag. From 0.1.1,
+   open About, check for updates, install, and restart. Confirm the version
+   changes, settings persist, and the EEPROM is unchanged.
 
 ## Results log
 
@@ -59,12 +63,13 @@ and regression test, not a replacement for the game test.
 | Criterion | Status |
 |---|---|
 | All five apps usable in-game | Tested by user; console input errors still need an in-game retest |
-| 30-minute session without errors | Not met in the supplied 0.1.0 log; repeat after installing 0.1.1 |
+| 30-minute session without errors | Not met in the supplied 0.1.0 log; repeat on the published 0.1.2 build |
 | At least 250 KB free on Tier 2 | Recorded logs exceed the threshold; confirm CPU/GPU tier |
 | First render within 2 seconds | Recorded values are 1.05 s and 1.25 s; confirm on Tier 2 hardware |
 | Resolution adaptation and GPU retry tests | Verified by `npm run test:screens` and `npm run test:faults` |
-| Updater detects, stages, installs, and restarts from a stable release | Harness test passes; in-game release test pending |
+| Updater detects, stages, installs, and restarts from a stable release | Success and injected commit-failure rollback pass in the harness; real 0.1.1-to-0.1.2 game test pending |
 | Dashboard uptime advances every second | `npm run test:dashboard-tick` passes; verify in-game |
+| UI loop requests 30 Hz idle cadence | `npm run test:refresh-rate` verifies the 1/30 s signal wait; actual display cadence must be measured in-game |
 
 ## Black-screen diagnostics
 

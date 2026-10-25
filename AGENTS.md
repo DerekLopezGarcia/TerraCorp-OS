@@ -41,7 +41,9 @@ npm run manifest       # required after adding/removing Lua files
 npm run sim
 npm run sim:oc
 npm run test:dashboard-tick
+npm run test:refresh-rate
 npm run test:updater
+npm run test:updater-rollback
 npm run test:install
 npm run test:fetch
 npm run test:boot

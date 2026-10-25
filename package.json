@@ -1,6 +1,6 @@
 {
   "name": "terracorp-os",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "TerraCorp OS: industrial desktop operating system for OpenComputers in the Supersymmetry modpack",
   "license": "MIT",
@@ -20,7 +20,9 @@
     "measure": "node tools/harness/measure.js",
     "test:fetch": "node tools/harness/test-fetch.js",
     "test:updater": "node tools/harness/simulate.js updater --strict",
-    "test:dashboard-tick": "node tools/harness/simulate.js dashboard_tick --strict"
+    "test:updater-rollback": "node tools/harness/simulate.js updater_rollback --strict",
+    "test:dashboard-tick": "node tools/harness/simulate.js dashboard_tick --strict",
+    "test:refresh-rate": "node tools/harness/simulate.js refresh_rate --strict"
   },
   "devDependencies": {
     "fengari": "^0.1.4"

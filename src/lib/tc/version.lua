@@ -5,7 +5,7 @@ return {
   product = "TerraCorp OS",
   company = "TerraCorp Industrial Systems",
   tagline = "Plant systems",
-  version = "0.1.1",
+  version = "0.1.2",
   codename = "Foundry",
   api = 1,
   license = "MIT",

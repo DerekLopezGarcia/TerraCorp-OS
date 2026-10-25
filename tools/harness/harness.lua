@@ -10,11 +10,15 @@ local faultsLeft = tonumber(FAULT.set) or 0
 local faultsInjected = 0
 local stats = { listCalls = 0, listReturned = 0, spaceCalls = 0 }
 local written = {}
+local deleted = {}
 local directories = { ["/"] = true, ["/etc"] = true, ["/var"] = true, ["/var/log"] = true }
 local handles = {}
 local nextHandle = 0
 
 local function readReal(path)
+  if deleted[path] then
+    return nil
+  end
   if written[path] ~= nil then
     return written[path]
   end
@@ -38,7 +42,9 @@ local function entriesUnder(path)
   end
 
   for full in pairs(files) do
+    if not deleted[full] then
     consider(full)
+    end
   end
   for full in pairs(written) do
     consider(full)
@@ -96,6 +102,7 @@ function fsApi.open(path, mode)
       return nil, "no such file or directory: " .. tostring(path)
     end
     written[path] = ""
+    deleted[path] = nil
     handle = { kind = "w", path = path }
   elseif mode == "a" or mode == "ab" then
     if not isDirectoryPath(parentOf(path)) then
@@ -190,12 +197,24 @@ end
 
 function fsApi.remove(path)
   written[path] = nil
+  deleted[path] = true
   return true
 end
 
+local renameCalls = 0
 function fsApi.rename(from, to)
-  written[to] = readReal(from)
+  renameCalls = renameCalls + 1
+  if rawget(_G, "SCENARIO") == "updater_rollback" and renameCalls == 4 then
+    return nil, "injected rename failure"
+  end
+  local content = readReal(from)
+  if content == nil then
+    return nil, "source does not exist"
+  end
+  written[to] = content
+  deleted[to] = nil
   written[from] = nil
+  deleted[from] = true
   return true
 end
 
@@ -313,8 +332,10 @@ resetScreen()
 -- ---------------------------------------------------------------------------
 
 local fakeUpdates = rawget(_G, "SCENARIO") == "updater"
+local fakeUpdateRollback = rawget(_G, "SCENARIO") == "updater_rollback"
+local updateScenario = fakeUpdates or fakeUpdateRollback
 local mockedReleaseVersion
-if fakeUpdates then
+if updateScenario then
   local currentVersion = files["/lib/tc/version.lua"]:match('version%s*=%s*"([^"]+)"')
   local major, minor, patch = currentVersion:match("^(%d+)%.(%d+)%.(%d+)$")
   mockedReleaseVersion = string.format("%s.%s.%d", major, minor, tonumber(patch) + 1)
@@ -325,12 +346,12 @@ local kinds = {
   ["fs-boot"] = "filesystem",
   ["eeprom-1"] = "eeprom",
 }
-if fakeUpdates then
+if updateScenario then
   kinds["internet-1"] = "internet"
 end
 
 local kindOrder = { "eeprom-1", "fs-boot", "gpu-1", "screen-1" }
-if fakeUpdates then
+if updateScenario then
   kindOrder[#kindOrder + 1] = "internet-1"
 end
 
@@ -421,8 +442,10 @@ function computer.uptime()
   return clock
 end
 
-function computer.pullSignal()
-  clock = clock + 0.25
+function computer.pullSignal(timeout)
+  stats.pullCalls = (stats.pullCalls or 0) + 1
+  stats.lastPullTimeout = timeout
+  clock = clock + (timeout or 0.25)
   if #scripted == 0 then
     return "shutdown"
   end
@@ -538,6 +561,8 @@ if scenario == "dashboard_tick" then
   assert(app.uptime == 2 and app.samplesAt == 2, "two-second sample was not refreshed")
   assert(expensiveReads == initialReads + 4, "expected one full sensor refresh at two seconds")
   stats.dashboardTickChecked = true
+elseif scenario == "refresh_rate" then
+  idle(1)
 elseif scenario == "dashboard" then
   ev("touch", "screen-1", 3, dockY, 0, "tester")
   idle(12)
@@ -563,6 +588,17 @@ elseif scenario == "settings" then
   ev("touch", "screen-1", 40, dockY, 0, "tester")
   idle(3)
 elseif scenario == "updater" then
+  local wx, wy, winWidth, winHeight = windowRect()
+  ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens About
+  idle(1)
+  local contentHeight = winHeight - 3
+  local buttonRow = math.max(4, contentHeight - 2)
+  local buttonX = wx + 1 + math.floor((winWidth - 2) / 2)
+  ev("touch", "screen-1", buttonX, wy + 1 + buttonRow, 0, "tester")
+  idle(1)
+  ev("touch", "screen-1", buttonX, wy + 1 + buttonRow, 0, "tester")
+  idle(2)
+elseif scenario == "updater_rollback" then
   local wx, wy, winWidth, winHeight = windowRect()
   ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens About
   idle(1)
@@ -626,8 +662,8 @@ local totalCells = width * height
 
 print("")
 print("=== METRICS ===")
-print(string.format("painted   : %d of %d cells (%.1f %%) in %d gpu.set calls · %d events",
-  painted, totalCells, painted * 100 / totalCells, setCalls, clock / 0.25))
+print(string.format("painted   : %d of %d cells (%.1f %%) in %d gpu.set calls · %d signals",
+  painted, totalCells, painted * 100 / totalCells, setCalls, stats.pullCalls or 0))
 
 print("")
 print("=== FINAL SCREEN ===")
@@ -651,6 +687,29 @@ if setCalls == 0 then
   errors = errors + 1
 end
 
+local screenRows = {}
+for y = 1, height do
+  screenRows[#screenRows + 1] = table.concat(cells[y])
+end
+local finalScreen = table.concat(screenRows, "\n")
+
+if scenario == "updater_rollback" then
+  for _, path in ipairs({ "/init.lua", "/boot/kernel.lua", "/lib/tc/version.lua" }) do
+    if readReal(path) ~= files[path] then
+      errors = errors + 1
+      print("FAIL: rollback did not restore " .. path)
+    end
+  end
+  if not finalScreen:find("Could not install", 1, true) then
+    errors = errors + 1
+    print("FAIL: rollback scenario did not report the injected install failure")
+  end
+  if written["/etc/terracorp.cfg"] ~= nil then
+    errors = errors + 1
+    print("FAIL: updater changed persistent settings")
+  end
+end
+
 -- Strict checks validate visible output as well as component calls.
 if STRICT then
   local rows = {}
@@ -658,6 +717,16 @@ if STRICT then
     rows[#rows + 1] = table.concat(cells[y])
   end
   local screen = table.concat(rows, "\n")
+
+  if scenario == "refresh_rate" then
+    local expected = 1 / 30
+    if type(stats.lastPullTimeout) ~= "number"
+      or stats.lastPullTimeout > expected + 0.000001
+      or stats.lastPullTimeout <= 0 then
+      errors = errors + 1
+      print("FAIL: idle signal wait exceeds the 30 Hz target")
+    end
+  end
 
   if screen:find("could not list", 1, true) then
     errors = errors + 1

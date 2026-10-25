@@ -4,6 +4,7 @@
 -- `require`, start services, and run the desktop event loop.
 
 local kernel = {}
+local SIGNAL_POLL_INTERVAL = 1 / 30
 
 local MODULE_ROOTS = {
   tc = "/lib/tc/",
@@ -321,7 +322,9 @@ function kernel:loop()
   local gpuFailures = 0
 
   while true do
-    local pack = table.pack(pcall(computer.pullSignal, 0.2))
+    -- Cap idle wait to one 30 Hz interval. Signals still wake the loop
+    -- immediately, so input-driven updates are not throttled to this rate.
+    local pack = table.pack(pcall(computer.pullSignal, SIGNAL_POLL_INTERVAL))
 
     if not pack[1] then
       self.log.error("pullSignal: " .. tostring(pack[2]))

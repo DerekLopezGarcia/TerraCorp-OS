@@ -66,7 +66,7 @@ let problems = 0;
 
 console.log(
   "scenario".padEnd(11) + "screen".padEnd(10) + "painted".padEnd(21) +
-  "gpu.set".padEnd(9) + "events"
+  "gpu.set".padEnd(9) + "signals"
 );
 
 for (const screen of screens) {
@@ -86,7 +86,7 @@ for (const screen of screens) {
     }
 
     const painted = output.match(
-      /painted\s*:\s*(\d+) of (\d+) cells \(([\d.]+) %\).*?(\d+) gpu\.set calls · (\d+) events/
+      /painted\s*:\s*(\d+) of (\d+) cells \(([\d.]+) %\).*?(\d+) gpu\.set calls · (\d+) signals/
     );
 
     console.log(

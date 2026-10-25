@@ -67,7 +67,8 @@ harness test.
 - Resume a terminal's session after reconnect.
 - Discover cores and use a shared per-segment key.
 - Add a minimal terminal client and kiosk profile.
-- Limit refresh to 10 Hz and group spans.
+- Limit remote-session refresh to 10 Hz and group spans; local screens have no
+  fixed Hz setting in OpenComputers.
 
 **Exit criteria:** two terminals (cable and Linked Card) connected to a
 headless core, reconnect under 5 seconds, documented bandwidth/latency, and no

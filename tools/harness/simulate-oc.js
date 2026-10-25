@@ -5,7 +5,7 @@
 
 const { runScenario } = require("./runner");
 
-const scenarios = ["dashboard", "console", "files", "settings", "updater"];
+const scenarios = ["dashboard", "console", "files", "settings", "updater", "updater_rollback", "refresh_rate"];
 const failed = [];
 
 for (const scenario of scenarios) {
