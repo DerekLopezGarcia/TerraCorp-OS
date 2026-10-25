@@ -9,6 +9,7 @@ local API_URL = "https://api.github.com/repos/" .. OWNER .. "/" .. REPOSITORY ..
 local RAW_URL = "https://raw.githubusercontent.com/" .. OWNER .. "/" .. REPOSITORY
 local MAX_RESPONSE = 512 * 1024
 local MAX_FILES = 64
+local HTTP_TIMEOUT = 30
 
 local function parseVersion(value)
   if type(value) ~= "string" then
@@ -45,26 +46,53 @@ local function request(url, limit)
     return nil, tostring(reason or "The request could not be started.")
   end
 
-  local okResponse, status, responseMessage = pcall(handle.response, handle)
+  if type(handle.finishConnect) ~= "function" then
+    pcall(handle.close)
+    return nil, "The HTTP handle cannot wait for its response."
+  end
+
+  local deadline = computer.uptime() + HTTP_TIMEOUT
+  while true do
+    local okConnect, connected, connectError = pcall(handle.finishConnect)
+    if not okConnect then
+      pcall(handle.close)
+      return nil, "HTTP request failed: " .. tostring(connected)
+    end
+    if connected then
+      break
+    end
+    if computer.uptime() >= deadline then
+      pcall(handle.close)
+      return nil, "HTTP request timed out after " .. HTTP_TIMEOUT .. " seconds."
+    end
+
+    if type(os) == "table" and type(os.sleep) == "function" then
+      pcall(os.sleep, 0.05)
+    else
+      computer.pullSignal(0.05)
+    end
+  end
+
+  local okResponse, status, responseMessage = pcall(handle.response)
   if not okResponse or type(status) ~= "number" then
-    pcall(handle.close, handle)
+    pcall(handle.close)
     local detail = okResponse and tostring(responseMessage or status) or tostring(status)
     return nil, "Could not read HTTP response status: " .. detail
   end
   if status ~= 200 then
-    pcall(handle.close, handle)
+    pcall(handle.close)
     return nil, "HTTP " .. tostring(status)
   end
 
   local chunks, size = {}, 0
   while true do
-    local okRead, chunk, readError = pcall(handle.read, handle, 8192)
+    local okRead, chunk, readError = pcall(handle.read, 8192)
     if not okRead then
-      pcall(handle.close, handle)
+      pcall(handle.close)
       return nil, "Download failed: " .. tostring(chunk)
     end
     if not chunk then
-      pcall(handle.close, handle)
+      pcall(handle.close)
       if readError then
         return nil, "Download failed: " .. tostring(readError)
       end

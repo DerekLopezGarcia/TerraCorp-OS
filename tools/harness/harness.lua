@@ -410,21 +410,27 @@ function component.invoke(address, method, ...)
       return nil, "not found"
     end
     local sent = false
+    local connectionChecks = 0
     local handle = {}
-    handle.response = function(self)
-        assert(self == handle, "response did not receive its request handle")
+    handle.finishConnect = function(...)
+        assert(select("#", ...) == 0, "finishConnect received unexpected arguments")
+        connectionChecks = connectionChecks + 1
+        return connectionChecks > 1
+      end
+    handle.response = function(...)
+        assert(select("#", ...) == 0, "response received unexpected arguments")
         return 200, "OK", {}
       end
-    handle.read = function(self)
-        assert(self == handle, "read did not receive its request handle")
+    handle.read = function(size)
+        assert(size == 8192, "read did not receive the requested chunk size")
         if sent then
           return nil
         end
         sent = true
         return body
       end
-    handle.close = function(self)
-        assert(self == handle, "close did not receive its request handle")
+    handle.close = function(...)
+        assert(select("#", ...) == 0, "close received unexpected arguments")
         return true
       end
     return handle
