@@ -94,6 +94,31 @@ function ui:armDragTest()
   self:notify("info", "Drag test armed: drag a title bar for 5-10 seconds, then release.")
 end
 
+function ui:advanceDrag(now)
+  local drag = self.dragging
+  if not drag or not drag.transitionDuration or drag.transitionDuration <= 0 then
+    return false
+  end
+
+  local progress = util.clamp((now - drag.transitionStart) / drag.transitionDuration, 0, 1)
+  local win = drag.win
+  local x = math.floor(drag.fromX + (drag.targetX - drag.fromX) * progress + 0.5)
+  local y = math.floor(drag.fromY + (drag.targetY - drag.fromY) * progress + 0.5)
+  if win.x ~= x or win.y ~= y then
+    win.x = x
+    win.y = y
+    if self.dragTest then
+      self.dragTest.interpolatedFrames = self.dragTest.interpolatedFrames + 1
+    end
+    self.dirty = true
+  end
+
+  if progress >= 1 then
+    drag.transitionDuration = 0
+  end
+  return true
+end
+
 function ui:findWindow(id)
   for _, win in ipairs(self.windows) do
     if win.id == id then
@@ -386,6 +411,7 @@ function ui:drawNotice()
 end
 
 function ui:render(force)
+  self:advanceDrag(self.kernel:uptime())
   if not force and not self.dirty then
     return 0
   end
@@ -538,10 +564,23 @@ function ui:onTouch(x, y, button)
       self:minimize(win)
       return
     end
-    self.dragging = { win = win, dx = x - win.x, dy = y - win.y }
+    local now = self.kernel:uptime()
+    self.dragging = {
+      win = win,
+      dx = x - win.x,
+      dy = y - win.y,
+      lastSignalAt = now,
+      transitionDuration = 0,
+    }
     if self.dragTestArmed then
       self.dragTestArmed = false
-      self.dragTest = { count = 0, firstAt = nil, lastAt = nil, maxGap = 0 }
+      self.dragTest = {
+        count = 0,
+        firstAt = nil,
+        lastAt = nil,
+        maxGap = 0,
+        interpolatedFrames = 0,
+      }
     end
     return
   end
@@ -566,8 +605,17 @@ function ui:onDrag(x, y, button)
     end
 
     local win = self.dragging.win
-    win.x = util.clamp(x - self.dragging.dx, 1, self.w - win.w + 1)
-    win.y = util.clamp(y - self.dragging.dy, 1, self.h - win.h + 1)
+    local drag = self.dragging
+    local now = self.kernel:uptime()
+    self:advanceDrag(now)
+
+    drag.fromX = win.x
+    drag.fromY = win.y
+    drag.targetX = util.clamp(x - drag.dx, 1, self.w - win.w + 1)
+    drag.targetY = util.clamp(y - drag.dy, 1, self.h - win.h + 1)
+    drag.transitionStart = now
+    drag.transitionDuration = util.clamp(now - drag.lastSignalAt, 1 / 30, 1 / 15)
+    drag.lastSignalAt = now
     self.dirty = true
     return
   end
@@ -580,6 +628,11 @@ end
 
 function ui:onDrop(x, y, button)
   if self.dragging then
+    self:advanceDrag(self.kernel:uptime())
+    if self.dragging.transitionDuration and self.dragging.transitionDuration > 0 then
+      self.dragging.win.x = self.dragging.targetX
+      self.dragging.win.y = self.dragging.targetY
+    end
     self.dragging = nil
     local metrics = self.dragTest
     self.dragTest = nil
@@ -587,10 +640,11 @@ function ui:onDrop(x, y, button)
       local elapsed = metrics.lastAt and metrics.firstAt and metrics.lastAt - metrics.firstAt or 0
       local rate = elapsed > 0 and (metrics.count - 1) / elapsed or 0
       local report = string.format(
-        "Drag test: %d signals, %.1f Hz avg, %.0f ms max gap",
+        "Drag test: %d signals, %.1f Hz avg, %.0f ms max gap, %d interpolated frames",
         metrics.count,
         rate,
-        metrics.maxGap * 1000
+        metrics.maxGap * 1000,
+        metrics.interpolatedFrames
       )
       self.log.info(report)
       self:notify("info", report)

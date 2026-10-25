@@ -593,9 +593,9 @@ elseif scenario == "drag_metric" then
   ev("touch", "screen-1", wx + 2, wy, 0, "tester")
   for index = 1, 6 do
     idle(8)
-    ev("drag", "screen-1", wx + 2 + index, wy + 1, 0, "tester")
+    ev("drag", "screen-1", wx + 2 + index * 3, wy + 1, 0, "tester")
   end
-  ev("drop", "screen-1", wx + 8, wy + 1, 0, "tester")
+  ev("drop", "screen-1", wx + 20, wy + 1, 0, "tester")
   idle(1)
 elseif scenario == "dashboard" then
   ev("touch", "screen-1", 3, dockY, 0, "tester")
@@ -764,6 +764,10 @@ if STRICT then
   if scenario == "drag_metric" and not screen:find("Drag test:", 1, true) then
     errors = errors + 1
     print("FAIL: drag-event measurement was not displayed")
+  end
+  if scenario == "drag_metric" and not screen:find("interpolated frames", 1, true) then
+    errors = errors + 1
+    print("FAIL: drag interpolation did not report intermediate redraws")
   end
 
   if screen:find("could not list", 1, true) then
