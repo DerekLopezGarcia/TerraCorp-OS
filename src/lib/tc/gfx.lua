@@ -147,7 +147,7 @@ function gfx:box(x, y, width, height, opts)
   end
 end
 
--- Barra de progreso de 0 a 1.
+-- Progress bar from 0 to 1.
 function gfx:bar(x, y, width, ratio, fg, bg, glyph)
   ratio = math.max(0, math.min(1, ratio or 0))
   local filled = math.floor(width * ratio + 0.5)

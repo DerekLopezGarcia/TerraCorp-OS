@@ -22,7 +22,7 @@ src/                  boot volume
   init.lua            entry point; finds the volume and loads the kernel
   boot/kernel.lua     VFS, module loader, services, event loop
   lib/tc/*.lua        core libraries, display, UI, updater
-  apps/*.lua          dashboard, files, console, settings, about
+  apps/*.lua          system, files, terminal, settings, notes, about
 eeprom/init.lua       optional boot manager
 tools/install.lua     OpenOS installer
 tools/fetch.lua       OpenOS repository downloader
@@ -39,6 +39,7 @@ npm run check
 npm run manifest       # required after adding/removing Lua files
 npm run sim
 npm run sim:oc
+npm run test:desktop
 npm run test:dashboard-tick
 npm run test:refresh-rate
 npm run test:drag-metric
@@ -67,7 +68,7 @@ write the EEPROM unless explicitly required.
 - Follow the current phase and exit criteria in `docs/roadmap.md`.
 - The kernel owns module loading. `tc.*` maps to `/lib/tc/*.lua`; `apps.*` maps
   to `/apps/*.lua`. Do not depend on OpenOS `require`, `event`, `fs`, or `shell`.
-- Apps use `{ id, title, short, order, create(ctx) }`; instances provide
+- Apps use `{ id, title, short, icon, order, create(ctx) }`; instances provide
   `draw`, `handle`, optional `tick`, and optional `close`. UI calls methods with
   `:` so `self` is the app instance.
 - Apps draw only through `ctx.view`; its coordinates are local and clipped.

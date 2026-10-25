@@ -15,6 +15,7 @@ contract. It does not measure in-game wall-clock boot time or memory use.
 npm run check
 npm run sim
 npm run sim:oc
+npm run test:desktop
 npm run test:dashboard-tick
 npm run test:refresh-rate
 npm run test:drag-metric
@@ -31,6 +32,25 @@ npm run test:screens
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
 
+## 0.2.0 desktop shell checks
+
+`npm run test:desktop` clicks the Files icon and requires the final screen to
+show exactly one window titled Files. `npm run test:screens` runs seven
+scenarios (System, desktop, Terminal, Files, Settings, Notes, updater) across
+five resolutions (160x50, 120x40, 80x25, 60x20, 40x16), for 35 combinations.
+Each combination must adopt the requested resolution, finish without errors,
+and paint visible content.
+
+Manual in-game checks add what the harness cannot prove:
+
+- A single click on each icon opens its app; no double click is needed.
+- F1-F6 still open the six apps, and with no focused window the arrows move the
+  icon selection and Enter opens it.
+- The taskbar chip focuses its window; clicking the focused chip minimizes it.
+- About shows live SYSTEM values and R resamples them.
+- The two-column icon strip and window placement look correct at 80x25 and
+  above; the three-column layout is usable at 40x16.
+
 ## In-game protocol
 
 1. Install/update from OpenOS using the steps in the README. Do not use
@@ -38,12 +58,13 @@ and regression test, not a replacement for the game test.
 2. Reboot and time startup until the desktop appears.
 3. Read `/var/log/tc.log` from TerraCorp's boot volume. Record the `gpu` line's
    resolution/free-memory values and the uptime on `First render OK`.
-4. Run a 30-minute session. Open all six apps; in Dashboard, verify uptime
-   advances once per second. Check that UI input/render response feels smooth
-   at the 30 Hz loop target (the harness cannot measure game-client FPS). In
-   Console, try `help`, `ls`, `pwd`, and
-   `echo test`. Move/minimize/close windows and change screen resolution from
-   OpenOS, then return to TerraCorp.
+4. Run a 30-minute session. Open all six apps by icon and by F1-F6; verify the
+   desktop selection, Enter-to-open, and taskbar chips. In System, verify uptime
+   advances once per second and readings refresh every two seconds. In About,
+   check the SYSTEM values and press R. Check that UI input/render response feels
+   smooth at the 30 Hz loop target (the harness cannot measure game-client FPS).
+   In Terminal, try `help`, `ls`, `pwd`, and `echo test`. Move/minimize/close
+   windows and change screen resolution from OpenOS, then return to TerraCorp.
 5. Check the log:
 
    ```sh
@@ -52,14 +73,16 @@ and regression test, not a replacement for the game test.
 
    It must return no lines. Record warnings separately.
 6. Repeat with Tier 2 CPU/GPU and a Tier 2 screen at 80x25.
-7. Recover the 0.1.9 or 0.1.10 updater: from OpenOS, copy the 0.1.11
+7. Updater: from a 0.1.9 or 0.1.10 install, copy the 0.1.11
    `src/boot/apply.lua` onto the TerraCorp volume as `/boot/apply.lua` (do not
    reinstall the whole tree). Reboot, then in About press **Install** for 0.1.11
    and confirm the boot-time progress screen appears before the desktop. Confirm
    the version changes, settings persist, a note written in Notes survives, the
    EEPROM is unchanged, and `/var/update/pending` is gone afterwards. Turn the
    computer off during the progress screen once and verify the next start
-   restores the previous version instead of hanging.
+   restores the previous version instead of hanging. That repair path was
+   validated in-game. When 0.2.0 is published, repeat the normal update from
+   0.1.11 and confirm the same invariants.
 
 ## Results log
 
@@ -68,20 +91,25 @@ and regression test, not a replacement for the game test.
 | Not recorded | TC-E6C8 | CPU/GPU unknown; screen tier unconfirmed | 80x25 | 1714 | 1.05 s | Not recorded | Log excerpt; occasional GPU span warnings |
 | Not recorded | TC-B218 | CPU/GPU unknown; Tier 3 screen | 160x50 | 1279 | 1.25 s | No | User reports a 30-minute session; TerraCorp 0.1.0 log has console keyboard `ERR` entries and later GPU span warnings |
 
+0.2.0 Grid: all local harness gates pass. In-game icon, SYSTEM, and F0 closure
+evidence is still pending.
+
 ## F0 exit checklist
 
 | Criterion | Status |
 |---|---|
-| All six apps usable in-game | Tested by user; console input errors still need an in-game retest |
-| 30-minute session without errors | Not met in the supplied 0.1.0 log; repeat on the published 0.1.11 build |
+| All six apps usable in-game | Tested by user; Terminal input still needs an in-game retest on 0.1.11+ |
+| 30-minute session without errors | Not met in the supplied 0.1.0 log; repeat on the published build |
 | At least 250 KB free on Tier 2 | Recorded logs exceed the threshold; confirm CPU/GPU tier |
 | First render within 2 seconds | Recorded values are 1.05 s and 1.25 s; confirm on Tier 2 hardware |
 | Resolution adaptation and GPU retry tests | Verified by `npm run test:screens` and `npm run test:faults` |
-| Updater detects, stages, installs, and restarts from a stable release | Modern/legacy response paths, full manifest filtering, backup recovery, rollback, and the boot-time applier (including a successful close with no return value) pass in the harness; real 0.1.9 → 0.1.11 update pending the one-file repair |
-| Notes persist across restarts and updates | `npm run test:notes` verifies `/var/notes.txt`; confirm in-game after the 0.1.11 update |
-| Dashboard uptime advances every second | `npm run test:dashboard-tick` passes; verify in-game |
+| Desktop icons, taskbar, and keyboard selection | `npm run test:desktop` clicks the Files icon and requires exactly one window; `npm run test:screens` covers 35 combinations; confirm in-game |
+| About SYSTEM section shows live values | Harness screens pass; confirm values and R refresh in-game |
+| Updater detects, stages, installs, and restarts from a stable release | Modern/legacy response paths, full manifest filtering, backup recovery, rollback, and the boot-time applier (including a successful close with no return value) pass in the harness; the 0.1.9 → 0.1.11 repair path was validated in-game by the user; record log and pending-file evidence |
+| Notes persist across restarts and updates | `npm run test:notes` verifies `/var/notes.txt`; confirm in-game after the update |
+| System uptime advances every second | `npm run test:dashboard-tick` passes; verify in-game |
 | UI loop requests 30 Hz idle cadence | `npm run test:refresh-rate` verifies the 1/30 s signal wait; actual display cadence must be measured in-game |
-| Window drag signal rate | In-game: Console `dragtest`, drag its title bar for 5-10 seconds, release, then `log 10` |
+| Window drag signal rate | In-game: Terminal `dragtest`, drag its title bar for 5-10 seconds, release, then `log 10` |
 
 ## Black-screen diagnostics
 

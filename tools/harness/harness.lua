@@ -547,19 +547,38 @@ local function typeText(value)
   end
 end
 
--- Scenarios use simulated resolution; the dock is on the penultimate row and
--- windows scale with the screen.
-local dockY = maxHeight - 1
+-- Scenarios use simulated resolution; the taskbar is the last row and windows
+-- scale with the screen. Desktop icons occupy a left strip on normal screens.
+local taskbarY = maxHeight
+
+local function iconColumns()
+  local fit = math.floor((maxWidth - 3 + 2) / 11)
+  fit = math.max(1, math.min(fit, 6))
+  if maxWidth >= 60 then
+    return math.min(fit, 2)
+  end
+  return math.min(fit, 3)
+end
 
 -- Match `ui:defaultGeometry` for the first window (offset 0). Pointer gestures
 -- may miss if layout changes; this should not create false-positive coverage.
 local function windowRect()
   local desktopTop = 3
-  local desktopBottom = dockY - 1
+  local desktopBottom = taskbarY - 1
   local usable = desktopBottom - desktopTop + 1
-  local w = math.min(maxWidth - 4, math.max(34, math.floor(maxWidth * 0.74)))
+  local gridWidth = iconColumns() * 11 - 2
+  local left = gridWidth + 4
+  local minWidth = math.min(34, maxWidth - 2)
+  local freeWidth = maxWidth - left + 1
+  local w, x
+  if freeWidth >= minWidth then
+    w = math.min(math.max(34, math.floor(maxWidth * 0.62)), freeWidth)
+    x = left + math.floor((freeWidth - w) / 2)
+  else
+    w = math.min(maxWidth - 4, math.max(34, math.floor(maxWidth * 0.74)))
+    x = math.floor((maxWidth - w) / 2)
+  end
   local h = math.min(usable - 1, math.max(10, math.floor(usable * 0.84)))
-  local x = math.floor((maxWidth - w) / 2)
   local y = desktopTop + math.max(0, math.floor((usable - h) / 2))
   return x, y, w, h
 end
@@ -621,8 +640,12 @@ elseif scenario == "drag_metric" then
   ev("drop", "screen-1", wx + 20, wy + 1, 0, "tester")
   idle(1)
 elseif scenario == "dashboard" then
-  ev("touch", "screen-1", 3, dockY, 0, "tester")
+  ev("touch", "screen-1", 6, 5, 0, "tester") -- first desktop icon: System
   idle(12)
+elseif scenario == "desktop" then
+  -- Second icon (Files) is in the first row at any supported resolution.
+  ev("touch", "screen-1", 17, 5, 0, "tester")
+  idle(2)
 elseif scenario == "console" then
   ev("key_down", "screen-1", nil, 0x3D, "tester")
   typeText("help")
@@ -642,7 +665,7 @@ elseif scenario == "files" then
   ev("key_down", "screen-1", nil, 0x0E, "tester")   -- go up
   idle(2)
 elseif scenario == "settings" then
-  ev("touch", "screen-1", 40, dockY, 0, "tester")
+  ev("key_down", "screen-1", nil, 0x3E, "tester") -- F4 opens Settings
   idle(3)
 elseif scenario == "notes" then
   ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens Notes
@@ -695,7 +718,7 @@ elseif scenario == "updater_rollback" then
   idle(2)
 else
   local wx, wy = windowRect()
-  ev("touch", "screen-1", 3, dockY, 0, "tester")     -- abre Panel
+  ev("touch", "screen-1", 6, 5, 0, "tester")     -- opens System from the icon
   ev("touch", "screen-1", wx + 2, wy, 0, "tester")   -- grab the title bar
   ev("drop", "screen-1", wx + 3, wy + 1, 0, "tester")
   ev("scroll", "screen-1", wx + 2, wy + 1, 1, "tester")
@@ -886,6 +909,16 @@ if STRICT then
   if scenario == "dashboard" and stats.spaceCalls == 0 then
     errors = errors + 1
     print("FAIL: Dashboard did not query spaceUsed")
+  end
+  if scenario == "desktop" then
+    if not screen:find("1 window", 1, true) then
+      errors = errors + 1
+      print("FAIL: clicking a desktop icon did not open exactly one window")
+    end
+    if not screen:find("Files", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Files icon did not open the Files app")
+    end
   end
   if (scenario == "updater" or scenario == "updater_legacy") then
     if not shutdownFlag then

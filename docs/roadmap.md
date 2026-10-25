@@ -18,7 +18,7 @@ and provide a safe update path before architectural expansion.
 
 - Test with Tier 2 CPU and Tier 2/3 screens.
 - Measure free memory, time to first render, and redraw activity.
-- Exercise all five apps and fix issues found in-game.
+- Exercise all six apps and fix issues found in-game.
 - Add an About-screen updater backed by stable GitHub Releases.
 - Version stable builds with matching semantic Git tags and GitHub Releases.
 - Keep settings, user data, boot configuration, and EEPROM outside the updater's
@@ -29,19 +29,26 @@ and provide a safe update path before architectural expansion.
 Tier 2 node, first render within 2 seconds, and a tested release update that
 preserves settings and supports rollback on handled installation failures.
 
-## F1 — Minimal core (0.2)
+## F1 — Desktop shell and minimal core (0.2.x)
 
-**Goal:** reduce the core surface before adding distributed features.
+**Goal:** ship a desktop icon shell, then reduce the core surface before adding
+distributed features.
 
-- Separate the kernel (boot, VFS, signals) from services (logging and APIs).
+- **0.2.0 Grid:** single-click desktop icons, taskbar window chips, keyboard
+  navigation when no window is focused, and a SYSTEM section in About. No
+  service or app-contract refactor in this patch release.
+- **0.2.x:** separate the kernel (boot, VFS, signals) from services (logging and
+  APIs).
 - Apps consume services instead of calling kernel internals.
-- Keep Shell, Files, and Editor in the core; move Dashboard and Settings to
+- Keep Shell, Files, and Editor in the core; move System and Settings to
   system apps.
 - Raise the app API to version 2 and document app/service contracts.
 - Remove unused code.
 
 **Exit criteria:** core at or below 1,200 lines, boot within 1.5 seconds,
-unchanged user-visible behavior, and a green contract-test harness.
+unchanged user-visible behavior after the refactor, and a green contract-test
+harness. Prepare 0.2.0 during F0, but tag it only after the F0 exit criteria
+are recorded.
 
 ## F2 — Sessions and displays (0.3)
 
@@ -151,5 +158,5 @@ Do not plan further work until this is tested in-game.
    terminals for factory use — decided.
 4. **Data-center autonomy:** automatic boot with a UPS and dedicated power plant;
    staged shedding and ordered shutdown — decided.
-5. **Core apps:** Shell, Files, and Editor proposed; Dashboard and Settings are
+5. **Core apps:** Shell, Files, and Editor proposed; System and Settings are
    system apps. Confirm in F1.

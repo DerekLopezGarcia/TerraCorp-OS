@@ -8,10 +8,26 @@ about.__index = about
 about.id = "about"
 about.title = "About"
 about.short = "About"
+about.icon = "INF"
 about.order = 6
 
-function about.create()
-  return setmetatable({ updateState = "check", updateStatus = "Check GitHub Releases for a stable update." }, about)
+function about.create(ctx)
+  local self = setmetatable({ updateState = "check", updateStatus = "Check GitHub Releases for a stable update." }, about)
+  self:refreshSystem(ctx)
+  return self
+end
+
+function about:refreshSystem(ctx)
+  local used, total = ctx.kernel:memory()
+  local storageUsed, storageTotal = ctx.kernel:storage()
+  local components = ctx.kernel:components()
+  self.system = {
+    memoryUsed = (tonumber(used) or 0) / 1048576,
+    memoryTotal = (tonumber(total) or 0) / 1048576,
+    storageUsed = storageUsed,
+    storageTotal = storageTotal,
+    devices = (components and components.total) or 0,
+  }
 end
 
 local LORE_BRIEF = {
@@ -40,6 +56,10 @@ function about:draw(ctx)
     end
   end
 
+  if not self.system then
+    self:refreshSystem(ctx)
+  end
+
   v:clear(" ", c.text, c.deep)
 
   v:put(1, 1, "TERRACORP", c.accent, c.deep)
@@ -48,37 +68,74 @@ function about:draw(ctx)
 
   if ctx.h >= 9 then
     v:put(1, 2, ctx.version.company .. " · " .. ctx.version.tagline, c.dim, c.deep)
-    local info = {
+
+    local storage = "unavailable"
+    if type(self.system.storageTotal) == "number" and self.system.storageTotal > 0 then
+      storage = ctx.util.humanSize(self.system.storageUsed)
+        .. " / " .. ctx.util.humanSize(self.system.storageTotal)
+    end
+
+    local screen = "unknown"
+    local gfx = ctx.kernel.gfx
+    if gfx and gfx.w and gfx.h then
+      screen = gfx.w .. "x" .. gfx.h
+    end
+
+    local product = {
       { "Version", ctx.version.version .. " " .. ctx.version.codename },
-      { "App API", tostring(ctx.version.api) },
+      { "App API", tostring(ctx.version.api) .. " · " .. ctx.version.license },
+    }
+    local system = {
       { "Node", ctx.kernel.hostname },
+      { "Memory", string.format("%.1f / %.1f MB",
+        self.system.memoryUsed, self.system.memoryTotal) },
+      { "Storage", storage },
+      { "Screen", screen },
+      { "Devices", tostring(self.system.devices) .. " components" },
+      { "Boot", ctx.kernel.volumeAddress or "unknown" },
       { "Address", ctx.kernel.address },
-      { "Boot volume", ctx.kernel.volume.address },
-      { "Resolution", ctx.view.w .. "x" .. ctx.view.h },
-      { "License", ctx.version.license },
     }
 
     local row = 4
-    for _, pair in ipairs(info) do
-      if row >= buttonRow - 1 then
-        break
+    local showHeaders = ctx.h >= 22
+    local function drawPairs(pairs)
+      for _, pair in ipairs(pairs) do
+        if row >= buttonRow then
+          return
+        end
+        v:put(2, row, pair[1], c.dim, c.deep)
+        v:put(16, row, ctx.text.truncate(pair[2], math.max(1, ctx.w - 16)), c.text, c.deep)
+        row = row + 1
       end
-      v:put(2, row, pair[1], c.dim, c.deep)
-      v:put(16, row, pair[2], c.text, c.deep)
-      row = row + 1
     end
 
-    if ctx.h >= 20 then
-      local dividerRow = 12
-      v:hline(1, dividerRow, ctx.w, ctx.glyphs.h, c.panel, c.deep)
-      for index, line in ipairs(LORE_BRIEF) do
-        local loreRow = dividerRow + index
-        if loreRow >= buttonRow - 1 then
+    if showHeaders then
+      v:put(2, row, "PRODUCT", c.accent, c.deep)
+      row = row + 1
+    end
+    drawPairs(product)
+
+    if showHeaders then
+      if row <= buttonRow - 2 then
+        v:put(2, row, "SYSTEM", c.accent, c.deep)
+        row = row + 1
+      end
+    end
+    drawPairs(system)
+
+    -- The lore is secondary information. Show it only when the window has room
+    -- for the system details, a divider, and a useful part of the brief.
+    if ctx.h >= 30 and row <= buttonRow - 3 then
+      v:hline(1, row, ctx.w, ctx.glyphs.h, c.panel, c.deep)
+      row = row + 1
+      for _, line in ipairs(LORE_BRIEF) do
+        if row > buttonRow - 2 then
           break
         end
         if line ~= "" then
-          v:put(2, loreRow, ctx.text.truncate(line, ctx.w - 2), c.dim, c.deep)
+          v:put(2, row, ctx.text.truncate(line, ctx.w - 2), c.dim, c.deep)
         end
+        row = row + 1
       end
     end
   else
@@ -105,6 +162,13 @@ function about:updateLabel()
 end
 
 function about:handle(ctx, name, x, y)
+  if name == "key" then
+    if x == "r" then
+      self:refreshSystem(ctx)
+      return true
+    end
+    return false
+  end
   if name ~= "touch" then
     return false
   end

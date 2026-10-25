@@ -574,6 +574,7 @@ function kernel.start(boot)
     gfx = gfx,
     vfs = vfs,
     volume = volume,
+    volumeAddress = boot.address,
     address = address,
     hostname = hostname,
   }, { __index = kernel })

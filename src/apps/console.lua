@@ -4,8 +4,9 @@ local console = {}
 console.__index = console
 
 console.id = "console"
-console.title = "Console"
-console.short = "Console"
+console.title = "Terminal"
+console.short = "Terminal"
+console.icon = "TRM"
 console.order = 3
 
 function console.create(ctx)
@@ -19,7 +20,7 @@ function console.create(ctx)
   self.wrapped = nil
   self.wrappedWidth = 0
 
-  self:push("TerraCorp OS — operator console", "accent")
+  self:push("TerraCorp OS - operator terminal", "accent")
   self:push("Type `help` to list available commands.", "dim")
   self:push("", "out")
   return self
@@ -126,7 +127,7 @@ function console:command(ctx, line)
       "pwd            print working directory",
       "cat <file>     print file contents",
       "echo <text>    print text",
-      "clear          clear the console",
+      "clear          clear the terminal",
       "uptime         show session uptime",
       "mem            show node memory",
       "comps          list connected components",
@@ -138,7 +139,7 @@ function console:command(ctx, line)
       "whoami         show node identity",
       "reboot         restart the node",
       "poweroff       shut down the node",
-      "exit           close the console",
+      "exit           close the terminal",
     }) do
       self:push("  " .. item, "dim")
     end
@@ -259,7 +260,7 @@ function console:command(ctx, line)
 
   if name == "dragtest" then
     ctx.ui:armDragTest()
-    self:push("Drag test armed. Drag this Console title bar for 5-10 seconds, then run `log 10`.", "ok")
+    self:push("Drag test armed. Drag this Terminal title bar for 5-10 seconds, then run `log 10`.", "ok")
     return
   end
 

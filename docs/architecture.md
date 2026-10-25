@@ -61,16 +61,36 @@ framebuffer and forces a complete redraw.
 Apps draw only through `ctx.view`, a clipped subview whose coordinates are local
 to the app window.
 
+## Desktop shell
+
+The desktop is drawn under the windows. It contains a responsive icon grid and a
+one-row taskbar; windows open above the icons.
+
+- Each app declares an `icon` code (`SYS`, `FIL`, `TRM`, `SET`, `NTS`, `INF`)
+  and a short label. Icons are single-click targets and are also reachable with
+  the keyboard.
+- At 60 columns and wider the grid uses two columns on the left, so a window can
+  open beside the icons. Narrower screens use three columns and centered
+  windows.
+- Tile height shrinks from three rows to two or one when the screen is too
+  short for the full grid.
+- The taskbar lists open windows as chips. Clicking a chip focuses its window;
+  clicking the focused chip minimizes it. The focused window is highlighted.
+- With no focused window, arrows move the icon selection, Home/End jump to the
+  ends, and Enter opens the selected app. F1-F6 always open an app by order.
+- The empty-desktop hint is drawn only when no window is open and the grid
+  leaves room for it.
+
 ## Windows and events
 
-The UI keeps a z-ordered window list, focus, and drag state.
+The UI keeps a z-ordered window list, focus, drag state, and the icon selection.
 
 | Event | Handling |
 |---|---|
-| `touch` | Dock, window controls/title bar, or focused app |
+| `touch` | Desktop icon, taskbar chip, window controls/title bar, or focused app |
 | `drag` / `drop` | Move window or forward to app |
 | `scroll` | Forward to app under pointer |
-| `key_down` | Global Esc/F1-F6 shortcuts or focused app |
+| `key_down` | Global Esc/F1-F6; arrows/Home/End/Enter when no window is focused; otherwise the focused app |
 | `screen_resized` | Rebind GPU and resize UI |
 | `interrupted` | Ignored so Ctrl+Alt+C does not terminate the OS |
 
@@ -86,6 +106,7 @@ local app = {
   id = "example",
   title = "Example",
   short = "Example",
+  icon = "EXA",
   order = 6,
 }
 
@@ -121,6 +142,10 @@ The context includes `ui`, `kernel`, `theme`, `colors`, `glyphs`, `log`,
 `config`, `version`, `util`, `text`, `win`, geometry, and `view`. Do not cache
 `ctx.view` between calls. Register an app ID in `APP_IDS` in the kernel.
 
+`title` is the window title and taskbar label. `short` is the desktop icon
+label. `icon` is a short code centered in the icon tile (three characters in the
+built-in apps); `order` sets both the F1-F10 shortcut and the grid position.
+
 ## Power and known limits
 
 `kernel:energyPercent()` returns 100 if the computer does not report energy.
@@ -132,5 +157,5 @@ The context includes `ui`, `kernel`, `theme`, `colors`, `glyphs`, `log`,
 - No modem-based distributed messaging yet.
 - No accounts or session locking.
 - Windows can be moved but not resized with the pointer.
-- Console history and in-memory logs do not survive reboot; warnings/errors are
+- Terminal history and in-memory logs do not survive reboot; warnings/errors are
   persisted in `/var/log/tc.log`.

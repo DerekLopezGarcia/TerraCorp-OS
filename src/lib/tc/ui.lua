@@ -1,7 +1,7 @@
--- Desktop: top bar, dock, windows, and app event dispatch.
+-- Desktop: top bar, desktop icons, taskbar, windows, and app event dispatch.
 --
 -- App contract (see docs/architecture.md):
---   module = { id, title, order, create(ctx) -> instance }
+--   module = { id, title, short, icon, order, create(ctx) -> instance }
 --   instance = { draw(ctx), handle(ctx, name, ...), blur(ctx), close(ctx) }
 -- `ctx.view` is a clipped gfx subview with local coordinates 1..w / 1..h.
 
@@ -13,9 +13,21 @@ local ui = {}
 ui.__index = ui
 
 local TOP_HEIGHT = 2
-local DOCK_HEIGHT = 2
+local TASKBAR_HEIGHT = 1
 local MIN_WIDTH = 34
 local MIN_HEIGHT = 10
+
+-- Desktop icon grid. The tile is centered inside a wider cell so labels such as
+-- "Terminal" and "Settings" fit without truncation. Narrow screens use three
+-- columns; normal screens keep a two-column strip on the left so windows can
+-- open beside the icons.
+local ICON_TILE_WIDTH = 5
+local ICON_TILE_HEIGHT = 3
+local ICON_CELL_WIDTH = 9
+local ICON_GAP_X = 2
+local ICON_GAP_Y = 1
+local ICON_COLUMNS_WIDE = 2
+local ICON_COLUMNS_NARROW = 3
 
 function ui.new(env)
   local self = setmetatable({}, ui)
@@ -49,6 +61,9 @@ function ui.new(env)
   self.dragTest = nil
   self.notice = nil
   self.dirty = true
+  self.iconIndex = 1
+  self.iconCols = 1
+  self.iconTileHeight = ICON_TILE_HEIGHT
 
   self:resize()
   return self
@@ -57,15 +72,79 @@ end
 function ui:resize()
   self.w = self.gfx.w
   self.h = self.gfx.h
-  self.dockTop = self.h - DOCK_HEIGHT + 1
+  self.taskbarTop = self.h - TASKBAR_HEIGHT + 1
   self.desktopTop = TOP_HEIGHT + 1
-  self.desktopBottom = self.dockTop - 1
+  self.desktopBottom = self.taskbarTop - 1
+
+  self.iconCols = self:iconColumns()
+  local rows = math.ceil(#self.order / self.iconCols)
+  local available = self.desktopBottom - self.desktopTop
+  local needed = rows * (ICON_TILE_HEIGHT + 1) + math.max(0, rows - 1) * ICON_GAP_Y
+  if needed <= available then
+    self.iconTileHeight = ICON_TILE_HEIGHT
+  else
+    local compact = rows * 3 + math.max(0, rows - 1) * ICON_GAP_Y
+    self.iconTileHeight = (compact <= available) and 2 or 1
+  end
+  self.iconIndex = util.clamp(self.iconIndex or 1, 1, math.max(1, #self.order))
 
   for _, win in ipairs(self.windows) do
     self:clampWindow(win)
   end
 
   self.dirty = true
+end
+
+function ui:iconColumns()
+  local count = math.max(1, #self.order)
+  local fit = math.floor((self.w - 3 + ICON_GAP_X) / (ICON_CELL_WIDTH + ICON_GAP_X))
+  fit = util.clamp(fit, 1, count)
+  if self.w >= 60 then
+    return math.min(fit, ICON_COLUMNS_WIDE)
+  end
+  return math.min(fit, ICON_COLUMNS_NARROW)
+end
+
+function ui:iconGridWidth()
+  return self.iconCols * (ICON_CELL_WIDTH + ICON_GAP_X) - ICON_GAP_X
+end
+
+function ui:iconRect(index)
+  local column = (index - 1) % self.iconCols
+  local row = math.floor((index - 1) / self.iconCols)
+  local x = 2 + column * (ICON_CELL_WIDTH + ICON_GAP_X)
+  local y = self.desktopTop + 1 + row * (self.iconTileHeight + 1 + ICON_GAP_Y)
+  return x, y
+end
+
+function ui:iconAt(x, y)
+  for index = 1, #self.order do
+    local ix, iy = self:iconRect(index)
+    if x >= ix and x < ix + ICON_CELL_WIDTH
+      and y >= iy and y < iy + self.iconTileHeight + 1 then
+      return index
+    end
+  end
+  return nil
+end
+
+function ui:iconGridBottom()
+  local rows = math.ceil(#self.order / self.iconCols)
+  local lastY = self.desktopTop + 1 + (rows - 1) * (self.iconTileHeight + 1 + ICON_GAP_Y)
+  return lastY + self.iconTileHeight
+end
+
+function ui:moveIcon(delta)
+  if #self.order == 0 then
+    return false
+  end
+  local nextIndex = util.clamp(self.iconIndex + delta, 1, #self.order)
+  if nextIndex == self.iconIndex then
+    return false
+  end
+  self.iconIndex = nextIndex
+  self.dirty = true
+  return true
 end
 
 function ui:clampWindow(win)
@@ -164,10 +243,24 @@ end
 
 function ui:defaultGeometry()
   local usable = self.desktopBottom - self.desktopTop + 1
-  local width = math.min(self.w - 4, math.max(MIN_WIDTH, math.floor(self.w * 0.74)))
+  local minWidth = math.min(MIN_WIDTH, self.w - 2)
+  local width, x
+
+  -- On normal screens, leave the icon strip visible and open the window in the
+  -- remaining space. Very narrow screens fall back to a centered window.
+  local left = self:iconGridWidth() + 4
+  local freeWidth = self.w - left + 1
+  if freeWidth >= minWidth then
+    width = util.clamp(math.floor(self.w * 0.62), minWidth, freeWidth)
+    x = left + math.floor((freeWidth - width) / 2)
+  else
+    width = math.min(self.w - 4, math.max(minWidth, math.floor(self.w * 0.74)))
+    x = math.floor((self.w - width) / 2)
+  end
+
   local height = math.min(usable - 1, math.max(MIN_HEIGHT, math.floor(usable * 0.84)))
   local offset = (#self.windows % 5) * 2
-  local x = math.floor((self.w - width) / 2) + offset
+  x = x + offset
   local y = self.desktopTop + math.max(0, math.floor((usable - height) / 2)) + offset
   return x, y, width, height
 end
@@ -180,9 +273,16 @@ function ui:open(id)
     return existing
   end
 
+  for index, item in ipairs(self.order) do
+    if item.id == id then
+      self.iconIndex = index
+      break
+    end
+  end
+
   local module = self.apps[id]
   if not module then
-      self:notify("warn", "Unknown application: " .. tostring(id))
+    self:notify("warn", "Unknown application: " .. tostring(id))
     return nil
   end
 
@@ -282,7 +382,7 @@ function ui:context(win)
 end
 
 --------------------------------------------------------------------------------
--- Dibujo
+-- Drawing
 --------------------------------------------------------------------------------
 
 function ui:drawTopbar()
@@ -300,7 +400,7 @@ function ui:drawTopbar()
 
   local hostname = self.config.get("hostname")
   if hostname == "" then
-    hostname = self.kernel.hostname or "TC-NODO"
+    hostname = self.kernel.hostname or "TC-NODE"
   end
 
   local left = hostname .. "  " .. g.bullet .. "  v" .. self.version.version
@@ -318,42 +418,87 @@ function ui:drawTopbar()
   self.gfx:put(self.w - text.width(status) - 1, 2, status, statusColor, c.panel)
 end
 
-function ui:drawDock()
+function ui:drawIcons()
   local c = self.colors
   local g = self.glyphs
-  local row = self.h - 1
+
+  for index, module in ipairs(self.order) do
+    local x, y = self:iconRect(index)
+    local cellBottom = y + self.iconTileHeight
+    if cellBottom <= self.desktopBottom then
+      local selected = (self.iconIndex == index and self.focus == nil)
+      local open = self:findWindow(module.id) ~= nil
+      local tileX = x + math.floor((ICON_CELL_WIDTH - ICON_TILE_WIDTH) / 2)
+      local code = module.icon or "APP"
+
+      local tileBg = selected and c.text or c.panel
+      local tileFg = selected and c.bg or c.accent
+      self.gfx:fill(tileX, y, ICON_TILE_WIDTH, self.iconTileHeight, " ", tileFg, tileBg)
+      self.gfx:put(
+        tileX + math.floor((ICON_TILE_WIDTH - text.width(code)) / 2),
+        y + math.floor(self.iconTileHeight / 2),
+        code,
+        tileFg,
+        tileBg
+      )
+
+      local label = text.truncate(module.short or module.title or module.id, ICON_CELL_WIDTH)
+      local labelFg = c.dim
+      if selected then
+        labelFg = c.text
+      elseif open then
+        labelFg = c.accent
+      end
+      self.gfx:put(
+        x + math.floor((ICON_CELL_WIDTH - text.width(label)) / 2),
+        y + self.iconTileHeight,
+        label,
+        labelFg,
+        c.bg
+      )
+
+      if open then
+        self.gfx:put(tileX + ICON_TILE_WIDTH - 1, y, g.mark, tileFg, tileBg)
+      end
+    end
+  end
+end
+
+function ui:drawTaskbar()
+  local c = self.colors
+  local g = self.glyphs
+  local row = self.taskbarTop
 
   self.gfx:fill(1, row, self.w, 1, " ", c.dim, c.panel)
-  self.gfx:fill(1, self.h, self.w, 1, " ", c.panel, c.bg)
-  local shortcut = "F1-F" .. tostring(math.min(#self.order, 10))
-  self.gfx:put(2, self.h, shortcut .. " open · Esc minimize · drag the title bar to move a window", c.dim, c.bg)
 
-  local column = 2
-  for index, module in ipairs(self.order) do
-    local label = " " .. index .. " " .. (module.short or module.title) .. " "
-    local open = self:findWindow(module.id) ~= nil
-    local focused = self.focus and self.focus.id == module.id
+  local mark = g.mark .. " " .. tostring(#self.windows)
+    .. ((#self.windows == 1) and " window" or " windows")
+  self.gfx:put(2, row, mark, c.text, c.panel)
+  local column = 2 + text.width(mark) + 2
 
-    local fg, bg
-    if focused then
-      fg, bg = c.onAccent, c.accent
-    elseif open then
-      fg, bg = c.text, c.deep
-    else
-      fg, bg = c.dim, c.panel
+  for _, win in ipairs(self.windows) do
+    local label = " " .. text.truncate(win.title, 14) .. " "
+    local width = text.width(label)
+    if column + width > self.w then
+      break
     end
 
-    local width = text.width(label)
-    if column + width >= self.w then
-      break
+    local fg, bg = c.dim, c.panel
+    if self.focus == win then
+      fg, bg = c.onAccent, c.accent
+    elseif not win.minimized then
+      fg, bg = c.text, c.deep
     end
 
     self.gfx:put(column, row, label, fg, bg)
     column = column + width + 1
   end
 
-  local mark = g.mark .. " " .. tostring(#self.windows) .. ((#self.windows == 1) and " window" or " windows")
-  self.gfx:put(self.w - text.width(mark) - 1, row, mark, c.dim, c.panel)
+  local hint = "F1-F" .. tostring(math.min(#self.order, 10)) .. " or click an icon"
+  local hintX = self.w - text.width(hint) - 1
+  if hintX > column then
+    self.gfx:put(hintX, row, hint, c.dim, c.panel)
+  end
 end
 
 function ui:drawWindow(win)
@@ -414,7 +559,7 @@ function ui:drawNotice()
   local label = " " .. text.truncate(self.notice.message, self.w - 8) .. " "
   local width = text.width(label)
   local x = self.w - width - 2
-  local y = self.h - DOCK_HEIGHT - 1
+  local y = self.taskbarTop - 1
   local bg = c.danger
   if self.notice.level == "warn" then
     bg = c.warn
@@ -443,7 +588,7 @@ function ui:render(force)
     end
   end
 
-    section("desktop", function()
+  section("desktop", function()
     self.gfx:fill(
       1,
       self.desktopTop,
@@ -453,6 +598,10 @@ function ui:render(force)
       self.colors.dim,
       self.colors.bg
     )
+  end)
+
+  section("icons", function()
+    self:drawIcons()
   end)
 
   local ordered = {}
@@ -477,13 +626,13 @@ function ui:render(force)
     end)
   end
 
-  section("barra superior", function()
+  section("top bar", function()
     self:drawTopbar()
   end)
-  section("dock", function()
-    self:drawDock()
+  section("taskbar", function()
+    self:drawTaskbar()
   end)
-  section("aviso", function()
+  section("notice", function()
     self:drawNotice()
   end)
 
@@ -505,15 +654,21 @@ end
 
 function ui:drawEmptyState()
   local c = self.colors
-  local title = "TERRACORP OS"
-  local subtitle = "No active session. Open an app from the dock."
-  local y = self.desktopTop + math.floor((self.desktopBottom - self.desktopTop) / 2) - 2
-  self.gfx:put(math.floor((self.w - text.width(title)) / 2) + 1, y, title, c.accent, c.bg)
-  self.gfx:put(math.floor((self.w - text.width(subtitle)) / 2) + 1, y + 2, subtitle, c.dim, c.bg)
+  local hint = "Select an icon or press F1-F" .. tostring(math.min(#self.order, 10)) .. "."
+  local y = self.desktopBottom - 1
+  if y > self:iconGridBottom() then
+    self.gfx:put(
+      math.floor((self.w - text.width(hint)) / 2) + 1,
+      y,
+      hint,
+      c.dim,
+      c.bg
+    )
+  end
 end
 
 --------------------------------------------------------------------------------
--- Eventos
+-- Events
 --------------------------------------------------------------------------------
 
 function ui:windowAt(x, y)
@@ -554,16 +709,22 @@ function ui:onTouch(x, y, button)
     return
   end
 
-  if y >= self.dockTop then
-    if y == self.dockTop then
-      self:onDockClick(x)
+  if y >= self.taskbarTop then
+    if y == self.taskbarTop then
+      self:onTaskbarClick(x)
     end
     return
   end
 
   local win = self:windowAt(x, y)
   if not win then
-    self:setFocus(nil)
+    local icon = self:iconAt(x, y)
+    if icon then
+      self.iconIndex = icon
+      self:open(self.order[icon].id)
+    else
+      self:setFocus(nil)
+    end
     return
   end
 
@@ -680,13 +841,24 @@ function ui:onScroll(x, y, direction)
   end
 end
 
-function ui:onDockClick(x)
-  local column = 2
-  for index, module in ipairs(self.order) do
-    local label = " " .. index .. " " .. (module.short or module.title) .. " "
+function ui:onTaskbarClick(x)
+  local g = self.glyphs
+  local mark = g.mark .. " " .. tostring(#self.windows)
+    .. ((#self.windows == 1) and " window" or " windows")
+  local column = 2 + text.width(mark) + 2
+
+  for _, win in ipairs(self.windows) do
+    local label = " " .. text.truncate(win.title, 14) .. " "
     local width = text.width(label)
+    if column + width > self.w then
+      return
+    end
     if x >= column and x < column + width then
-      self:open(module.id)
+      if self.focus == win and not win.minimized then
+        self:minimize(win)
+      else
+        self:setFocus(win)
+      end
       return
     end
     column = column + width + 1
@@ -708,7 +880,9 @@ function ui:onKey(char, code)
   end
 
   if code == keys.esc then
-    self:minimize(self.focus)
+    if self.focus then
+      self:minimize(self.focus)
+    end
     return
   end
 
@@ -723,6 +897,25 @@ function ui:onKey(char, code)
 
   if self.focus then
     self:forward(self.focus, "key", char, code)
+    return
+  end
+
+  -- With no focused window, the arrow keys move the desktop selection and
+  -- Enter opens it. This keeps every app reachable without a touch screen.
+  if code == keys.left then
+    self:moveIcon(-1)
+  elseif code == keys.right then
+    self:moveIcon(1)
+  elseif code == keys.up then
+    self:moveIcon(-self.iconCols)
+  elseif code == keys.down then
+    self:moveIcon(self.iconCols)
+  elseif code == keys.home then
+    self:moveIcon(1 - self.iconIndex)
+  elseif code == keys["end"] then
+    self:moveIcon(#self.order - self.iconIndex)
+  elseif code == keys.enter and #self.order > 0 then
+    self:open(self.order[self.iconIndex].id)
   end
 end
 

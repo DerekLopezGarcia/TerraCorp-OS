@@ -6,6 +6,7 @@ files.__index = files
 files.id = "files"
 files.title = "Files"
 files.short = "Files"
+files.icon = "FIL"
 files.order = 2
 
 local MAX_PREVIEW_BYTES = 32768

@@ -4,20 +4,21 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.1.11 Ledger**. The prototype boots, provides six apps,
-persists settings and notes, and logs errors. Local simulations cover the
-OpenComputers API contract; in-game testing is tracked in
+Current version: **0.2.0 Grid**. The prototype boots into a desktop shell with
+six apps, persists settings and notes, and logs errors. Local simulations cover
+the OpenComputers API contract; in-game testing is tracked in
 [`docs/tests.md`](docs/tests.md).
 
 ## Features
 
-- Desktop, dock, and movable/minimizable windows.
-- **Dashboard:** node, memory, power, devices, storage, and system log.
+- Desktop icons, a one-row taskbar, and movable/minimizable windows.
+- **System:** node, memory, power, devices, storage, and system log.
 - **Files:** browse the boot volume, view sizes, and preview text files.
-- **Console:** built-in shell (`ls`, `cd`, `cat`, `log`, `open`, `theme`, etc.).
+- **Terminal:** built-in shell (`ls`, `cd`, `cat`, `log`, `open`, `theme`, etc.).
 - **Settings:** accent color, character set, clock format, boot splash, and log level.
 - **Notes:** a persistent multi-line scratchpad stored at `/var/notes.txt`.
-- **About:** version details and a GitHub Releases updater.
+- **About:** version details, a SYSTEM section (memory, storage, screen,
+  devices, boot volume, address), corporate lore, and a GitHub Releases updater.
 - Difference-based framebuffer rendering.
 - No OpenOS runtime dependency: TerraCorp loads its own modules and filesystem.
 
@@ -34,7 +35,9 @@ OpenComputers API contract; in-game testing is tracked in
 | Memory | 1 MB | 2 MB |
 
 The desktop uses the screen's actual resolution and adapts from 40x16 to
-160x50. Below 80x25, dashboard cards are compressed.
+160x50. At 60 columns and wider, a two-column icon strip stays on the left and
+windows open beside it; narrower screens use a three-column grid and centered
+windows. Below 80x25, System cards are compressed.
 
 ## Installation
 
@@ -88,17 +91,22 @@ the final argument.
 
 ## Controls
 
-- **Dock:** click Dashboard, Files, Console, Settings, Notes, or About.
-- **Keyboard:** F1-F6 open the corresponding app; Esc minimizes the focused window.
+- **Desktop:** click an icon once to open its app. With no window focused, the
+  arrow keys move the selection, Home/End jump to the ends, and Enter opens the
+  selected app. F1-F6 open the six apps directly; Esc minimizes the focused
+  window.
+- **Taskbar:** click a window chip to focus it; clicking the focused chip
+  minimizes it.
 - **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.
+- **System:** readings refresh every two seconds; R samples immediately.
 - **Files:** arrows select, Enter opens, Backspace goes up, R reloads.
-- **Console:** type commands and press Enter; `help` lists commands.
+- **Terminal:** type commands and press Enter; `help` lists commands.
 - **Settings:** click a value to cycle it.
 - **Notes:** type to edit; Enter starts a line and saves. PgUp/PgDn scroll,
   arrows/Home/End move the cursor, and clicking a line places the cursor.
   Losing focus also saves.
-- **Updater:** open About, check for updates, press **Install** and let the
-  computer restart. The update downloads and installs before the desktop starts,
+- **About:** R refreshes the SYSTEM section. **Check for updates** queries
+  GitHub Releases; **Install** downloads and installs before the desktop starts,
   on its own progress screen, and rolls back if anything fails. Requires an
   Internet Card.
 - **0.1.9 and 0.1.10 updater repair:** those builds reject the filesystem's
@@ -114,7 +122,7 @@ src/                  boot-volume contents
   init.lua            entry point
   boot/kernel.lua     filesystem, services, module loader, event loop
   lib/tc/             core libraries, graphics, UI, and updater
-  apps/               dashboard, files, console, settings, notes, about
+  apps/               system, files, terminal, settings, notes, about
 eeprom/init.lua       optional boot manager (not required for normal installs)
 tools/                OpenOS installer, downloader, and manifest
 tools/harness/        local Node.js simulation and tests
@@ -131,6 +139,7 @@ npm run check
 npm run manifest
 npm run sim
 npm run sim:oc
+npm run test:desktop
 npm run test:dashboard-tick
 npm run test:refresh-rate
 npm run test:drag-metric

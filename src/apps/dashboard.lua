@@ -4,8 +4,9 @@ local dashboard = {}
 dashboard.__index = dashboard
 
 dashboard.id = "dashboard"
-dashboard.title = "Plant Dashboard"
-dashboard.short = "Dashboard"
+dashboard.title = "System"
+dashboard.short = "System"
+dashboard.icon = "SYS"
 dashboard.order = 1
 
 local CARD_HEIGHT = 6

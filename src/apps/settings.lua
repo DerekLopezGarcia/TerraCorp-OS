@@ -6,6 +6,7 @@ settings.__index = settings
 settings.id = "settings"
 settings.title = "Settings"
 settings.short = "Settings"
+settings.icon = "SET"
 settings.order = 4
 
 function settings.create()

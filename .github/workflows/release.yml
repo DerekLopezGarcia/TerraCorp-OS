@@ -35,6 +35,7 @@ jobs:
           npm run check
           npm run sim
           npm run sim:oc
+          npm run test:desktop
           npm run test:dashboard-tick
           npm run test:refresh-rate
           npm run test:drag-metric
