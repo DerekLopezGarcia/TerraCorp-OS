@@ -4,14 +4,14 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.2.1 Mosaic**. The prototype boots into a desktop shell with
+Current version: **0.2.2 Drift**. The prototype boots into a desktop shell with
 six apps, persists settings, notes, and the desktop icon layout, and logs errors.
 Local simulations cover the OpenComputers API contract; in-game testing is
 tracked in [`docs/tests.md`](docs/tests.md).
 
 ## Features
 
-- Draggable desktop icons with a saved order, a one-row taskbar, and
+- Draggable desktop icons on a full-screen grid, a one-row taskbar, and
   movable/minimizable windows.
 - **System:** node, memory, power, devices, storage, and system log. Its desktop
   icon uses an accent-filled tile to stand out from the other apps.
@@ -37,9 +37,9 @@ tracked in [`docs/tests.md`](docs/tests.md).
 | Memory | 1 MB | 2 MB |
 
 The desktop uses the screen's actual resolution and adapts from 40x16 to
-160x50. At 60 columns and wider, a two-column icon strip stays on the left and
-windows open beside it; narrower screens use a three-column grid and centered
-windows. Below 80x25, System cards are compressed.
+160x50. The icon grid covers the full desktop width and height; windows open
+below the lowest occupied icon row when the remaining height is usable, and
+centered otherwise. Below 80x25, System cards are compressed.
 
 ## Installation
 
@@ -93,11 +93,13 @@ the final argument.
 
 ## Controls
 
-- **Desktop:** click an icon once to open its app. Drag an icon onto another
-  icon's cell to move it there; the new order is saved on release and restored
-  after a reboot or update. With no window focused, the arrow keys move the
-  selection, Home/End jump to the ends, and Enter opens the selected app. F1-F6
-  open the six apps directly; Esc minimizes the focused window.
+- **Desktop:** click an icon once to open its app. Drag an icon to any cell on
+  the full-screen grid; dropping on an empty cell moves it there and dropping on
+  another icon swaps the two. The floating icon follows the pointer smoothly,
+  like a dragged window. The new layout is saved on release and restored after a
+  reboot or update. With no window focused, the arrow keys move the selection,
+  Home/End jump to the ends, and Enter opens the selected app. F1-F6 open the six
+  apps directly; Esc minimizes the focused window.
 - **Taskbar:** click a window chip to focus it; clicking the focused chip
   minimizes it.
 - **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.

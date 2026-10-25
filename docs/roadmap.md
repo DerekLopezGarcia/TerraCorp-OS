@@ -40,6 +40,9 @@ distributed features.
 - **0.2.1 Mosaic:** drag icons within the grid to arrange them, persist the
   order in `/etc/terracorp.cfg`, and render System with a distinct accent tile.
   F1-F6 remain bound to apps, not grid positions.
+- **0.2.2 Drift:** expand the icon grid to the whole screen, keep empty-cell
+  positions in `iconLayout`, allow move-or-swap drops, and draw the dragged icon
+  as a floating tile that eases toward the pointer like a window.
 - **0.2.x:** separate the kernel (boot, VFS, signals) from services (logging and
   APIs).
 - Apps consume services instead of calling kernel internals.

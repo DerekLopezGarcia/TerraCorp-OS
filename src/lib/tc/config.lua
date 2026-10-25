@@ -14,6 +14,7 @@ config.defaults = {
   logLevel = "info",
   hostname = "",
   iconOrder = "",
+  iconLayout = "",
 }
 
 config.data = {}

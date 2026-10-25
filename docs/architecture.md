@@ -51,10 +51,12 @@ iterator for compatibility.
 
 `/etc/terracorp.cfg` stores a serialized Lua table loaded in an empty
 environment. The updater never writes this file, so settings and the desktop
-layout survive updates. `iconOrder` holds a comma-separated list of app IDs;
-`""` means the built-in `order` sequence. On boot the UI keeps every ID that
-still maps to an installed app, drops unknown IDs, and appends newly installed
-apps that are missing from an older saved layout.
+layout survive updates. `iconLayout` holds comma-separated `id@slot` pairs and
+preserves empty cells; `iconOrder` keeps the compact app order so older releases
+can still read the layout. `""` in either key means the built-in `order`
+sequence. On boot the UI keeps every ID that still maps to an installed app,
+drops unknown IDs, honors saved slots that fit the screen, and places newly
+installed or out-of-range apps in the first free cell.
 
 ## Framebuffer and rendering
 
@@ -72,29 +74,35 @@ to the app window.
 
 ## Desktop shell
 
-The desktop is drawn under the windows. It contains a responsive icon grid and a
-one-row taskbar; windows open above the icons.
+The desktop is drawn under the windows. It contains a responsive full-screen icon
+grid and a one-row taskbar; windows are drawn over the grid.
 
 - Each app declares an `icon` code (`SYS`, `FIL`, `TRM`, `SET`, `NTS`, `INF`)
   and a short label. Icons are single-click targets and are also reachable with
   the keyboard.
-- The grid order comes from `iconOrder` in `/etc/terracorp.cfg`. Dragging an
-  icon over another cell inserts it at that position; dropping it saves the new
-  order. If `iconOrder` is empty or incomplete, the UI starts from the apps'
-  `order` values and appends missing apps.
+- The grid covers every column that fits the screen width and every row that
+  fits above the taskbar. All cells are drop slots, including empty ones.
+- Positions come from `iconLayout` (`id@slot`) in `/etc/terracorp.cfg`.
+  Dropping on an empty cell moves the icon there; dropping on an occupied cell
+  swaps the two icons. Dropping saves the layout. If the saved layout is empty,
+  incomplete, or still uses the older compact `iconOrder`, the UI starts from
+  the apps' `order` values and appends missing apps in the first free cells.
+- A dragged icon is rendered as a floating tile above the windows and eases
+  toward the pointer on the 30 Hz frame loop, matching window dragging. Empty
+  grid cells show a dim guide and the target cell gets an accent outline while
+  the icon is in motion.
 - An app may set `iconStyle = "accent"` to draw its tile with the accent
   background and an inset box (System uses this).
-- At 60 columns and wider the grid uses two columns on the left, so a window can
-  open beside the icons. Narrower screens use three columns and centered
-  windows.
-- Tile height shrinks from three rows to two or one when the screen is too
-  short for the full grid. The inset box on an accent tile is omitted below
-  three rows.
+- Tile height shrinks from three rows to two or one when the screen cannot fit
+  even one full row. The inset box on an accent tile is omitted below three rows.
+- Windows open below the lowest occupied icon row when at least the minimum
+  window height remains; otherwise they open centered. This keeps the first row
+  visible on an uncluttered desktop without blocking icons that were moved lower.
 - The taskbar lists open windows as chips. Clicking a chip focuses its window;
   clicking the focused chip minimizes it. The focused window is highlighted.
 - With no focused window, arrows move the icon selection, Home/End jump to the
-  ends, and Enter opens the selected app. F1-F6 always open an app by `order`,
-  independent of the grid arrangement.
+  first/last occupied cell, and Enter opens the selected app. F1-F6 always open
+  an app by `order`, independent of the grid arrangement.
 - The empty-desktop hint is drawn only when no window is open and the grid
   leaves room for it.
 
@@ -105,7 +113,7 @@ The UI keeps a z-ordered window list, focus, drag state, and the icon selection.
 | Event | Handling |
 |---|---|
 | `touch` | Desktop icon, taskbar chip, window controls/title bar, or focused app. An icon press is remembered until `drop`. |
-| `drag` / `drop` | Move a window, reorder the pressed icon, or forward to an app. A drop on the same icon opens it; a drop after an icon move saves the layout. |
+| `drag` / `drop` | Move a window, drag the pressed icon across the full-screen grid, or forward to an app. A drop without movement opens the pressed icon; a drop that moves or swaps icons saves the layout. |
 | `scroll` | Forward to app under pointer |
 | `key_down` | Global Esc/F1-F6; arrows/Home/End/Enter when no window is focused; otherwise the focused app |
 | `screen_resized` | Rebind GPU and resize UI |
@@ -163,9 +171,9 @@ The context includes `ui`, `kernel`, `theme`, `colors`, `glyphs`, `log`,
 `title` is the window title and taskbar label. `short` is the desktop icon
 label. `icon` is a short code centered in the icon tile (three characters in the
 built-in apps); `order` sets the F1-F10 shortcut and the initial grid position.
-The saved `iconOrder` overrides the grid position but never the shortcut.
-`iconStyle = "accent"` draws the tile with the accent background and, when the
-tile is at least three rows tall, an inset box.
+Saved `iconLayout` positions override the initial grid position but never the
+shortcut. `iconStyle = "accent"` draws the tile with the accent background and,
+when the tile is at least three rows tall, an inset box.
 
 ## Power and known limits
 

@@ -18,16 +18,13 @@ local MIN_WIDTH = 34
 local MIN_HEIGHT = 10
 
 -- Desktop icon grid. The tile is centered inside a wider cell so labels such as
--- "Terminal" and "Settings" fit without truncation. Narrow screens use three
--- columns; normal screens keep a two-column strip on the left so windows can
--- open beside the icons.
+-- "Terminal" and "Settings" fit without truncation. The grid covers the whole
+-- desktop: every column and row that fits is a drop slot, even when empty.
 local ICON_TILE_WIDTH = 5
 local ICON_TILE_HEIGHT = 3
 local ICON_CELL_WIDTH = 9
 local ICON_GAP_X = 2
 local ICON_GAP_Y = 1
-local ICON_COLUMNS_WIDE = 2
-local ICON_COLUMNS_NARROW = 3
 
 function ui.new(env)
   local self = setmetatable({}, ui)
@@ -52,7 +49,8 @@ function ui.new(env)
   table.sort(self.order, function(a, b)
     return (a.order or 99) < (b.order or 99)
   end)
-  self.layout = self:loadIconLayout()
+  self.layout = {}
+  self.iconPlacements = self:loadIconPlacements()
 
   self.windows = {}
   self.focus = nil
@@ -82,16 +80,19 @@ function ui:resize()
   self.iconPress = nil
   self.iconDrag = nil
   self.iconCols = self:iconColumns()
-  local rows = math.ceil(#self.layout / self.iconCols)
-  local available = self.desktopBottom - self.desktopTop
-  local needed = rows * (ICON_TILE_HEIGHT + 1) + math.max(0, rows - 1) * ICON_GAP_Y
-  if needed <= available then
-    self.iconTileHeight = ICON_TILE_HEIGHT
-  else
-    local compact = rows * 3 + math.max(0, rows - 1) * ICON_GAP_Y
-    self.iconTileHeight = (compact <= available) and 2 or 1
+
+  local tileHeight = ICON_TILE_HEIGHT
+  if self:iconRowsFor(tileHeight) < 1 then
+    tileHeight = 2
+    if self:iconRowsFor(tileHeight) < 1 then
+      tileHeight = 1
+    end
   end
-  self.iconIndex = util.clamp(self.iconIndex or 1, 1, math.max(1, #self.layout))
+  self.iconTileHeight = tileHeight
+  self.iconRows = math.max(1, self:iconRowsFor(tileHeight))
+  self.iconSlotCount = self.iconCols * self.iconRows
+  self:buildIconLayout()
+  self.iconIndex = util.clamp(self.iconIndex or 1, 1, math.max(1, self.iconSlotCount))
 
   for _, win in ipairs(self.windows) do
     self:clampWindow(win)
@@ -101,23 +102,42 @@ function ui:resize()
 end
 
 function ui:iconColumns()
-  local count = math.max(1, #self.layout)
   local fit = math.floor((self.w - 3 + ICON_GAP_X) / (ICON_CELL_WIDTH + ICON_GAP_X))
-  fit = util.clamp(fit, 1, count)
-  if self.w >= 60 then
-    return math.min(fit, ICON_COLUMNS_WIDE)
-  end
-  return math.min(fit, ICON_COLUMNS_NARROW)
+  return math.max(1, fit)
 end
 
-function ui:loadIconLayout()
-  local layout, seen = {}, {}
-  local saved = self.config.get("iconOrder")
-  if type(saved) == "string" then
-    for id in saved:gmatch("[^,%s]+") do
-      if self.apps[id] and not seen[id] then
-        layout[#layout + 1] = id
+-- Number of icon rows the desktop can show at the given tile height. Each cell
+-- is the tile plus its label row; ICON_GAP_Y separates consecutive rows.
+function ui:iconRowsFor(tileHeight)
+  local top = self.desktopTop + 1
+  local available = self.desktopBottom - top + 1
+  local pitch = tileHeight + 1 + ICON_GAP_Y
+  return math.floor((available - (tileHeight + 1)) / pitch) + 1
+end
+
+-- Saved layouts store positions as `id@slot` so empty cells survive a restart.
+-- The older compact `iconOrder` preference is still accepted and migrated.
+function ui:loadIconPlacements()
+  local placements, seen = {}, {}
+  local saved = self.config.get("iconLayout")
+  if type(saved) == "string" and saved ~= "" then
+    for entry in saved:gmatch("[^,%s]+") do
+      local id, slot = entry:match("^(.+)@(%d+)$")
+      if id and self.apps[id] and not seen[id] then
         seen[id] = true
+        placements[#placements + 1] = { id = id, slot = tonumber(slot) }
+      end
+    end
+  end
+
+  if #placements == 0 then
+    local legacy = self.config.get("iconOrder")
+    if type(legacy) == "string" then
+      for id in legacy:gmatch("[^,%s]+") do
+        if self.apps[id] and not seen[id] then
+          seen[id] = true
+          placements[#placements + 1] = { id = id }
+        end
       end
     end
   end
@@ -125,15 +145,87 @@ function ui:loadIconLayout()
   -- Keep new apps reachable even when an older layout was saved.
   for _, module in ipairs(self.order) do
     if not seen[module.id] then
-      layout[#layout + 1] = module.id
       seen[module.id] = true
+      placements[#placements + 1] = { id = module.id }
     end
   end
-  return layout
+  return placements
+end
+
+-- Remember the current positions before a screen resize rebuilds the grid.
+function ui:captureIconPlacements()
+  local placements = {}
+  for index = 1, #self.layout do
+    local id = self.layout[index]
+    if id then
+      placements[#placements + 1] = { id = id, slot = index }
+    end
+  end
+  if #placements > 0 then
+    self.iconPlacements = placements
+  end
+end
+
+-- Build a dense slot array: false marks an empty desktop cell. Slots that no
+-- longer fit after a resize are moved to the first free cell instead of being
+-- dropped.
+function ui:buildIconLayout()
+  self:captureIconPlacements()
+
+  local capacity = math.max(1, self.iconSlotCount or 1)
+  local layout = {}
+  for index = 1, capacity do
+    layout[index] = false
+  end
+
+  local seen = {}
+  for _, placement in ipairs(self.iconPlacements or {}) do
+    local slot = placement.slot
+    if slot and slot >= 1 and slot <= capacity
+      and not layout[slot] and not seen[placement.id] then
+      layout[slot] = placement.id
+      seen[placement.id] = true
+    end
+  end
+
+  local function placeMissing(id)
+    for index = 1, capacity do
+      if not layout[index] then
+        layout[index] = id
+        seen[id] = true
+        return true
+      end
+    end
+    return false
+  end
+
+  for _, placement in ipairs(self.iconPlacements or {}) do
+    if not seen[placement.id] then
+      placeMissing(placement.id)
+    end
+  end
+  for _, module in ipairs(self.order) do
+    if not seen[module.id] then
+      placeMissing(module.id)
+    end
+  end
+
+  self.layout = layout
 end
 
 function ui:saveIconLayout()
-  if not self.config.set("iconOrder", table.concat(self.layout, ",")) then
+  local order, slots = {}, {}
+  for index = 1, #self.layout do
+    local id = self.layout[index]
+    if id then
+      order[#order + 1] = id
+      slots[#slots + 1] = id .. "@" .. tostring(index)
+    end
+  end
+
+  -- `iconOrder` keeps the compact ordering readable by older releases.
+  if not self.config.set("iconOrder", table.concat(order, ","))
+    or not self.config.set("iconLayout", table.concat(slots, ",")) then
     self:notify("warn", "Could not store the desktop layout.")
     return false
   end
@@ -142,6 +234,8 @@ function ui:saveIconLayout()
     self:notify("warn", "Could not save the desktop layout: " .. tostring(reason))
     return false
   end
+  self.iconPlacements = nil
+  self:captureIconPlacements()
   self:notify("info", "Desktop layout saved.")
   return true
 end
@@ -160,44 +254,68 @@ end
 
 function ui:iconAt(x, y)
   for index = 1, #self.layout do
-    local ix, iy = self:iconRect(index)
-    if x >= ix and x < ix + ICON_CELL_WIDTH
-      and y >= iy and y < iy + self.iconTileHeight + 1 then
-      return index
+    if self.layout[index] then
+      local ix, iy = self:iconRect(index)
+      if x >= ix and x < ix + ICON_CELL_WIDTH
+        and y >= iy and y < iy + self.iconTileHeight + 1 then
+        return index
+      end
     end
   end
   return nil
 end
 
+-- Map a pointer position anywhere in the desktop to a grid slot. This lets
+-- icons be dragged into any cell on the screen, including empty ones.
+function ui:iconIndexAt(x, y)
+  local column = math.floor((x - 2) / (ICON_CELL_WIDTH + ICON_GAP_X)) + 1
+  column = util.clamp(column, 1, self.iconCols)
+  local row = math.floor((y - (self.desktopTop + 1)) / (self.iconTileHeight + 1 + ICON_GAP_Y))
+  row = util.clamp(row, 0, math.max(0, self.iconRows - 1))
+  return util.clamp(row * self.iconCols + column, 1, self.iconSlotCount)
+end
+
+-- Bottom row actually used by an icon. Windows open below this row so the
+-- first row of the full-screen grid stays visible while the desktop is empty.
 function ui:iconGridBottom()
-  local rows = math.ceil(#self.layout / self.iconCols)
+  local rows = 1
+  for index = 1, #self.layout do
+    if self.layout[index] then
+      rows = math.max(rows, math.floor((index - 1) / self.iconCols) + 1)
+    end
+  end
   local lastY = self.desktopTop + 1 + (rows - 1) * (self.iconTileHeight + 1 + ICON_GAP_Y)
   return lastY + self.iconTileHeight
 end
 
 function ui:moveIcon(delta)
-  if #self.layout == 0 then
-    return false
+  local nextIndex = self.iconIndex + delta
+  while nextIndex >= 1 and nextIndex <= self.iconSlotCount do
+    if self.layout[nextIndex] then
+      self.iconIndex = nextIndex
+      self.dirty = true
+      return true
+    end
+    nextIndex = nextIndex + delta
   end
-  local nextIndex = util.clamp(self.iconIndex + delta, 1, #self.layout)
-  if nextIndex == self.iconIndex then
-    return false
-  end
-  self.iconIndex = nextIndex
-  self.dirty = true
-  return true
+  return false
 end
 
-function ui:moveIconTo(target)
-  if #self.layout == 0 then
+-- Positional move used by drop: an empty target simply receives the icon, an
+-- occupied target swaps places with it, matching desktop icon behavior.
+function ui:moveIconTo(target, fromIndex)
+  fromIndex = util.clamp(fromIndex or self.iconIndex, 1, self.iconSlotCount)
+  target = util.clamp(target, 1, self.iconSlotCount)
+  local moving = self.layout[fromIndex]
+  if not moving then
     return false
   end
-  target = util.clamp(target, 1, #self.layout)
-  if target == self.iconIndex then
+  if target == fromIndex then
+    self.iconIndex = fromIndex
     return false
   end
-  local id = table.remove(self.layout, self.iconIndex)
-  table.insert(self.layout, target, id)
+
+  self.layout[target], self.layout[fromIndex] = moving, self.layout[target] or false
   self.iconIndex = target
   self.dirty = true
   return true
@@ -254,6 +372,30 @@ function ui:advanceDrag(now)
   return true
 end
 
+-- Ease the floating icon toward the pointer the same way window dragging eases
+-- toward its target. Coordinates stay fractional until drawing so movement is
+-- smooth even when drag signals arrive less often than frames.
+function ui:advanceIconDrag(now)
+  local drag = self.iconDrag
+  if not drag or not drag.transitionDuration or drag.transitionDuration <= 0 then
+    return false
+  end
+
+  local progress = util.clamp((now - drag.transitionStart) / drag.transitionDuration, 0, 1)
+  local x = drag.fromX + (drag.targetX - drag.fromX) * progress
+  local y = drag.fromY + (drag.targetY - drag.fromY) * progress
+  if drag.x ~= x or drag.y ~= y then
+    drag.x = x
+    drag.y = y
+    self.dirty = true
+  end
+
+  if progress >= 1 then
+    drag.transitionDuration = 0
+  end
+  return true
+end
+
 function ui:findWindow(id)
   for _, win in ipairs(self.windows) do
     if win.id == id then
@@ -300,24 +442,27 @@ end
 function ui:defaultGeometry()
   local usable = self.desktopBottom - self.desktopTop + 1
   local minWidth = math.min(MIN_WIDTH, self.w - 2)
-  local width, x
-
-  -- On normal screens, leave the icon strip visible and open the window in the
-  -- remaining space. Very narrow screens fall back to a centered window.
-  local left = self:iconGridWidth() + 4
-  local freeWidth = self.w - left + 1
-  if freeWidth >= minWidth then
-    width = util.clamp(math.floor(self.w * 0.62), minWidth, freeWidth)
-    x = left + math.floor((freeWidth - width) / 2)
-  else
-    width = math.min(self.w - 4, math.max(minWidth, math.floor(self.w * 0.74)))
-    x = math.floor((self.w - width) / 2)
-  end
+  local width = math.min(self.w - 4, math.max(minWidth, math.floor(self.w * 0.74)))
+  local offset = (#self.windows % 5) * 2
+  local x = util.clamp(
+    math.floor((self.w - width) / 2) + offset,
+    1,
+    math.max(1, self.w - width + 1)
+  )
 
   local height = math.min(usable - 1, math.max(MIN_HEIGHT, math.floor(usable * 0.84)))
-  local offset = (#self.windows % 5) * 2
-  x = x + offset
-  local y = self.desktopTop + math.max(0, math.floor((usable - height) / 2)) + offset
+  local y = self.desktopTop + math.max(0, math.floor((usable - height) / 2))
+
+  -- The icon grid spans the screen. Keep the first row visible by opening the
+  -- window below it when the remaining height is still usable.
+  local below = self:iconGridBottom() + 1
+  local maxBelow = self.desktopBottom - below + 1
+  if maxBelow >= MIN_HEIGHT then
+    y = below
+    height = math.min(height, maxBelow)
+  end
+
+  y = util.clamp(y, 1, math.max(1, self.h - height + 1))
   return x, y, width, height
 end
 
@@ -474,68 +619,151 @@ function ui:drawTopbar()
   self.gfx:put(self.w - text.width(status) - 1, 2, status, statusColor, c.panel)
 end
 
-function ui:drawIcons()
+function ui:drawIcon(module, x, y, selected, open)
   local c = self.colors
   local g = self.glyphs
+  local tileX = x + math.floor((ICON_CELL_WIDTH - ICON_TILE_WIDTH) / 2)
+  local code = module.icon or "APP"
+  local special = module.iconStyle == "accent"
 
-  for index, id in ipairs(self.layout) do
-    local module = self.apps[id]
-    if module then
+  local tileBg, tileFg
+  if selected then
+    tileBg, tileFg = c.text, c.bg
+  elseif special then
+    tileBg, tileFg = c.accent, c.onAccent
+  else
+    tileBg, tileFg = c.panel, c.accent
+  end
+
+  self.gfx:fill(tileX, y, ICON_TILE_WIDTH, self.iconTileHeight, " ", tileFg, tileBg)
+  if special and not selected and self.iconTileHeight >= 3 then
+    self.gfx:box(tileX, y, ICON_TILE_WIDTH, self.iconTileHeight, {
+      glyphs = g,
+      fg = c.onAccent,
+      bg = c.accent,
+    })
+  end
+  self.gfx:put(
+    tileX + math.floor((ICON_TILE_WIDTH - text.width(code)) / 2),
+    y + math.floor(self.iconTileHeight / 2),
+    code,
+    tileFg,
+    tileBg
+  )
+
+  local label = text.truncate(module.short or module.title or module.id, ICON_CELL_WIDTH)
+  local labelFg = c.dim
+  if selected then
+    labelFg = c.text
+  elseif open then
+    labelFg = c.accent
+  end
+  self.gfx:put(
+    x + math.floor((ICON_CELL_WIDTH - text.width(label)) / 2),
+    y + self.iconTileHeight,
+    label,
+    labelFg,
+    c.bg
+  )
+
+  if open then
+    self.gfx:put(tileX + ICON_TILE_WIDTH - 1, y, g.mark, tileFg, tileBg)
+  end
+end
+
+-- Outline the slot that will receive the dragged icon. Empty slots get an
+-- accent outline; occupied slots keep their own background so the outline never
+-- punches a hole through an icon.
+function ui:drawIconTarget(index)
+  if self.iconTileHeight < 3 or index < 1 or index > self.iconSlotCount then
+    return
+  end
+
+  local x, y = self:iconRect(index)
+  if y + self.iconTileHeight > self.desktopBottom then
+    return
+  end
+
+  local c = self.colors
+  local g = self.glyphs
+  local id = self.layout[index]
+  local module = id and self.apps[id] or nil
+  local bg, fg = c.bg, c.accent
+  if module and module.iconStyle == "accent" then
+    bg, fg = c.accent, c.onAccent
+  elseif module then
+    bg = c.panel
+  end
+
+  local tileX = x + math.floor((ICON_CELL_WIDTH - ICON_TILE_WIDTH) / 2)
+  local inner = ICON_TILE_WIDTH - 2
+  self.gfx:put(tileX, y, g.tl .. string.rep(g.h, inner) .. g.tr, fg, bg)
+  self.gfx:put(
+    tileX,
+    y + self.iconTileHeight - 1,
+    g.bl .. string.rep(g.h, inner) .. g.br,
+    fg,
+    bg
+  )
+  for row = y + 1, y + self.iconTileHeight - 2 do
+    self.gfx:put(tileX, row, g.v, fg, bg)
+    self.gfx:put(tileX + ICON_TILE_WIDTH - 1, row, g.v, fg, bg)
+  end
+end
+
+-- While dragging, mark the empty cells of the full-screen grid so the available
+-- drop area is visible. Guides are drawn under windows and under the ghost.
+function ui:drawIconGuides()
+  if not self.iconDrag or self.iconTileHeight < 2 then
+    return
+  end
+
+  local c = self.colors
+  local mark = self.glyphs.dash
+  local column = math.floor((ICON_CELL_WIDTH - 1) / 2)
+  local row = math.floor(self.iconTileHeight / 2)
+  for index = 1, self.iconSlotCount do
+    if not self.layout[index] then
       local x, y = self:iconRect(index)
-      local cellBottom = y + self.iconTileHeight
-      if cellBottom <= self.desktopBottom then
-        local selected = (self.iconIndex == index and (self.focus == nil or self.iconDrag ~= nil))
-        local open = self:findWindow(module.id) ~= nil
-        local tileX = x + math.floor((ICON_CELL_WIDTH - ICON_TILE_WIDTH) / 2)
-        local code = module.icon or "APP"
-        local special = module.iconStyle == "accent"
-
-        local tileBg, tileFg
-        if selected then
-          tileBg, tileFg = c.text, c.bg
-        elseif special then
-          tileBg, tileFg = c.accent, c.onAccent
-        else
-          tileBg, tileFg = c.panel, c.accent
-        end
-
-        self.gfx:fill(tileX, y, ICON_TILE_WIDTH, self.iconTileHeight, " ", tileFg, tileBg)
-        if special and not selected and self.iconTileHeight >= 3 then
-          self.gfx:box(tileX, y, ICON_TILE_WIDTH, self.iconTileHeight, {
-            glyphs = g,
-            fg = c.onAccent,
-            bg = c.accent,
-          })
-        end
-        self.gfx:put(
-          tileX + math.floor((ICON_TILE_WIDTH - text.width(code)) / 2),
-          y + math.floor(self.iconTileHeight / 2),
-          code,
-          tileFg,
-          tileBg
-        )
-
-        local label = text.truncate(module.short or module.title or module.id, ICON_CELL_WIDTH)
-        local labelFg = c.dim
-        if selected then
-          labelFg = c.text
-        elseif open then
-          labelFg = c.accent
-        end
-        self.gfx:put(
-          x + math.floor((ICON_CELL_WIDTH - text.width(label)) / 2),
-          y + self.iconTileHeight,
-          label,
-          labelFg,
-          c.bg
-        )
-
-        if open then
-          self.gfx:put(tileX + ICON_TILE_WIDTH - 1, y, g.mark, tileFg, tileBg)
-        end
+      if y + self.iconTileHeight <= self.desktopBottom then
+        self.gfx:put(x + column, y + row, mark, c.line, c.bg)
       end
     end
   end
+end
+
+function ui:drawIcons()
+  self:drawIconGuides()
+
+  for index, id in ipairs(self.layout) do
+    local module = self.apps[id]
+    if module and not (self.iconDrag and self.iconDrag.index == index) then
+      local x, y = self:iconRect(index)
+      if y + self.iconTileHeight <= self.desktopBottom then
+        local selected = (self.iconIndex == index and self.focus == nil)
+        self:drawIcon(module, x, y, selected, self:findWindow(module.id) ~= nil)
+      end
+    end
+  end
+
+  if self.iconDrag and self.iconDrag.targetIndex then
+    self:drawIconTarget(self.iconDrag.targetIndex)
+  end
+end
+
+function ui:drawIconDrag()
+  local drag = self.iconDrag
+  if not drag then
+    return
+  end
+  local module = self.apps[drag.id]
+  if not module then
+    return
+  end
+
+  local x = math.floor(drag.x + 0.5)
+  local y = math.floor(drag.y + 0.5)
+  self:drawIcon(module, x, y, false, self:findWindow(module.id) ~= nil)
 end
 
 function ui:drawTaskbar()
@@ -644,7 +872,9 @@ function ui:drawNotice()
 end
 
 function ui:render(force)
-  self:advanceDrag(self.kernel:uptime())
+  local now = self.kernel:uptime()
+  self:advanceDrag(now)
+  self:advanceIconDrag(now)
   if not force and not self.dirty then
     return 0
   end
@@ -699,6 +929,12 @@ function ui:render(force)
       self:drawEmptyState()
     end)
   end
+
+  -- Draw the floating icon above windows so a drag remains visible anywhere on
+  -- the desktop, just like a dragged window.
+  section("icon drag", function()
+    self:drawIconDrag()
+  end)
 
   section("top bar", function()
     self:drawTopbar()
@@ -882,11 +1118,50 @@ function ui:onDrag(x, y, button)
   end
 
   if self.iconPress then
-    self.iconDrag = self.iconDrag or { from = self.iconPress.index, moved = false }
-    local target = self:iconAt(x, y)
-    if target and self:moveIconTo(target) then
-      self.iconDrag.moved = true
+    local now = self.kernel:uptime()
+    local drag = self.iconDrag
+    if not drag then
+      local startX, startY = self:iconRect(self.iconPress.index)
+      drag = {
+        id = self.layout[self.iconPress.index],
+        index = self.iconPress.index,
+        x = startX,
+        y = startY,
+        fromX = startX,
+        fromY = startY,
+        targetX = startX,
+        targetY = startY,
+        offsetX = self.iconPress.x - startX,
+        offsetY = self.iconPress.y - startY,
+        targetIndex = self.iconPress.index,
+        moved = false,
+        lastSignalAt = now,
+        transitionStart = now,
+        transitionDuration = 0,
+      }
+      self.iconDrag = drag
     end
+
+    local maxX = math.max(2, self.w - ICON_CELL_WIDTH + 1)
+    local maxY = math.max(self.desktopTop, self.desktopBottom - self.iconTileHeight)
+    drag.fromX = drag.x
+    drag.fromY = drag.y
+    drag.targetX = util.clamp(x - drag.offsetX, 2, maxX)
+    drag.targetY = util.clamp(y - drag.offsetY, self.desktopTop, maxY)
+    drag.transitionStart = now
+    drag.transitionDuration = util.clamp(now - drag.lastSignalAt, 1 / 30, 1 / 15)
+    drag.lastSignalAt = now
+
+    -- Any real movement turns the press into a drag. Returning to the original
+    -- slot must not open the app when the button is released.
+    if math.abs(x - self.iconPress.x) > 1 or math.abs(y - self.iconPress.y) > 1 then
+      drag.moved = true
+    end
+    local target = self:iconIndexAt(x, y)
+    if target ~= drag.index then
+      drag.moved = true
+    end
+    drag.targetIndex = target
     self.dirty = true
     return
   end
@@ -899,11 +1174,17 @@ end
 
 function ui:onDrop(x, y, button)
   if self.iconDrag then
-    local moved = self.iconDrag.moved
+    local drag = self.iconDrag
     self.iconDrag = nil
     self.iconPress = nil
-    if moved then
+    local target = self:iconIndexAt(x, y)
+    if target and target ~= drag.index then
+      self:moveIconTo(target, drag.index)
       self:saveIconLayout()
+    elseif not drag.moved then
+      -- A tap that emitted a stray drag signal still opens the app.
+      self.iconIndex = drag.index
+      self:open(drag.id)
     end
     self.dirty = true
     return
@@ -1030,10 +1311,22 @@ function ui:onKey(char, code)
   elseif code == keys.down then
     self:moveIcon(self.iconCols)
   elseif code == keys.home then
-    self:moveIcon(1 - self.iconIndex)
+    for index = 1, self.iconSlotCount do
+      if self.layout[index] then
+        self.iconIndex = index
+        self.dirty = true
+        break
+      end
+    end
   elseif code == keys["end"] then
-    self:moveIcon(#self.layout - self.iconIndex)
-  elseif code == keys.enter and #self.layout > 0 then
+    for index = self.iconSlotCount, 1, -1 do
+      if self.layout[index] then
+        self.iconIndex = index
+        self.dirty = true
+        break
+      end
+    end
+  elseif code == keys.enter and self.layout[self.iconIndex] then
     self:open(self.layout[self.iconIndex])
   end
 end

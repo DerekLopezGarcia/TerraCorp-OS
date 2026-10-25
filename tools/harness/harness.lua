@@ -343,6 +343,7 @@ local fakeLegacyInternet = rawget(_G, "SCENARIO") == "updater_legacy"
 local fakeUpdateRecover = rawget(_G, "SCENARIO") == "updater_recover"
 local fakeBootUpdate = rawget(_G, "SCENARIO") == "boot_update"
 local savedIconOrder = rawget(_G, "SCENARIO") == "icon_order_saved"
+local savedIconSlot = rawget(_G, "SCENARIO") == "icon_slot_saved"
 local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet or fakeUpdateRecover or fakeBootUpdate
 local mockedReleaseVersion
 if updateScenario then
@@ -366,6 +367,13 @@ end
 if savedIconOrder then
   written["/etc/terracorp.cfg"] = 'return {\n'
     .. '  iconOrder = "files,dashboard,console,settings,notes,about",\n'
+    .. '}\n'
+end
+if savedIconSlot then
+  -- Slots 2 (Files) and 7.. are empty; Files sits on row 3, column 4.
+  written["/etc/terracorp.cfg"] = 'return {\n'
+    .. '  iconOrder = "dashboard,console,settings,notes,about,files",\n'
+    .. '  iconLayout = "dashboard@1,console@3,settings@4,notes@5,about@6,files@32",\n'
     .. '}\n'
 end
 local kinds = {
@@ -554,16 +562,21 @@ local function typeText(value)
 end
 
 -- Scenarios use simulated resolution; the taskbar is the last row and windows
--- scale with the screen. Desktop icons occupy a left strip on normal screens.
+-- scale with the screen. The icon grid covers the full screen width.
 local taskbarY = maxHeight
 
 local function iconColumns()
   local fit = math.floor((maxWidth - 3 + 2) / 11)
-  fit = math.max(1, math.min(fit, 6))
-  if maxWidth >= 60 then
-    return math.min(fit, 2)
-  end
-  return math.min(fit, 3)
+  return math.max(1, fit)
+end
+
+local function iconGridBottom()
+  local desktopTop = 3
+  local desktopBottom = taskbarY - 1
+  local rows = math.ceil(6 / iconColumns())
+  local tile = 3
+  local lastY = desktopTop + 1 + (rows - 1) * (tile + 1 + 1)
+  return lastY + tile
 end
 
 -- Match `ui:defaultGeometry` for the first window (offset 0). Pointer gestures
@@ -572,20 +585,19 @@ local function windowRect()
   local desktopTop = 3
   local desktopBottom = taskbarY - 1
   local usable = desktopBottom - desktopTop + 1
-  local gridWidth = iconColumns() * 11 - 2
-  local left = gridWidth + 4
   local minWidth = math.min(34, maxWidth - 2)
-  local freeWidth = maxWidth - left + 1
-  local w, x
-  if freeWidth >= minWidth then
-    w = math.min(math.max(34, math.floor(maxWidth * 0.62)), freeWidth)
-    x = left + math.floor((freeWidth - w) / 2)
-  else
-    w = math.min(maxWidth - 4, math.max(34, math.floor(maxWidth * 0.74)))
-    x = math.floor((maxWidth - w) / 2)
-  end
+  local w = math.min(maxWidth - 4, math.max(minWidth, math.floor(maxWidth * 0.74)))
+  local x = math.floor((maxWidth - w) / 2)
   local h = math.min(usable - 1, math.max(10, math.floor(usable * 0.84)))
   local y = desktopTop + math.max(0, math.floor((usable - h) / 2))
+
+  local below = iconGridBottom() + 1
+  local maxBelow = desktopBottom - below + 1
+  if maxBelow >= 10 then
+    y = below
+    h = math.min(h, maxBelow)
+  end
+
   return x, y, w, h
 end
 
@@ -655,10 +667,20 @@ elseif scenario == "desktop" then
   ev("drop", "screen-1", 17, 5, 0, "tester")
   idle(2)
 elseif scenario == "icon_order" then
-  -- Drag the second icon (Files) onto the first slot (System), then open the
-  -- first slot to prove the layout changed and was saved.
+  -- Drag the second icon (Files) across several cells to exercise the floating
+  -- icon, then drop it on the first slot and open that slot.
   ev("touch", "screen-1", 17, 5, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 16, 5, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 14, 5, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 11, 5, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 8, 5, 0, "tester")
+  idle(1)
   ev("drag", "screen-1", 6, 5, 0, "tester")
+  idle(1)
   ev("drop", "screen-1", 6, 5, 0, "tester")
   idle(2)
   ev("touch", "screen-1", 6, 5, 0, "tester")
@@ -668,6 +690,42 @@ elseif scenario == "icon_order_saved" then
   -- The saved layout is loaded during boot; the first slot must be Files.
   ev("touch", "screen-1", 6, 5, 0, "tester")
   ev("drop", "screen-1", 6, 5, 0, "tester")
+  idle(2)
+elseif scenario == "icon_slot" then
+  -- Drag Files from slot 2 to an empty cell on row 3 (column 4), then open it
+  -- from its new position.
+  ev("touch", "screen-1", 17, 5, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 21, 6, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 28, 9, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 35, 13, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 37, 14, 0, "tester")
+  idle(1)
+  ev("drop", "screen-1", 37, 14, 0, "tester")
+  idle(2)
+  ev("touch", "screen-1", 39, 15, 0, "tester")
+  ev("drop", "screen-1", 39, 15, 0, "tester")
+  idle(2)
+elseif scenario == "icon_slot_saved" then
+  -- The saved position puts Files at row 3, column 4.
+  ev("touch", "screen-1", 39, 15, 0, "tester")
+  ev("drop", "screen-1", 39, 15, 0, "tester")
+  idle(2)
+elseif scenario == "icon_drag" then
+  -- Open Files, then drag System over the window and hold it there. The ghost
+  -- must be drawn above the window content, like a dragged window.
+  ev("key_down", "screen-1", nil, 0x3C, "tester") -- F2 opens Files
+  idle(2)
+  ev("touch", "screen-1", 6, 5, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 20, 10, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 40, 18, 0, "tester")
+  idle(1)
+  ev("drag", "screen-1", 60, 25, 0, "tester")
   idle(2)
 elseif scenario == "console" then
   ev("key_down", "screen-1", nil, 0x3D, "tester")
@@ -971,6 +1029,41 @@ if STRICT then
     if not screen:find("Preview", 1, true) then
       errors = errors + 1
       print("FAIL: the saved layout did not put Files first")
+    end
+  end
+  if scenario == "icon_slot" or scenario == "icon_slot_saved" then
+    if not screen:find("1 window", 1, true) then
+      errors = errors + 1
+      print("FAIL: the icon in an empty slot did not open a window")
+    end
+    if not screen:find("Preview", 1, true) then
+      errors = errors + 1
+      print("FAIL: clicking the moved icon did not open Files")
+    end
+  end
+  if scenario == "icon_slot" then
+    -- Files must render on row 3 (tile text at row 15), not in its old cell.
+    local moved = (rows[15] or ""):sub(38, 40)
+    if moved ~= "FIL" then
+      errors = errors + 1
+      print("FAIL: the dragged icon did not render in the empty full-screen slot")
+    end
+    local preferences = written["/etc/terracorp.cfg"] or ""
+    if not preferences:find('iconLayout = "dashboard@1,console@3,settings@4,notes@5,about@6,files@32"', 1, true) then
+      errors = errors + 1
+      print("FAIL: the empty-slot layout was not saved")
+    end
+  end
+  if scenario == "icon_drag" then
+    -- The ghost is at row 25 and its label at row 27, inside the Files window.
+    -- Lua string offsets are byte-based, so search for the text instead.
+    if not (rows[25] or ""):find("SYS", 1, true) then
+      errors = errors + 1
+      print("FAIL: the floating icon was not drawn above the window")
+    end
+    if not (rows[27] or ""):find("System", 1, true) then
+      errors = errors + 1
+      print("FAIL: the floating icon label was not drawn above the window")
     end
   end
   if (scenario == "updater" or scenario == "updater_legacy") then

@@ -13,7 +13,7 @@ published, non-draft, non-prerelease GitHub Release stable.
 3. Commit the release and create a matching annotated tag, for example:
 
    ```sh
-   git tag -a v0.2.0 -m "TerraCorp OS 0.2.0"
+   git tag -a v0.2.1 -m "TerraCorp OS 0.2.1"
    git push origin main --tags
    ```
 
@@ -51,7 +51,8 @@ download/validation error, the current installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.2.1 Mosaic; the latest published stable release is 0.2.0.
+The current build is 0.2.2 Drift; the latest published stable release is 0.2.1
+(2026-10-25).
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

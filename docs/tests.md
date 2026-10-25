@@ -33,10 +33,41 @@ npm run test:screens
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
 
+## 0.2.2 full-screen icon grid checks
+
+`npm run test:icon-order` runs five scenarios at 160x50:
+
+1. Drag Files onto the System cell and drop. Files must swap into the first
+   slot, open from there, and `/etc/terracorp.cfg` must keep both the compact
+   `iconOrder = "files,dashboard,console,settings,notes,about"` and a matching
+   `iconLayout` with `files@1`.
+2. Seed that preference before boot and require the first cell to open Files,
+   proving the saved order still loads.
+3. Drag Files onto an empty cell on row 3 (slot 32), then click it. The `FIL`
+   tile must render at the new position, the app must open, and the saved
+   `iconLayout` must contain `files@32`.
+4. Seed the row-3 layout before boot and require that same empty-cell position
+   to open Files after restart.
+5. Open Files, drag System over the window, and hold it there. The floating tile
+   and its label must be drawn above the window content.
+
+Manual in-game checks for 0.2.2:
+
+- The desktop shows drop slots across the full width and height, not just a
+  left-hand strip.
+- Drag an icon: a floating tile follows the pointer smoothly (not a series of
+  jumps), the target cell is outlined, and the icon lands in the cell under the
+  pointer.
+- Drop an icon on an empty cell and on another icon. The first moves it; the
+  second swaps the two. Clicking without dragging still opens the app.
+- Restart the computer and update to a later build: positions, including empty
+  gaps, are restored, and `/var/notes.txt` is unchanged.
+- F1-F6 still open apps by their fixed order after positions change.
+
 ## 0.2.1 desktop layout checks
 
-`npm run test:icon-order` runs two scenarios. The first drags the Files icon onto
-the System cell, opens the first cell, and requires Files to open and
+`npm run test:icon-order` runs two scenarios in 0.2.1. The first drags the Files
+icon onto the System cell, opens the first cell, and requires Files to open and
 `/etc/terracorp.cfg` to contain
 `iconOrder = "files,dashboard,console,settings,notes,about"`. The second seeds
 that same preference before boot and requires the first cell to open Files,
@@ -120,8 +151,17 @@ Node, resolution, memory, first-render, and 30-minute log figures were not
 recorded, so F0 closure is still pending.
 
 0.2.1 Mosaic: all local harness gates pass, including `test:icon-order` (drag,
-save, and reload) and the 35-combination screen matrix. In-game drag/persistence,
-the accent System icon, and the 0.2.0 → 0.2.1 update are pending.
+save, and reload) and the 35-combination screen matrix. Published as
+[`v0.2.1`](https://github.com/DerekLopezGarcia/TerraCorp-OS/releases/tag/v0.2.1)
+on 2026-10-25. In-game drag/persistence, the accent System icon, and the
+0.2.0 → 0.2.1 update are pending.
+
+0.2.2 Drift: all local harness gates pass, including five icon-layout scenarios
+(swap, saved swap, empty-cell move on row 3, saved empty-cell position, and the
+floating tile above a window) and the 35-combination screen matrix. Published as
+[`v0.2.2`](https://github.com/DerekLopezGarcia/TerraCorp-OS/releases/tag/v0.2.2)
+on 2026-10-25. In-game grid, drag smoothness, and persistence checks are
+pending.
 
 ## F0 exit checklist
 
@@ -133,7 +173,7 @@ the accent System icon, and the 0.2.0 → 0.2.1 update are pending.
 | First render within 2 seconds | Recorded values are 1.05 s and 1.25 s; confirm on Tier 2 hardware |
 | Resolution adaptation and GPU retry tests | Verified by `npm run test:screens` and `npm run test:faults` |
 | Desktop icons, taskbar, and keyboard selection | `npm run test:desktop` clicks the Files icon and requires exactly one window; `npm run test:screens` covers 35 combinations; reported working in-game on 2026-10-25 |
-| Icon order persists | `npm run test:icon-order` verifies drag-to-reorder, saving `iconOrder`, and loading it after boot; confirm in-game across a restart and update |
+| Icon layout persists | `npm run test:icon-order` verifies swap, move-to-empty-slot, saving `iconLayout`/`iconOrder`, and loading both formats after boot; confirm in-game across a restart and update |
 | About SYSTEM section shows live values | Harness screens pass; confirm values and R refresh in-game |
 | Updater detects, stages, installs, and restarts from a stable release | Modern/legacy response paths, full manifest filtering, backup recovery, rollback, and the boot-time applier (including a successful close with no return value) pass in the harness; the 0.1.9 → 0.1.11 repair path and the normal 0.1.11 → 0.2.0 update were confirmed in-game; keep log and pending-file evidence for F0 |
 | Notes persist across restarts and updates | `npm run test:notes` verifies `/var/notes.txt`; the 0.2.0 update succeeded in-game, but an explicit notes check was not recorded |

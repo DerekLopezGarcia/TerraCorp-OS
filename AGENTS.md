@@ -73,6 +73,10 @@ write the EEPROM unless explicitly required.
   `draw`, `handle`, optional `tick`, and optional `close`. An app may set
   `iconStyle = "accent"` for a highlighted desktop tile. UI calls methods with
   `:` so `self` is the app instance.
+- The desktop grid spans the whole screen. Persist icon positions as
+  `iconLayout = "id@slot,..."` and keep `iconOrder` as the compact order for
+  older releases; empty slots are valid. `npm run test:icon-order` covers swap,
+  move-to-empty, persistence, and legacy loading.
 - Apps draw only through `ctx.view`; its coordinates are local and clipped.
 - Use `theme.colors` and `theme.glyphs`; use `ctx.text` for display widths.
 - Only `kernel:poweroff` may call `computer.shutdown`.
