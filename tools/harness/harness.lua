@@ -333,7 +333,8 @@ resetScreen()
 
 local fakeUpdates = rawget(_G, "SCENARIO") == "updater"
 local fakeUpdateRollback = rawget(_G, "SCENARIO") == "updater_rollback"
-local updateScenario = fakeUpdates or fakeUpdateRollback
+local fakeLegacyInternet = rawget(_G, "SCENARIO") == "updater_legacy"
+local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet
 local mockedReleaseVersion
 if updateScenario then
   local currentVersion = files["/lib/tc/version.lua"]:match('version%s*=%s*"([^"]+)"')
@@ -411,18 +412,28 @@ function component.invoke(address, method, ...)
     end
     local sent = false
     local connectionChecks = 0
+    local readChecks = 0
     local handle = {}
-    handle.finishConnect = function(...)
-        assert(select("#", ...) == 0, "finishConnect received unexpected arguments")
-        connectionChecks = connectionChecks + 1
-        return connectionChecks > 1
-      end
+    if not fakeLegacyInternet then
+      handle.finishConnect = function(...)
+          assert(select("#", ...) == 0, "finishConnect received unexpected arguments")
+          connectionChecks = connectionChecks + 1
+          return connectionChecks > 1
+        end
+    end
     handle.response = function(...)
         assert(select("#", ...) == 0, "response received unexpected arguments")
+        if fakeLegacyInternet and not sent then
+          return nil
+        end
         return 200, "OK", {}
       end
     handle.read = function(size)
         assert(size == 8192, "read did not receive the requested chunk size")
+        readChecks = readChecks + 1
+        if fakeLegacyInternet and readChecks == 1 then
+          return ""
+        end
         if sent then
           return nil
         end
@@ -596,7 +607,7 @@ elseif scenario == "files" then
 elseif scenario == "settings" then
   ev("touch", "screen-1", 40, dockY, 0, "tester")
   idle(3)
-elseif scenario == "updater" then
+elseif scenario == "updater" or scenario == "updater_legacy" then
   local wx, wy, winWidth, winHeight = windowRect()
   ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens About
   idle(1)
@@ -604,9 +615,9 @@ elseif scenario == "updater" then
   local buttonRow = math.max(4, contentHeight - 2)
   local buttonX = wx + 1 + math.floor((winWidth - 2) / 2)
   ev("touch", "screen-1", buttonX, wy + 1 + buttonRow, 0, "tester")
-  idle(1)
+  idle(fakeLegacyInternet and 8 or 1)
   ev("touch", "screen-1", buttonX, wy + 1 + buttonRow, 0, "tester")
-  idle(2)
+  idle(fakeLegacyInternet and 12 or 2)
 elseif scenario == "updater_rollback" then
   local wx, wy, winWidth, winHeight = windowRect()
   ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens About
@@ -753,7 +764,8 @@ if STRICT then
     errors = errors + 1
     print("FAIL: Dashboard did not query spaceUsed")
   end
-  if scenario == "updater" and not screen:find("Installed 3 files", 1, true) then
+  if (scenario == "updater" or scenario == "updater_legacy")
+    and not screen:find("Installed 3 files", 1, true) then
       errors = errors + 1
       print("FAIL: the updater did not detect or install the mocked GitHub release")
   end

@@ -41,31 +41,40 @@ local function request(url, limit)
     ["User-Agent"] = "TerraCorp-OS updater",
     ["Accept"] = "application/vnd.github+json",
   }
-  local handle, reason = component.invoke(internetAddress, "request", url, nil, headers)
+  local requestOk, handle, reason = pcall(
+    component.invoke,
+    internetAddress,
+    "request",
+    url,
+    nil,
+    headers
+  )
+  if not requestOk then
+    return nil, "HTTP request failed: " .. tostring(handle)
+  end
   if not handle then
     return nil, tostring(reason or "The request could not be started.")
   end
 
-  if type(handle.finishConnect) ~= "function" then
+  local function closeHandle()
     pcall(handle.close)
-    return nil, "The HTTP handle cannot wait for its response."
   end
 
-  local deadline = computer.uptime() + HTTP_TIMEOUT
-  while true do
-    local okConnect, connected, connectError = pcall(handle.finishConnect)
-    if not okConnect then
-      pcall(handle.close)
-      return nil, "HTTP request failed: " .. tostring(connected)
+  local chunks, size = {}, 0
+  local responseLimit = limit or MAX_RESPONSE
+  local function keepChunk(chunk)
+    if type(chunk) ~= "string" or chunk == "" then
+      return true
     end
-    if connected then
-      break
+    size = size + #chunk
+    if size > responseLimit then
+      return nil, "The response is larger than the allowed limit."
     end
-    if computer.uptime() >= deadline then
-      pcall(handle.close)
-      return nil, "HTTP request timed out after " .. HTTP_TIMEOUT .. " seconds."
-    end
+    chunks[#chunks + 1] = chunk
+    return true
+  end
 
+  local function waitBriefly()
     if type(os) == "table" and type(os.sleep) == "function" then
       pcall(os.sleep, 0.05)
     else
@@ -73,37 +82,92 @@ local function request(url, limit)
     end
   end
 
+  local deadline = computer.uptime() + HTTP_TIMEOUT
+  if type(handle.finishConnect) == "function" then
+    while true do
+      local okConnect, connected = pcall(handle.finishConnect)
+      if not okConnect then
+        closeHandle()
+        return nil, "HTTP request failed: " .. tostring(connected)
+      end
+      if connected then
+        break
+      end
+      if computer.uptime() >= deadline then
+        closeHandle()
+        return nil, "HTTP request timed out after " .. HTTP_TIMEOUT .. " seconds."
+      end
+      waitBriefly()
+    end
+  else
+    -- Older Internet Card handles expose response/read but not finishConnect.
+    -- Poll response and drain available bytes until the asynchronous request
+    -- publishes its status; preserve any body chunks read while waiting.
+    while true do
+      local okResponse, status = pcall(handle.response)
+      if not okResponse then
+        closeHandle()
+        return nil, "Could not read HTTP response status: " .. tostring(status)
+      end
+      if type(status) == "number" then
+        break
+      elseif status ~= nil then
+        closeHandle()
+        return nil, "Could not read HTTP response status: " .. tostring(status)
+      end
+
+      local okRead, chunk, readError = pcall(handle.read, 8192)
+      if not okRead then
+        closeHandle()
+        return nil, "Download failed while waiting for response: " .. tostring(chunk)
+      end
+      if chunk == nil then
+        closeHandle()
+        return nil, "The HTTP connection closed before returning a status"
+          .. (readError and (": " .. tostring(readError)) or ".")
+      end
+      local kept, keepError = keepChunk(chunk)
+      if not kept then
+        closeHandle()
+        return nil, keepError
+      end
+      if computer.uptime() >= deadline then
+        closeHandle()
+        return nil, "HTTP request timed out after " .. HTTP_TIMEOUT .. " seconds."
+      end
+      waitBriefly()
+    end
+  end
+
   local okResponse, status, responseMessage = pcall(handle.response)
   if not okResponse or type(status) ~= "number" then
-    pcall(handle.close)
+    closeHandle()
     local detail = okResponse and tostring(responseMessage or status) or tostring(status)
     return nil, "Could not read HTTP response status: " .. detail
   end
   if status ~= 200 then
-    pcall(handle.close)
+    closeHandle()
     return nil, "HTTP " .. tostring(status)
   end
 
-  local chunks, size = {}, 0
   while true do
     local okRead, chunk, readError = pcall(handle.read, 8192)
     if not okRead then
-      pcall(handle.close)
+      closeHandle()
       return nil, "Download failed: " .. tostring(chunk)
     end
     if not chunk then
-      pcall(handle.close)
+      closeHandle()
       if readError then
         return nil, "Download failed: " .. tostring(readError)
       end
       break
     end
-    size = size + #chunk
-    if size > (limit or MAX_RESPONSE) then
-      pcall(handle.close)
-      return nil, "The response is larger than the allowed limit."
+    local kept, keepError = keepChunk(chunk)
+    if not kept then
+      closeHandle()
+      return nil, keepError
     end
-    chunks[#chunks + 1] = chunk
   end
 
   local body = table.concat(chunks)
