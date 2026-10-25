@@ -7,6 +7,7 @@ dashboard.id = "dashboard"
 dashboard.title = "System"
 dashboard.short = "System"
 dashboard.icon = "SYS"
+dashboard.iconStyle = "accent"
 dashboard.order = 1
 
 local CARD_HEIGHT = 6

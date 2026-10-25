@@ -51,7 +51,7 @@ download/validation error, the current installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.2.0; the latest published stable release is 0.1.11.
+The current build is 0.2.1 Mosaic; the latest published stable release is 0.2.0.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

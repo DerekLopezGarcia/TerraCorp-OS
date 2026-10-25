@@ -37,6 +37,9 @@ distributed features.
 - **0.2.0 Grid:** single-click desktop icons, taskbar window chips, keyboard
   navigation when no window is focused, and a SYSTEM section in About. No
   service or app-contract refactor in this patch release.
+- **0.2.1 Mosaic:** drag icons within the grid to arrange them, persist the
+  order in `/etc/terracorp.cfg`, and render System with a distinct accent tile.
+  F1-F6 remain bound to apps, not grid positions.
 - **0.2.x:** separate the kernel (boot, VFS, signals) from services (logging and
   APIs).
 - Apps consume services instead of calling kernel internals.
@@ -47,8 +50,9 @@ distributed features.
 
 **Exit criteria:** core at or below 1,200 lines, boot within 1.5 seconds,
 unchanged user-visible behavior after the refactor, and a green contract-test
-harness. Prepare 0.2.0 during F0, but tag it only after the F0 exit criteria
-are recorded.
+harness. 0.2.0 shipped on 2026-10-25 to validate the icon shell and updater; the
+remaining 0.2.x refactor waits for the F0 exit criteria (30-minute clean log and
+Tier 2 figures).
 
 ## F2 — Sessions and displays (0.3)
 

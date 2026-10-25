@@ -47,6 +47,15 @@ Component calls are protected where a disconnected disk could otherwise crash
 the OS. OpenComputers `filesystem.list` returns a table; the VFS also accepts an
 iterator for compatibility.
 
+## Preferences
+
+`/etc/terracorp.cfg` stores a serialized Lua table loaded in an empty
+environment. The updater never writes this file, so settings and the desktop
+layout survive updates. `iconOrder` holds a comma-separated list of app IDs;
+`""` means the built-in `order` sequence. On boot the UI keeps every ID that
+still maps to an installed app, drops unknown IDs, and appends newly installed
+apps that are missing from an older saved layout.
+
 ## Framebuffer and rendering
 
 `gfx` keeps flat character/foreground/background arrays plus the last-rendered
@@ -69,15 +78,23 @@ one-row taskbar; windows open above the icons.
 - Each app declares an `icon` code (`SYS`, `FIL`, `TRM`, `SET`, `NTS`, `INF`)
   and a short label. Icons are single-click targets and are also reachable with
   the keyboard.
+- The grid order comes from `iconOrder` in `/etc/terracorp.cfg`. Dragging an
+  icon over another cell inserts it at that position; dropping it saves the new
+  order. If `iconOrder` is empty or incomplete, the UI starts from the apps'
+  `order` values and appends missing apps.
+- An app may set `iconStyle = "accent"` to draw its tile with the accent
+  background and an inset box (System uses this).
 - At 60 columns and wider the grid uses two columns on the left, so a window can
   open beside the icons. Narrower screens use three columns and centered
   windows.
 - Tile height shrinks from three rows to two or one when the screen is too
-  short for the full grid.
+  short for the full grid. The inset box on an accent tile is omitted below
+  three rows.
 - The taskbar lists open windows as chips. Clicking a chip focuses its window;
   clicking the focused chip minimizes it. The focused window is highlighted.
 - With no focused window, arrows move the icon selection, Home/End jump to the
-  ends, and Enter opens the selected app. F1-F6 always open an app by order.
+  ends, and Enter opens the selected app. F1-F6 always open an app by `order`,
+  independent of the grid arrangement.
 - The empty-desktop hint is drawn only when no window is open and the grid
   leaves room for it.
 
@@ -87,8 +104,8 @@ The UI keeps a z-ordered window list, focus, drag state, and the icon selection.
 
 | Event | Handling |
 |---|---|
-| `touch` | Desktop icon, taskbar chip, window controls/title bar, or focused app |
-| `drag` / `drop` | Move window or forward to app |
+| `touch` | Desktop icon, taskbar chip, window controls/title bar, or focused app. An icon press is remembered until `drop`. |
+| `drag` / `drop` | Move a window, reorder the pressed icon, or forward to an app. A drop on the same icon opens it; a drop after an icon move saves the layout. |
 | `scroll` | Forward to app under pointer |
 | `key_down` | Global Esc/F1-F6; arrows/Home/End/Enter when no window is focused; otherwise the focused app |
 | `screen_resized` | Rebind GPU and resize UI |
@@ -107,6 +124,7 @@ local app = {
   title = "Example",
   short = "Example",
   icon = "EXA",
+  iconStyle = nil, -- "accent" opts into the highlighted tile
   order = 6,
 }
 
@@ -144,7 +162,10 @@ The context includes `ui`, `kernel`, `theme`, `colors`, `glyphs`, `log`,
 
 `title` is the window title and taskbar label. `short` is the desktop icon
 label. `icon` is a short code centered in the icon tile (three characters in the
-built-in apps); `order` sets both the F1-F10 shortcut and the grid position.
+built-in apps); `order` sets the F1-F10 shortcut and the initial grid position.
+The saved `iconOrder` overrides the grid position but never the shortcut.
+`iconStyle = "accent"` draws the tile with the accent background and, when the
+tile is at least three rows tall, an inset box.
 
 ## Power and known limits
 

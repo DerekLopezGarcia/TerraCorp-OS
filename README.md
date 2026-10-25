@@ -4,15 +4,17 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.2.0 Grid**. The prototype boots into a desktop shell with
-six apps, persists settings and notes, and logs errors. Local simulations cover
-the OpenComputers API contract; in-game testing is tracked in
-[`docs/tests.md`](docs/tests.md).
+Current version: **0.2.1 Mosaic**. The prototype boots into a desktop shell with
+six apps, persists settings, notes, and the desktop icon layout, and logs errors.
+Local simulations cover the OpenComputers API contract; in-game testing is
+tracked in [`docs/tests.md`](docs/tests.md).
 
 ## Features
 
-- Desktop icons, a one-row taskbar, and movable/minimizable windows.
-- **System:** node, memory, power, devices, storage, and system log.
+- Draggable desktop icons with a saved order, a one-row taskbar, and
+  movable/minimizable windows.
+- **System:** node, memory, power, devices, storage, and system log. Its desktop
+  icon uses an accent-filled tile to stand out from the other apps.
 - **Files:** browse the boot volume, view sizes, and preview text files.
 - **Terminal:** built-in shell (`ls`, `cd`, `cat`, `log`, `open`, `theme`, etc.).
 - **Settings:** accent color, character set, clock format, boot splash, and log level.
@@ -91,10 +93,11 @@ the final argument.
 
 ## Controls
 
-- **Desktop:** click an icon once to open its app. With no window focused, the
-  arrow keys move the selection, Home/End jump to the ends, and Enter opens the
-  selected app. F1-F6 open the six apps directly; Esc minimizes the focused
-  window.
+- **Desktop:** click an icon once to open its app. Drag an icon onto another
+  icon's cell to move it there; the new order is saved on release and restored
+  after a reboot or update. With no window focused, the arrow keys move the
+  selection, Home/End jump to the ends, and Enter opens the selected app. F1-F6
+  open the six apps directly; Esc minimizes the focused window.
 - **Taskbar:** click a window chip to focus it; clicking the focused chip
   minimizes it.
 - **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.
@@ -140,6 +143,7 @@ npm run manifest
 npm run sim
 npm run sim:oc
 npm run test:desktop
+npm run test:icon-order
 npm run test:dashboard-tick
 npm run test:refresh-rate
 npm run test:drag-metric

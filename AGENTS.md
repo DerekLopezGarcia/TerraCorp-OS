@@ -40,6 +40,7 @@ npm run manifest       # required after adding/removing Lua files
 npm run sim
 npm run sim:oc
 npm run test:desktop
+npm run test:icon-order
 npm run test:dashboard-tick
 npm run test:refresh-rate
 npm run test:drag-metric
@@ -69,7 +70,8 @@ write the EEPROM unless explicitly required.
 - The kernel owns module loading. `tc.*` maps to `/lib/tc/*.lua`; `apps.*` maps
   to `/apps/*.lua`. Do not depend on OpenOS `require`, `event`, `fs`, or `shell`.
 - Apps use `{ id, title, short, icon, order, create(ctx) }`; instances provide
-  `draw`, `handle`, optional `tick`, and optional `close`. UI calls methods with
+  `draw`, `handle`, optional `tick`, and optional `close`. An app may set
+  `iconStyle = "accent"` for a highlighted desktop tile. UI calls methods with
   `:` so `self` is the app instance.
 - Apps draw only through `ctx.view`; its coordinates are local and clipped.
 - Use `theme.colors` and `theme.glyphs`; use `ctx.text` for display widths.

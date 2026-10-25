@@ -27,6 +27,10 @@ The keyboard signal is `key_down(keyboardAddress, char, code, playerName)`.
 `char` is a numeric Unicode code point, or zero when no printable character is
 available. Use `code` for arrows and function keys. Touch coordinates start at
 1,1 in the upper-left corner. Ctrl/Alt modifiers arrive as their own key events.
+The screen emits `touch` when the button is pressed and `drop` when it is
+released; a release without movement still produces a `drop`. Movement between
+them produces `drag` signals. Desktop icons therefore open on `drop`, so the same
+gesture can drag an icon instead of opening it.
 
 Verified scan-code subset:
 

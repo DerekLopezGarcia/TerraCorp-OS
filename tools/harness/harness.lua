@@ -342,6 +342,7 @@ local fakeUpdateRollback = rawget(_G, "SCENARIO") == "updater_rollback"
 local fakeLegacyInternet = rawget(_G, "SCENARIO") == "updater_legacy"
 local fakeUpdateRecover = rawget(_G, "SCENARIO") == "updater_recover"
 local fakeBootUpdate = rawget(_G, "SCENARIO") == "boot_update"
+local savedIconOrder = rawget(_G, "SCENARIO") == "icon_order_saved"
 local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet or fakeUpdateRecover or fakeBootUpdate
 local mockedReleaseVersion
 if updateScenario then
@@ -361,6 +362,11 @@ if fakeBootUpdate then
   directories[stale .. "/lib"] = true
   directories[stale .. "/lib/tc"] = true
   written[stale .. "/lib/tc/version.lua"] = 'return { version = "0.0.0" }\n'
+end
+if savedIconOrder then
+  written["/etc/terracorp.cfg"] = 'return {\n'
+    .. '  iconOrder = "files,dashboard,console,settings,notes,about",\n'
+    .. '}\n'
 end
 local kinds = {
   ["gpu-1"] = "gpu",
@@ -641,10 +647,27 @@ elseif scenario == "drag_metric" then
   idle(1)
 elseif scenario == "dashboard" then
   ev("touch", "screen-1", 6, 5, 0, "tester") -- first desktop icon: System
+  ev("drop", "screen-1", 6, 5, 0, "tester")
   idle(12)
 elseif scenario == "desktop" then
   -- Second icon (Files) is in the first row at any supported resolution.
   ev("touch", "screen-1", 17, 5, 0, "tester")
+  ev("drop", "screen-1", 17, 5, 0, "tester")
+  idle(2)
+elseif scenario == "icon_order" then
+  -- Drag the second icon (Files) onto the first slot (System), then open the
+  -- first slot to prove the layout changed and was saved.
+  ev("touch", "screen-1", 17, 5, 0, "tester")
+  ev("drag", "screen-1", 6, 5, 0, "tester")
+  ev("drop", "screen-1", 6, 5, 0, "tester")
+  idle(2)
+  ev("touch", "screen-1", 6, 5, 0, "tester")
+  ev("drop", "screen-1", 6, 5, 0, "tester")
+  idle(2)
+elseif scenario == "icon_order_saved" then
+  -- The saved layout is loaded during boot; the first slot must be Files.
+  ev("touch", "screen-1", 6, 5, 0, "tester")
+  ev("drop", "screen-1", 6, 5, 0, "tester")
   idle(2)
 elseif scenario == "console" then
   ev("key_down", "screen-1", nil, 0x3D, "tester")
@@ -719,6 +742,7 @@ elseif scenario == "updater_rollback" then
 else
   local wx, wy = windowRect()
   ev("touch", "screen-1", 6, 5, 0, "tester")     -- opens System from the icon
+  ev("drop", "screen-1", 6, 5, 0, "tester")
   ev("touch", "screen-1", wx + 2, wy, 0, "tester")   -- grab the title bar
   ev("drop", "screen-1", wx + 3, wy + 1, 0, "tester")
   ev("scroll", "screen-1", wx + 2, wy + 1, 1, "tester")
@@ -918,6 +942,35 @@ if STRICT then
     if not screen:find("Files", 1, true) then
       errors = errors + 1
       print("FAIL: the Files icon did not open the Files app")
+    end
+  end
+  if scenario == "icon_order" then
+    if not screen:find("1 window", 1, true) then
+      errors = errors + 1
+      print("FAIL: the reordered first icon did not open a window")
+    end
+    if not screen:find("Preview", 1, true) then
+      errors = errors + 1
+      print("FAIL: the reordered first icon did not open Files")
+    end
+    local preferences = written["/etc/terracorp.cfg"] or ""
+    if not preferences:find(
+      'iconOrder = "files,dashboard,console,settings,notes,about"',
+      1,
+      true
+    ) then
+      errors = errors + 1
+      print("FAIL: the desktop icon order was not saved")
+    end
+  end
+  if scenario == "icon_order_saved" then
+    if not screen:find("1 window", 1, true) then
+      errors = errors + 1
+      print("FAIL: the saved first icon did not open a window")
+    end
+    if not screen:find("Preview", 1, true) then
+      errors = errors + 1
+      print("FAIL: the saved layout did not put Files first")
     end
   end
   if (scenario == "updater" or scenario == "updater_legacy") then

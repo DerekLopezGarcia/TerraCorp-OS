@@ -13,6 +13,7 @@ config.defaults = {
   splash = true,
   logLevel = "info",
   hostname = "",
+  iconOrder = "",
 }
 
 config.data = {}
