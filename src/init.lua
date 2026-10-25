@@ -104,6 +104,37 @@ end
 
 bindScreen()
 
+-- A pending update is applied here, before the kernel starts, so the desktop is
+-- never responsible for installing it. The applier owns the screen and rolls
+-- back on failure; boot continues either way.
+local function runPendingUpdate()
+  if not read(address, "/var/update/pending") then
+    return
+  end
+
+  local source = read(address, "/boot/apply.lua")
+  local chunk = source and load(source, "=boot/apply.lua")
+  if not chunk then
+    pcall(invoke, address, "remove", "/var/update/pending")
+    return
+  end
+
+  local ok = pcall(chunk, {
+    address = address,
+    component = component,
+    computer = computer,
+    invoke = invoke,
+    read = function(path)
+      return read(address, path)
+    end,
+  })
+  if not ok then
+    pcall(invoke, address, "remove", "/var/update/pending")
+  end
+end
+
+runPendingUpdate()
+
 local source, reason = read(address, "/boot/kernel.lua")
 if not source then
   error("TerraCorp OS: " .. tostring(reason), 0)

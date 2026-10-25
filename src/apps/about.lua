@@ -31,6 +31,15 @@ function about:draw(ctx)
   local c = ctx.colors
   local v = ctx.view
 
+  if not self.statusChecked then
+    self.statusChecked = true
+    local notice = ctx.kernel.vfs.read("/var/update/status")
+    if type(notice) == "string" and notice ~= "" then
+      self.updateStatus = notice:gsub("%s+$", "")
+      pcall(ctx.kernel.vfs.remove, "/var/update/status")
+    end
+  end
+
   v:clear(" ", c.text, c.deep)
 
   v:put(1, 1, "TERRACORP", c.accent, c.deep)
@@ -88,7 +97,7 @@ end
 
 function about:updateLabel()
   if self.updateState == "install" and self.release then
-    return "Install " .. self.release.version
+    return "Install " .. self.release.version .. " and restart"
   elseif self.updateState == "restart" then
     return "Restart to finish update"
   end
@@ -119,7 +128,24 @@ function about:handle(ctx, name, x, y)
       self.updateStatus = "TerraCorp OS is up to date (" .. ctx.version.version .. ")."
     end
     return true
+  elseif self.updateState == "restart" then
+    ctx.kernel:poweroff(true)
+    return true
   elseif self.updateState == "install" and self.release then
+    if ctx.kernel.vfs.exists("/boot/apply.lua") then
+      local queued, reason = updater.schedule(self.release, ctx.version.version, ctx.kernel.vfs)
+      if queued then
+        -- Close the desktop and reboot into the boot-time applier, which owns
+        -- the screen and shows its own progress bar.
+        self.updateState = "restart"
+        ctx.kernel:poweroff(true)
+      else
+        self.updateState = "check"
+        self.updateStatus = tostring(reason)
+      end
+      return true
+    end
+
     local ok, count, bytes = updater.install(
       self.release,
       ctx.version.version,

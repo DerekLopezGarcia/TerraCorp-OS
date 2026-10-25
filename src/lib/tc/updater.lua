@@ -274,6 +274,66 @@ local function removeTree(vfs, path)
   return vfs.remove(path)
 end
 
+-- A reset (power loss, crash, reboot) in the middle of an install can leave the
+-- backup tree behind. Blocking forever would strand the node on an older build,
+-- so restore those originals before a new attempt. Empty leftover directories
+-- are simply removed.
+local function restoreBackup(vfs, root)
+  if not vfs.exists(root) then
+    return true
+  end
+
+  local files, pending = {}, { { path = root, relative = "" } }
+  while #pending > 0 do
+    local current = table.remove(pending)
+    local entries, reason = vfs.list(current.path)
+    if not entries then
+      return nil, reason
+    end
+    for _, entry in ipairs(entries) do
+      local name = entry:gsub("/+$", "")
+      local full = current.path .. "/" .. name
+      local relative = current.relative == "" and name or (current.relative .. "/" .. name)
+      if vfs.isDirectory(full) then
+        local children, childError = vfs.list(full)
+        if not children then
+          return nil, childError
+        end
+        if #children > 0 then
+          pending[#pending + 1] = { path = full, relative = relative }
+        else
+          local removed, removeError = vfs.remove(full)
+          if not removed then
+            return nil, removeError or full
+          end
+        end
+      else
+        files[#files + 1] = { source = full, target = "/" .. relative }
+      end
+    end
+  end
+
+  for _, item in ipairs(files) do
+    if vfs.exists(item.target) then
+      local removed, removeError = vfs.remove(item.target)
+      if not removed then
+        return nil, removeError or item.target
+      end
+    end
+    local dir = item.target:match("^(.*)/[^/]+$")
+    local dirOk, dirError = vfs.ensureDir(dir)
+    if not dirOk then
+      return nil, dirError
+    end
+    local moved, moveError = vfs.rename(item.source, item.target)
+    if not moved then
+      return nil, moveError or item.target
+    end
+  end
+
+  return removeTree(vfs, root)
+end
+
 local function rollback(vfs, changed)
   local errors = {}
   for index = #changed, 1, -1 do
@@ -317,6 +377,36 @@ function updater.check(currentVersion)
   }
 end
 
+-- Queue a release for the boot-time applier (src/boot/apply.lua). The desktop
+-- only records the target; downloading, verification, and installation happen
+-- before the kernel starts, with their own progress screen.
+function updater.schedule(release, currentVersion, vfs)
+  local current = parseVersion(currentVersion)
+  local target = release and parseVersion(release.version)
+  if not current or not target or compareVersions(current, target) >= 0 then
+    return nil, "There is no newer valid release to install."
+  end
+  if release.tag ~= "v" .. release.version then
+    return nil, "The release tag does not match its version."
+  end
+  if not vfs.exists("/boot/apply.lua") then
+    return nil, "This installation cannot stage a boot-time update."
+  end
+
+  local dirOk, dirError = vfs.ensureDir("/var/update")
+  if not dirOk then
+    return nil, "Could not prepare the update directory: " .. tostring(dirError)
+  end
+  local written, writeError = vfs.write(
+    "/var/update/pending",
+    "version=" .. release.version .. "\ntag=" .. release.tag .. "\n"
+  )
+  if not written then
+    return nil, "Could not queue the update: " .. tostring(writeError)
+  end
+  return true
+end
+
 function updater.install(release, currentVersion, vfs, volume)
   local current = parseVersion(currentVersion)
   local targetVersion = release and parseVersion(release.version)
@@ -343,8 +433,9 @@ function updater.install(release, currentVersion, vfs, volume)
   if not clearOk then
     return nil, "Could not clear the previous staging directory: " .. tostring(clearError)
   end
-  if vfs.exists(backupRoot) then
-    return nil, "A backup for this release already exists; it was preserved."
+  local recovered, recoverError = restoreBackup(vfs, backupRoot)
+  if not recovered then
+    return nil, "Could not recover the previous update backup: " .. tostring(recoverError)
   end
 
   local staged, totalBytes, versionSource = {}, 0, nil

@@ -4,6 +4,7 @@ src/apps/console.lua
 src/apps/dashboard.lua
 src/apps/files.lua
 src/apps/settings.lua
+src/boot/apply.lua
 src/boot/kernel.lua
 src/init.lua
 src/lib/tc/config.lua

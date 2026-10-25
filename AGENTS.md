@@ -45,6 +45,8 @@ npm run test:drag-metric
 npm run test:updater
 npm run test:updater-legacy
 npm run test:updater-rollback
+npm run test:updater-recover
+npm run test:boot-update
 npm run test:install
 npm run test:fetch
 npm run test:boot

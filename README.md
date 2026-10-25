@@ -4,7 +4,7 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.1.8 Foundry**. The prototype boots, provides five apps,
+Current version: **0.1.9 Foundry**. The prototype boots, provides five apps,
 persists settings, and logs errors. Local simulations cover the OpenComputers
 API contract; in-game testing is tracked in [`docs/tests.md`](docs/tests.md).
 
@@ -92,8 +92,10 @@ the final argument.
 - **Files:** arrows select, Enter opens, Backspace goes up, R reloads.
 - **Console:** type commands and press Enter; `help` lists commands.
 - **Settings:** click a value to cycle it.
-- **Updater:** open About, check for updates, install a published stable release,
-  then restart to apply it. Requires an Internet Card.
+- **Updater:** open About, check for updates, press **Install** and let the
+  computer restart. The update downloads and installs before the desktop starts,
+  on its own progress screen, and rolls back if anything fails. Requires an
+  Internet Card.
 
 ## Repository layout
 
@@ -125,6 +127,8 @@ npm run test:drag-metric
 npm run test:updater
 npm run test:updater-legacy
 npm run test:updater-rollback
+npm run test:updater-recover
+npm run test:boot-update
 npm run test:install
 npm run test:fetch
 npm run test:boot

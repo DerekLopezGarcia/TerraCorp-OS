@@ -197,6 +197,7 @@ end
 
 function fsApi.remove(path)
   written[path] = nil
+  directories[path] = nil
   deleted[path] = true
   return true
 end
@@ -334,12 +335,25 @@ resetScreen()
 local fakeUpdates = rawget(_G, "SCENARIO") == "updater"
 local fakeUpdateRollback = rawget(_G, "SCENARIO") == "updater_rollback"
 local fakeLegacyInternet = rawget(_G, "SCENARIO") == "updater_legacy"
-local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet
+local fakeUpdateRecover = rawget(_G, "SCENARIO") == "updater_recover"
+local fakeBootUpdate = rawget(_G, "SCENARIO") == "boot_update"
+local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet or fakeUpdateRecover or fakeBootUpdate
 local mockedReleaseVersion
 if updateScenario then
   local currentVersion = files["/lib/tc/version.lua"]:match('version%s*=%s*"([^"]+)"')
   local major, minor, patch = currentVersion:match("^(%d+)%.(%d+)%.(%d+)$")
   mockedReleaseVersion = string.format("%s.%s.%d", major, minor, tonumber(patch) + 1)
+end
+if fakeBootUpdate then
+  directories["/var/update"] = true
+  written["/var/update/pending"] = "version=" .. mockedReleaseVersion
+    .. "\ntag=v" .. mockedReleaseVersion .. "\n"
+  -- A reset during an earlier attempt left originals in the backup tree.
+  local stale = "/var/update/backup/" .. mockedReleaseVersion
+  directories[stale] = true
+  directories[stale .. "/lib"] = true
+  directories[stale .. "/lib/tc"] = true
+  written[stale .. "/lib/tc/version.lua"] = 'return { version = "0.0.0" }\n'
 end
 local kinds = {
   ["gpu-1"] = "gpu",
@@ -399,14 +413,16 @@ function component.invoke(address, method, ...)
     if url:find("/releases/latest", 1, true) then
       body = '{"tag_name":"v' .. mockedReleaseVersion .. '"}'
     elseif url:find("/tools/manifest.txt", 1, true) then
-      body = "eeprom/init.lua\nsrc/init.lua\nsrc/boot/kernel.lua\nsrc/lib/tc/version.lua\ntools/fetch.lua\n"
+      body = "eeprom/init.lua\nsrc/init.lua\nsrc/boot/kernel.lua\nsrc/boot/apply.lua\nsrc/lib/tc/version.lua\ntools/fetch.lua\n"
     elseif url:find("/src/lib/tc/version.lua", 1, true) then
       body = 'return { product = "TerraCorp OS", company = "TerraCorp", tagline = "Architects of Dawn", version = "'
         .. mockedReleaseVersion .. '", codename = "Foundry", api = 1, license = "MIT" }\n'
     elseif url:find("/src/init.lua", 1, true) then
-      body = "return 1\n"
+      body = files["/init.lua"]
     elseif url:find("/src/boot/kernel.lua", 1, true) then
-      body = "return 2\n"
+      body = files["/boot/kernel.lua"]
+    elseif url:find("/src/boot/apply.lua", 1, true) then
+      body = files["/boot/apply.lua"]
     else
       return nil, "not found"
     end
@@ -621,7 +637,21 @@ elseif scenario == "files" then
 elseif scenario == "settings" then
   ev("touch", "screen-1", 40, dockY, 0, "tester")
   idle(3)
-elseif scenario == "updater" or scenario == "updater_legacy" then
+elseif scenario == "boot_update" then
+  idle(2)
+elseif scenario == "updater" or scenario == "updater_legacy" or scenario == "updater_recover" then
+  if scenario ~= "updater" and scenario ~= "updater_legacy" then
+    deleted["/boot/apply.lua"] = true
+  end
+  if scenario == "updater_recover" then
+    -- Simulate a reset mid-install: the originals of the target release were
+    -- moved into its backup tree and never restored.
+    local backup = "/var/update/backup/" .. mockedReleaseVersion
+    directories[backup] = true
+    directories[backup .. "/lib"] = true
+    directories[backup .. "/lib/tc"] = true
+    written[backup .. "/lib/tc/version.lua"] = 'return { version = "0.0.1" }\n'
+  end
   local wx, wy, winWidth, winHeight = windowRect()
   ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens About
   idle(1)
@@ -633,6 +663,9 @@ elseif scenario == "updater" or scenario == "updater_legacy" then
   ev("touch", "screen-1", buttonX, wy + 1 + buttonRow, 0, "tester")
   idle(fakeLegacyInternet and 12 or 2)
 elseif scenario == "updater_rollback" then
+  -- Exercise the legacy in-process installer, which is still the fallback when
+  -- /boot/apply.lua is unavailable.
+  deleted["/boot/apply.lua"] = true
   local wx, wy, winWidth, winHeight = windowRect()
   ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens About
   idle(1)
@@ -734,13 +767,45 @@ if scenario == "updater_rollback" then
       print("FAIL: rollback did not restore " .. path)
     end
   end
-  if not finalScreen:find("Could not install", 1, true) then
+  if not finalScreen:find("injected rename failure", 1, true) then
     errors = errors + 1
     print("FAIL: rollback scenario did not report the injected install failure")
   end
   if written["/etc/terracorp.cfg"] ~= nil then
     errors = errors + 1
     print("FAIL: updater changed persistent settings")
+  end
+end
+
+if scenario == "updater_recover" then
+  if finalScreen:find("backup for this release already exists", 1, true) then
+    errors = errors + 1
+    print("FAIL: a leftover backup blocked the update")
+  end
+  if not finalScreen:find("Restart to apply", 1, true) then
+    errors = errors + 1
+    print("FAIL: the update did not complete after recovering the backup")
+  end
+  local version = readReal("/lib/tc/version.lua") or ""
+  if not version:find(mockedReleaseVersion, 1, true) then
+    errors = errors + 1
+    print("FAIL: the installed version was not replaced after recovery")
+  end
+end
+
+if scenario == "boot_update" then
+  if readReal("/var/update/pending") ~= nil then
+    errors = errors + 1
+    print("FAIL: the pending update marker was not cleared")
+  end
+  local status = readReal("/var/update/status") or ""
+  if not status:find("Update complete", 1, true) or not status:find(mockedReleaseVersion, 1, true) then
+    errors = errors + 1
+    print("FAIL: the boot-time updater did not report success")
+  end
+  if not finalScreen:find("v" .. mockedReleaseVersion, 1, true) then
+    errors = errors + 1
+    print("FAIL: the boot-time updater did not install the new version")
   end
 end
 
@@ -786,10 +851,20 @@ if STRICT then
     errors = errors + 1
     print("FAIL: Dashboard did not query spaceUsed")
   end
-  if (scenario == "updater" or scenario == "updater_legacy")
-    and not screen:find("Installed 3 files", 1, true) then
+  if (scenario == "updater" or scenario == "updater_legacy") then
+    if not shutdownFlag then
       errors = errors + 1
-      print("FAIL: the updater did not detect or install the mocked GitHub release")
+      print("FAIL: the updater did not restart into the boot-time applier")
+    end
+    local marker = readReal("/var/update/pending") or ""
+    if not marker:find("version=" .. mockedReleaseVersion, 1, true) then
+      errors = errors + 1
+      print("FAIL: the queued update marker does not name the mocked release")
+    end
+  end
+  if scenario == "updater_recover" and not screen:find("Restart to apply", 1, true) then
+    errors = errors + 1
+    print("FAIL: the legacy installer did not recover the leftover backup")
   end
   if scenario == "dashboard_tick" and not stats.dashboardTickChecked then
     errors = errors + 1
