@@ -28,7 +28,7 @@ from the release tag, not from the moving `main` branch.
 
 ## What the updater does
 
-The About app's **Check for updates** button queries GitHub's latest-release
+The Update app's **Check for updates** button queries GitHub's latest-release
 API. When a newer stable version is found, **Install &lt;version&gt; and restart**
 writes `/var/update/pending` and reboots immediately. The install itself happens
 in `src/boot/apply.lua`, which the boot entry point runs before the kernel
@@ -41,7 +41,7 @@ runs before the desktop, a window or UI failure cannot interrupt an update.
 Existing files are moved to `/var/update/backup/<version>` before replacement.
 Any failure restores them and starts the previous version; a leftover backup
 from an interrupted attempt is restored on the next start instead of blocking
-updates. The result is written to `/var/update/status` and shown in About.
+updates. The result is written to `/var/update/status` and shown in Update.
 
 The updater changes only OS files on the boot filesystem. It does not modify
 `/etc` settings, user data (including `/var/notes.txt`), OpenOS, the BIOS, or
@@ -51,7 +51,7 @@ download/validation error, the current installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.2.2 Drift; the latest published stable release is 0.2.1
+The current build is 0.2.3 Glyph; the latest published stable release is 0.2.2
 (2026-10-25).
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS

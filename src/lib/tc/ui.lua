@@ -17,14 +17,22 @@ local TASKBAR_HEIGHT = 1
 local MIN_WIDTH = 34
 local MIN_HEIGHT = 10
 
--- Desktop icon grid. The tile is centered inside a wider cell so labels such as
--- "Terminal" and "Settings" fit without truncation. The grid covers the whole
--- desktop: every column and row that fits is a drop slot, even when empty.
-local ICON_TILE_WIDTH = 5
-local ICON_TILE_HEIGHT = 3
+-- Desktop icon grid. Every app draws a 9x5 pictogram (`iconArt`) inside its
+-- tile, with the label on the row below. The grid covers the whole desktop:
+-- every column and row that fits is a drop slot, even when empty. Rows use no
+-- vertical gap so two rows still fit on a 50x16 Tier 1 screen.
+local ICON_TILE_WIDTH = 9
+local ICON_TILE_HEIGHT = 5
 local ICON_CELL_WIDTH = 9
 local ICON_GAP_X = 2
-local ICON_GAP_Y = 1
+local ICON_GAP_Y = 0
+
+-- Saved layouts from 0.2.x used "about"; the app is now "update".
+local APP_ALIASES = { about = "update" }
+
+local function resolveAppId(id)
+  return APP_ALIASES[id] or id
+end
 
 function ui.new(env)
   local self = setmetatable({}, ui)
@@ -123,6 +131,7 @@ function ui:loadIconPlacements()
   if type(saved) == "string" and saved ~= "" then
     for entry in saved:gmatch("[^,%s]+") do
       local id, slot = entry:match("^(.+)@(%d+)$")
+      id = id and resolveAppId(id)
       if id and self.apps[id] and not seen[id] then
         seen[id] = true
         placements[#placements + 1] = { id = id, slot = tonumber(slot) }
@@ -134,6 +143,7 @@ function ui:loadIconPlacements()
     local legacy = self.config.get("iconOrder")
     if type(legacy) == "string" then
       for id in legacy:gmatch("[^,%s]+") do
+        id = resolveAppId(id)
         if self.apps[id] and not seen[id] then
           seen[id] = true
           placements[#placements + 1] = { id = id }
@@ -621,9 +631,7 @@ end
 
 function ui:drawIcon(module, x, y, selected, open)
   local c = self.colors
-  local g = self.glyphs
   local tileX = x + math.floor((ICON_CELL_WIDTH - ICON_TILE_WIDTH) / 2)
-  local code = module.icon or "APP"
   local special = module.iconStyle == "accent"
 
   local tileBg, tileFg
@@ -636,20 +644,30 @@ function ui:drawIcon(module, x, y, selected, open)
   end
 
   self.gfx:fill(tileX, y, ICON_TILE_WIDTH, self.iconTileHeight, " ", tileFg, tileBg)
-  if special and not selected and self.iconTileHeight >= 3 then
-    self.gfx:box(tileX, y, ICON_TILE_WIDTH, self.iconTileHeight, {
-      glyphs = g,
-      fg = c.onAccent,
-      bg = c.accent,
-    })
+
+  -- Every app ships a 9x5 pictogram; `npm run check` enforces it. On a screen
+  -- too short for a full tile, fall back to the 3-cell code so the icon stays
+  -- readable instead of clipping the art.
+  local art = module.iconArt
+  if self.iconTileHeight == ICON_TILE_HEIGHT
+    and type(art) == "table"
+    and #art == ICON_TILE_HEIGHT then
+    for row = 1, ICON_TILE_HEIGHT do
+      local line = art[row]
+      if type(line) == "string" then
+        self.gfx:put(tileX, y + row - 1, line, tileFg, tileBg)
+      end
+    end
+  else
+    local code = module.icon or "APP"
+    self.gfx:put(
+      tileX + math.floor((ICON_TILE_WIDTH - text.width(code)) / 2),
+      y + math.floor(self.iconTileHeight / 2),
+      code,
+      tileFg,
+      tileBg
+    )
   end
-  self.gfx:put(
-    tileX + math.floor((ICON_TILE_WIDTH - text.width(code)) / 2),
-    y + math.floor(self.iconTileHeight / 2),
-    code,
-    tileFg,
-    tileBg
-  )
 
   local label = text.truncate(module.short or module.title or module.id, ICON_CELL_WIDTH)
   local labelFg = c.dim
@@ -665,10 +683,6 @@ function ui:drawIcon(module, x, y, selected, open)
     labelFg,
     c.bg
   )
-
-  if open then
-    self.gfx:put(tileX + ICON_TILE_WIDTH - 1, y, g.mark, tileFg, tileBg)
-  end
 end
 
 -- Outline the slot that will receive the dragged icon. Empty slots get an

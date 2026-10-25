@@ -344,6 +344,7 @@ local fakeUpdateRecover = rawget(_G, "SCENARIO") == "updater_recover"
 local fakeBootUpdate = rawget(_G, "SCENARIO") == "boot_update"
 local savedIconOrder = rawget(_G, "SCENARIO") == "icon_order_saved"
 local savedIconSlot = rawget(_G, "SCENARIO") == "icon_slot_saved"
+local savedUpdateIcon = rawget(_G, "SCENARIO") == "icon_update"
 local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet or fakeUpdateRecover or fakeBootUpdate
 local mockedReleaseVersion
 if updateScenario then
@@ -370,10 +371,17 @@ if savedIconOrder then
     .. '}\n'
 end
 if savedIconSlot then
-  -- Slots 2 (Files) and 7.. are empty; Files sits on row 3, column 4.
+  -- Slots 2 (Files) and 7.. are empty; Files sits on row 3, column 4. The
+  -- 0.2.2 layout still says "about"; the UI must migrate it to "update".
   written["/etc/terracorp.cfg"] = 'return {\n'
     .. '  iconOrder = "dashboard,console,settings,notes,about,files",\n'
     .. '  iconLayout = "dashboard@1,console@3,settings@4,notes@5,about@6,files@32",\n'
+    .. '}\n'
+end
+if savedUpdateIcon then
+  -- A 0.2.2 desktop with Update (then About) in slot 6.
+  written["/etc/terracorp.cfg"] = 'return {\n'
+    .. '  iconLayout = "dashboard@1,console@2,settings@3,notes@4,files@5,about@6",\n'
     .. '}\n'
 end
 local kinds = {
@@ -572,10 +580,10 @@ end
 
 local function iconGridBottom()
   local desktopTop = 3
-  local desktopBottom = taskbarY - 1
   local rows = math.ceil(6 / iconColumns())
-  local tile = 3
-  local lastY = desktopTop + 1 + (rows - 1) * (tile + 1 + 1)
+  -- 9x5 tiles with no vertical gap: tile + label row + next tile.
+  local tile = 5
+  local lastY = desktopTop + 1 + (rows - 1) * (tile + 1)
   return lastY + tile
 end
 
@@ -698,21 +706,26 @@ elseif scenario == "icon_slot" then
   idle(1)
   ev("drag", "screen-1", 21, 6, 0, "tester")
   idle(1)
-  ev("drag", "screen-1", 28, 9, 0, "tester")
+  ev("drag", "screen-1", 28, 10, 0, "tester")
   idle(1)
-  ev("drag", "screen-1", 35, 13, 0, "tester")
+  ev("drag", "screen-1", 35, 16, 0, "tester")
   idle(1)
-  ev("drag", "screen-1", 37, 14, 0, "tester")
+  ev("drag", "screen-1", 37, 18, 0, "tester")
   idle(1)
-  ev("drop", "screen-1", 37, 14, 0, "tester")
+  ev("drop", "screen-1", 37, 18, 0, "tester")
   idle(2)
-  ev("touch", "screen-1", 39, 15, 0, "tester")
-  ev("drop", "screen-1", 39, 15, 0, "tester")
+  ev("touch", "screen-1", 39, 19, 0, "tester")
+  ev("drop", "screen-1", 39, 19, 0, "tester")
   idle(2)
 elseif scenario == "icon_slot_saved" then
   -- The saved position puts Files at row 3, column 4.
-  ev("touch", "screen-1", 39, 15, 0, "tester")
-  ev("drop", "screen-1", 39, 15, 0, "tester")
+  ev("touch", "screen-1", 39, 19, 0, "tester")
+  ev("drop", "screen-1", 39, 19, 0, "tester")
+  idle(2)
+elseif scenario == "icon_update" then
+  -- 0.2.2 saved "about@6"; clicking slot 6 must open Update.
+  ev("touch", "screen-1", 60, 5, 0, "tester")
+  ev("drop", "screen-1", 60, 5, 0, "tester")
   idle(2)
 elseif scenario == "icon_drag" then
   -- Open Files, then drag System over the window and hold it there. The ghost
@@ -774,7 +787,7 @@ elseif scenario == "updater" or scenario == "updater_legacy" or scenario == "upd
     written[backup .. "/lib/tc/version.lua"] = 'return { version = "0.0.1" }\n'
   end
   local wx, wy, winWidth, winHeight = windowRect()
-  ev("key_down", "screen-1", nil, 0x40, "tester") -- F6 opens About
+  ev("key_down", "screen-1", nil, 0x40, "tester") -- F6 opens Update
   idle(1)
   local contentHeight = winHeight - 3
   local buttonRow = math.max(4, contentHeight - 2)
@@ -788,7 +801,7 @@ elseif scenario == "updater_rollback" then
   -- /boot/apply.lua is unavailable.
   deleted["/boot/apply.lua"] = true
   local wx, wy, winWidth, winHeight = windowRect()
-  ev("key_down", "screen-1", nil, 0x40, "tester") -- F6 opens About
+  ev("key_down", "screen-1", nil, 0x40, "tester") -- F6 opens Update
   idle(1)
   local contentHeight = winHeight - 3
   local buttonRow = math.max(4, contentHeight - 2)
@@ -1013,12 +1026,16 @@ if STRICT then
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
     if not preferences:find(
-      'iconOrder = "files,dashboard,console,settings,notes,about"',
+      'iconOrder = "files,dashboard,console,settings,notes,update"',
       1,
       true
     ) then
       errors = errors + 1
       print("FAIL: the desktop icon order was not saved")
+    end
+    if not preferences:find('iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6"', 1, true) then
+      errors = errors + 1
+      print("FAIL: the desktop icon layout was not saved")
     end
   end
   if scenario == "icon_order_saved" then
@@ -1042,28 +1059,38 @@ if STRICT then
     end
   end
   if scenario == "icon_slot" then
-    -- Files must render on row 3 (tile text at row 15), not in its old cell.
-    local moved = (rows[15] or ""):sub(38, 40)
-    if moved ~= "FIL" then
+    -- Files must render on row 3 (label at row 21), not in its old cell.
+    if not (rows[21] or ""):find("Files", 1, true) then
       errors = errors + 1
       print("FAIL: the dragged icon did not render in the empty full-screen slot")
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
-    if not preferences:find('iconLayout = "dashboard@1,console@3,settings@4,notes@5,about@6,files@32"', 1, true) then
+    if not preferences:find('iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,files@32"', 1, true) then
       errors = errors + 1
       print("FAIL: the empty-slot layout was not saved")
     end
   end
   if scenario == "icon_drag" then
-    -- The ghost is at row 25 and its label at row 27, inside the Files window.
-    -- Lua string offsets are byte-based, so search for the text instead.
-    if not (rows[25] or ""):find("SYS", 1, true) then
+    -- The ghost art starts at row 24 and its label at row 29, inside the Files
+    -- window. The System icon is hidden while dragging, so this art can only
+    -- come from the floating tile drawn above the window.
+    if not (rows[24] or ""):find("┌───────┐", 1, true) then
       errors = errors + 1
-      print("FAIL: the floating icon was not drawn above the window")
+      print("FAIL: the floating icon art was not drawn above the window")
     end
-    if not (rows[27] or ""):find("System", 1, true) then
+    if not (rows[29] or ""):find("System", 1, true) then
       errors = errors + 1
       print("FAIL: the floating icon label was not drawn above the window")
+    end
+  end
+  if scenario == "icon_update" then
+    if not screen:find("1 window", 1, true) then
+      errors = errors + 1
+      print("FAIL: clicking the migrated Update icon did not open a window")
+    end
+    if not screen:find("UPDATE", 1, true) or not screen:find("Check for updates", 1, true) then
+      errors = errors + 1
+      print("FAIL: the migrated Update icon did not open the Update app")
     end
   end
   if (scenario == "updater" or scenario == "updater_legacy") then

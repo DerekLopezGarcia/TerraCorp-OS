@@ -7,6 +7,13 @@ dashboard.id = "dashboard"
 dashboard.title = "System"
 dashboard.short = "System"
 dashboard.icon = "SYS"
+dashboard.iconArt = {
+  "┌───────┐",
+  "│ ▄▄▄▄▄ │",
+  "│ █████ │",
+  "└───┬───┘",
+  "  ──┴──  ",
+}
 dashboard.iconStyle = "accent"
 dashboard.order = 1
 

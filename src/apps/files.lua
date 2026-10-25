@@ -7,6 +7,13 @@ files.id = "files"
 files.title = "Files"
 files.short = "Files"
 files.icon = "FIL"
+files.iconArt = {
+  " ┌───┐   ",
+  " │   │   ",
+  " ├───┴──┐",
+  " │      │",
+  " └──────┘",
+}
 files.order = 2
 
 local MAX_PREVIEW_BYTES = 32768

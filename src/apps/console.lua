@@ -7,6 +7,13 @@ console.id = "console"
 console.title = "Terminal"
 console.short = "Terminal"
 console.icon = "TRM"
+console.iconArt = {
+  "┌───────┐",
+  "│ █ █ █ │",
+  "├───────┤",
+  "│ >_    │",
+  "└───────┘",
+}
 console.order = 3
 
 function console.create(ctx)

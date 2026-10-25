@@ -58,6 +58,11 @@ sequence. On boot the UI keeps every ID that still maps to an installed app,
 drops unknown IDs, honors saved slots that fit the screen, and places newly
 installed or out-of-range apps in the first free cell.
 
+`iconLayout` and `iconOrder` are migrated in place. The 0.2.x app `about` is now
+`update`, so the UI maps `about` to `update` when loading either key. An existing
+desktop therefore keeps Update in its old slot without rewriting the user's file
+until the next drag saves the layout.
+
 ## Framebuffer and rendering
 
 `gfx` keeps flat character/foreground/background arrays plus the last-rendered
@@ -77,11 +82,17 @@ to the app window.
 The desktop is drawn under the windows. It contains a responsive full-screen icon
 grid and a one-row taskbar; windows are drawn over the grid.
 
-- Each app declares an `icon` code (`SYS`, `FIL`, `TRM`, `SET`, `NTS`, `INF`)
-  and a short label. Icons are single-click targets and are also reachable with
-  the keyboard.
+- Every app declares a 3-cell `icon` code (`SYS`, `FIL`, `TRM`, `SET`, `NTS`,
+  `UPD`) and a 9x5 `iconArt` pictogram. The desktop tile is 9 cells wide and 5
+  rows tall, with the `short` label on the row below. `npm run check` rejects an
+  app without a registered ID, a 3-cell code, a label, or five 9-cell art rows,
+  so an app cannot ship without a visible desktop icon.
 - The grid covers every column that fits the screen width and every row that
-  fits above the taskbar. All cells are drop slots, including empty ones.
+  fits above the taskbar. All cells are drop slots, including empty ones. Tiles
+  use no vertical gap so two rows fit on a 50x16 Tier 1 screen.
+- Pictograms are ASCII/CP437 box-drawing art: System is a computer monitor,
+  Terminal a command window, Settings a gear, Notes a dog-eared page, Files a
+  folder, and Update a down arrow above a disk.
 - Positions come from `iconLayout` (`id@slot`) in `/etc/terracorp.cfg`.
   Dropping on an empty cell moves the icon there; dropping on an occupied cell
   swaps the two icons. Dropping saves the layout. If the saved layout is empty,
@@ -92,9 +103,13 @@ grid and a one-row taskbar; windows are drawn over the grid.
   grid cells show a dim guide and the target cell gets an accent outline while
   the icon is in motion.
 - An app may set `iconStyle = "accent"` to draw its tile with the accent
-  background and an inset box (System uses this).
-- Tile height shrinks from three rows to two or one when the screen cannot fit
-  even one full row. The inset box on an accent tile is omitted below three rows.
+  background (System uses this). The art is drawn in the inverse color, so the
+  tile is highlighted without an inset box.
+- Tile height shrinks from five rows to two or one when the screen cannot fit
+  even one full row. On a reduced tile the app's 3-cell `icon` code is drawn
+  instead of the 9x5 art so nothing is clipped; the label stays on the row below.
+- An open window is indicated by the accent-colored icon label; the tile itself
+  does not change.
 - Windows open below the lowest occupied icon row when at least the minimum
   window height remains; otherwise they open centered. This keeps the first row
   visible on an uncluttered desktop without blocking icons that were moved lower.
@@ -132,6 +147,13 @@ local app = {
   title = "Example",
   short = "Example",
   icon = "EXA",
+  iconArt = {
+    "         ",
+    "         ",
+    "         ",
+    "         ",
+    "         ",
+  },
   iconStyle = nil, -- "accent" opts into the highlighted tile
   order = 6,
 }
@@ -169,11 +191,12 @@ The context includes `ui`, `kernel`, `theme`, `colors`, `glyphs`, `log`,
 `ctx.view` between calls. Register an app ID in `APP_IDS` in the kernel.
 
 `title` is the window title and taskbar label. `short` is the desktop icon
-label. `icon` is a short code centered in the icon tile (three characters in the
-built-in apps); `order` sets the F1-F10 shortcut and the initial grid position.
-Saved `iconLayout` positions override the initial grid position but never the
-shortcut. `iconStyle = "accent"` draws the tile with the accent background and,
-when the tile is at least three rows tall, an inset box.
+label. `iconArt` is the 9x5 desktop pictogram: five strings of exactly nine
+display cells each, drawn inside the tile. `icon` is a three-cell code used only
+when the tile must shrink below five rows; keep it as the compact fallback.
+`order` sets the F1-F10 shortcut and the initial grid position. Saved
+`iconLayout` positions override the initial grid position but never the
+shortcut. `iconStyle = "accent"` draws the tile with the accent background.
 
 ## Power and known limits
 

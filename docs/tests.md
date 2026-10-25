@@ -33,6 +33,48 @@ npm run test:screens
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
 
+## 0.2.3 desktop pictogram checks
+
+`npm run test:icon-order` runs six scenarios at 160x50:
+
+1. Drag Files onto the System cell and drop. Files must swap into the first
+   slot, open from there, and `/etc/terracorp.cfg` must keep both the compact
+   `iconOrder = "files,dashboard,console,settings,notes,update"` and the matching
+   `iconLayout` with `files@1`.
+2. Seed that preference before boot and require the first cell to open Files,
+   proving the saved order still loads.
+3. Drag Files onto an empty cell on row 3 (slot 32), then click it. The folder
+   art and `Files` label must render at the new position, the app must open, and
+   the saved `iconLayout` must contain `files@32`.
+4. Seed the row-3 layout before boot and require that same empty-cell position
+   to open Files after restart.
+5. Open Files, drag System over the window, and hold it there. The floating
+   monitor art and its label must be drawn above the window content.
+6. Seed a 0.2.2 layout that names `about@6`, click slot 6, and require the
+   Update window to open. This proves the saved `about` alias migrates in place.
+
+`npm run check` also enforces the app contract: every `src/apps/*.lua` file must
+be registered in `APP_IDS`, declare a 3-cell `icon`, a `short` label, a valid
+`iconStyle`, and five `iconArt` rows of exactly nine display cells. The gate was
+tested by shortening one art row and confirming a non-zero exit.
+
+Manual in-game checks for 0.2.3:
+
+- Each desktop tile shows its pictogram: monitor (System), console window
+  (Terminal), gear (Settings), dog-eared page (Notes), folder (Files), and a down
+  arrow over a disk (Update).
+- System keeps the accent-filled tile; its art uses the inverse color and has no
+  inset box.
+- Drag each icon over an open window. The floating art follows the pointer
+  smoothly and is not clipped by the window.
+- Drop on an empty cell and on another icon. The first moves it; the second
+  swaps. Labels stay centered under the art.
+- Restart and update from 0.2.2: positions, including empty gaps, are restored;
+  Update appears in the old About slot; settings and `/var/notes.txt` are
+  unchanged.
+- F1-F6 still open apps by their fixed order, and F6 opens Update.
+- At 50x16 all six pictograms fit in two rows above the taskbar.
+
 ## 0.2.2 full-screen icon grid checks
 
 `npm run test:icon-order` runs five scenarios at 160x50:
@@ -114,7 +156,7 @@ Manual in-game checks add what the harness cannot prove:
 4. Run a 30-minute session. Open all six apps by icon and by F1-F6; verify the
    desktop selection, Enter-to-open, and taskbar chips. Drag two icons to swap
    their cells, restart, and confirm the order remains. In System, verify uptime
-   advances once per second and readings refresh every two seconds. In About,
+   advances once per second and readings refresh every two seconds. In Update,
    check the SYSTEM values and press R. Check that UI input/render response feels
    smooth at the 30 Hz loop target (the harness cannot measure game-client FPS).
    In Terminal, try `help`, `ls`, `pwd`, and `echo test`. Move/minimize/close
@@ -129,7 +171,7 @@ Manual in-game checks add what the harness cannot prove:
 6. Repeat with Tier 2 CPU/GPU and a Tier 2 screen at 80x25.
 7. Updater: from a 0.1.9 or 0.1.10 install, copy the 0.1.11
    `src/boot/apply.lua` onto the TerraCorp volume as `/boot/apply.lua` (do not
-   reinstall the whole tree). Reboot, then in About press **Install** for 0.1.11
+   reinstall the whole tree). Reboot, then in Update press **Install** for 0.1.11
    and confirm the boot-time progress screen appears before the desktop. Confirm
    the version changes, settings persist, a note written in Notes survives, the
    EEPROM is unchanged, and `/var/update/pending` is gone afterwards. Turn the
@@ -160,8 +202,16 @@ on 2026-10-25. In-game drag/persistence, the accent System icon, and the
 (swap, saved swap, empty-cell move on row 3, saved empty-cell position, and the
 floating tile above a window) and the 35-combination screen matrix. Published as
 [`v0.2.2`](https://github.com/DerekLopezGarcia/TerraCorp-OS/releases/tag/v0.2.2)
-on 2026-10-25. In-game grid, drag smoothness, and persistence checks are
+on 2026-10-25. The user confirmed the in-game behavior worked well. Grid,
+drag-smoothness, and memory figures were not itemized, so F0 closure is still
 pending.
+
+0.2.3 Glyph: all local harness gates pass, including six icon-layout scenarios
+and the app-icon contract gate. Published as
+[`v0.2.3`](https://github.com/DerekLopezGarcia/TerraCorp-OS/releases/tag/v0.2.3)
+on 2026-10-25. In-game pictogram rendering, drag smoothness over windows, the
+`about` → `update` migration on a real 0.2.2 install, and a 50x16 two-row layout
+are pending confirmation.
 
 ## F0 exit checklist
 
@@ -174,7 +224,7 @@ pending.
 | Resolution adaptation and GPU retry tests | Verified by `npm run test:screens` and `npm run test:faults` |
 | Desktop icons, taskbar, and keyboard selection | `npm run test:desktop` clicks the Files icon and requires exactly one window; `npm run test:screens` covers 35 combinations; reported working in-game on 2026-10-25 |
 | Icon layout persists | `npm run test:icon-order` verifies swap, move-to-empty-slot, saving `iconLayout`/`iconOrder`, and loading both formats after boot; confirm in-game across a restart and update |
-| About SYSTEM section shows live values | Harness screens pass; confirm values and R refresh in-game |
+| About → Update SYSTEM section shows live values | Harness screens pass; confirm values and R refresh in-game |
 | Updater detects, stages, installs, and restarts from a stable release | Modern/legacy response paths, full manifest filtering, backup recovery, rollback, and the boot-time applier (including a successful close with no return value) pass in the harness; the 0.1.9 → 0.1.11 repair path and the normal 0.1.11 → 0.2.0 update were confirmed in-game; keep log and pending-file evidence for F0 |
 | Notes persist across restarts and updates | `npm run test:notes` verifies `/var/notes.txt`; the 0.2.0 update succeeded in-game, but an explicit notes check was not recorded |
 | System uptime advances every second | `npm run test:dashboard-tick` passes; the 0.2.0 desktop was reported working, but per-second uptime was not itemized |

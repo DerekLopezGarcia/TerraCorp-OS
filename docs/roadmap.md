@@ -43,6 +43,10 @@ distributed features.
 - **0.2.2 Drift:** expand the icon grid to the whole screen, keep empty-cell
   positions in `iconLayout`, allow move-or-swap drops, and draw the dragged icon
   as a floating tile that eases toward the pointer like a window.
+- **0.2.3 Glyph:** give every app a 9x5 box-drawing pictogram on its desktop
+  tile, rename About to Update (arrow above a disk), migrate saved `about`
+  positions to `update`, and enforce the desktop-icon contract in
+  `npm run check`.
 - **0.2.x:** separate the kernel (boot, VFS, signals) from services (logging and
   APIs).
 - Apps consume services instead of calling kernel internals.

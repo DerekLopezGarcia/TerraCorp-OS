@@ -4,23 +4,23 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.2.2 Drift**. The prototype boots into a desktop shell with
+Current version: **0.2.3 Glyph**. The prototype boots into a desktop shell with
 six apps, persists settings, notes, and the desktop icon layout, and logs errors.
 Local simulations cover the OpenComputers API contract; in-game testing is
 tracked in [`docs/tests.md`](docs/tests.md).
 
 ## Features
 
-- Draggable desktop icons on a full-screen grid, a one-row taskbar, and
+- Draggable desktop pictograms on a full-screen grid, a one-row taskbar, and
   movable/minimizable windows.
 - **System:** node, memory, power, devices, storage, and system log. Its desktop
-  icon uses an accent-filled tile to stand out from the other apps.
+  monitor icon uses an accent-filled tile to stand out from the other apps.
 - **Files:** browse the boot volume, view sizes, and preview text files.
 - **Terminal:** built-in shell (`ls`, `cd`, `cat`, `log`, `open`, `theme`, etc.).
 - **Settings:** accent color, character set, clock format, boot splash, and log level.
 - **Notes:** a persistent multi-line scratchpad stored at `/var/notes.txt`.
-- **About:** version details, a SYSTEM section (memory, storage, screen,
-  devices, boot volume, address), corporate lore, and a GitHub Releases updater.
+- **Update:** version details, a SYSTEM section (memory, storage, screen,
+  devices, boot volume, address), and a GitHub Releases updater.
 - Difference-based framebuffer rendering.
 - No OpenOS runtime dependency: TerraCorp loads its own modules and filesystem.
 
@@ -39,7 +39,8 @@ tracked in [`docs/tests.md`](docs/tests.md).
 The desktop uses the screen's actual resolution and adapts from 40x16 to
 160x50. The icon grid covers the full desktop width and height; windows open
 below the lowest occupied icon row when the remaining height is usable, and
-centered otherwise. Below 80x25, System cards are compressed.
+centered otherwise. On a 50x16 Tier 1 screen the grid still fits all six
+pictograms in two rows. Below 80x25, System cards are compressed.
 
 ## Installation
 
@@ -95,11 +96,11 @@ the final argument.
 
 - **Desktop:** click an icon once to open its app. Drag an icon to any cell on
   the full-screen grid; dropping on an empty cell moves it there and dropping on
-  another icon swaps the two. The floating icon follows the pointer smoothly,
-  like a dragged window. The new layout is saved on release and restored after a
-  reboot or update. With no window focused, the arrow keys move the selection,
-  Home/End jump to the ends, and Enter opens the selected app. F1-F6 open the six
-  apps directly; Esc minimizes the focused window.
+  another icon swaps the two. The floating pictogram follows the pointer
+  smoothly, like a dragged window. The new layout is saved on release and
+  restored after a reboot or update. With no window focused, the arrow keys move
+  the selection, Home/End jump to the ends, and Enter opens the selected app.
+  F1-F6 open the six apps directly; Esc minimizes the focused window.
 - **Taskbar:** click a window chip to focus it; clicking the focused chip
   minimizes it.
 - **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.
@@ -110,10 +111,11 @@ the final argument.
 - **Notes:** type to edit; Enter starts a line and saves. PgUp/PgDn scroll,
   arrows/Home/End move the cursor, and clicking a line places the cursor.
   Losing focus also saves.
-- **About:** R refreshes the SYSTEM section. **Check for updates** queries
+- **Update:** R refreshes the SYSTEM section. **Check for updates** queries
   GitHub Releases; **Install** downloads and installs before the desktop starts,
   on its own progress screen, and rolls back if anything fails. Requires an
-  Internet Card.
+  Internet Card. Saved 0.2.x layouts that name the old `about` app migrate to
+  `update` in place.
 - **0.1.9 and 0.1.10 updater repair:** those builds reject the filesystem's
   successful `close` (which returns no value) while staging, so an in-game update
   stops with `could not stage ... (nil)`. From OpenOS, replace `/boot/apply.lua`
@@ -127,7 +129,7 @@ src/                  boot-volume contents
   init.lua            entry point
   boot/kernel.lua     filesystem, services, module loader, event loop
   lib/tc/             core libraries, graphics, UI, and updater
-  apps/               system, files, terminal, settings, notes, about
+  apps/               system, files, terminal, settings, notes, update
 eeprom/init.lua       optional boot manager (not required for normal installs)
 tools/                OpenOS installer, downloader, and manifest
 tools/harness/        local Node.js simulation and tests

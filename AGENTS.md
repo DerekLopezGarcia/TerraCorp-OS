@@ -22,7 +22,7 @@ src/                  boot volume
   init.lua            entry point; finds the volume and loads the kernel
   boot/kernel.lua     VFS, module loader, services, event loop
   lib/tc/*.lua        core libraries, display, UI, updater
-  apps/*.lua          system, files, terminal, settings, notes, about
+  apps/*.lua          system, files, terminal, settings, notes, update
 eeprom/init.lua       optional boot manager
 tools/install.lua     OpenOS installer
 tools/fetch.lua       OpenOS repository downloader
@@ -69,10 +69,14 @@ write the EEPROM unless explicitly required.
 - Follow the current phase and exit criteria in `docs/roadmap.md`.
 - The kernel owns module loading. `tc.*` maps to `/lib/tc/*.lua`; `apps.*` maps
   to `/apps/*.lua`. Do not depend on OpenOS `require`, `event`, `fs`, or `shell`.
-- Apps use `{ id, title, short, icon, order, create(ctx) }`; instances provide
-  `draw`, `handle`, optional `tick`, and optional `close`. An app may set
+- Apps use `{ id, title, short, icon, iconArt, order, create(ctx) }`; instances
+  provide `draw`, `handle`, optional `tick`, and optional `close`. An app may set
   `iconStyle = "accent"` for a highlighted desktop tile. UI calls methods with
   `:` so `self` is the app instance.
+- Every app must show a desktop icon. This is a repository rule, not a style
+  preference: register the ID in `APP_IDS`, provide a 3-cell `icon` code, a
+  `short` label, and a 9x5 `iconArt` pictogram. `npm run check` fails when an app
+  file is unregistered or its icon data is missing or malformed.
 - The desktop grid spans the whole screen. Persist icon positions as
   `iconLayout = "id@slot,..."` and keep `iconOrder` as the compact order for
   older releases; empty slots are valid. `npm run test:icon-order` covers swap,
@@ -93,6 +97,9 @@ write the EEPROM unless explicitly required.
   returns a table and disk space is reported in bytes by `spaceUsed` and
   `spaceTotal`.
 - Keep `tools/manifest.txt` synchronized. `npm run check` verifies it.
+- Every app must expose a desktop icon: a valid `icon` code, `short` label, and
+  a 9x5 `iconArt` pictogram, with the app ID registered in `APP_IDS`. Do not
+  merge an app that only opens from a shortcut or the taskbar.
 - Before considering a change complete, run `npm run check`, `npm run sim`, and
   `npm run sim:oc`, plus focused tests for the changed feature.
 

@@ -89,6 +89,96 @@ if (manifest) {
   }
 }
 
+// Every app must ship a desktop icon: a 3-cell code for compact tiles and a
+// 9x5 `iconArt` pictogram. AGENTS.md states this rule; enforce it here so an
+// app cannot ship without a visible desktop icon.
+const appsDir = path.join(repoRoot, "src", "apps");
+const appFiles = fs.existsSync(appsDir)
+  ? fs.readdirSync(appsDir)
+    .filter((name) => name.endsWith(".lua"))
+    .map((name) => name.slice(0, -4))
+    .sort()
+  : [];
+const kernelSource = fs.readFileSync(path.join(repoRoot, "src", "boot", "kernel.lua"), "utf8");
+const idsMatch = kernelSource.match(/APP_IDS\s*=\s*\{([\s\S]*?)\}/);
+const registered = idsMatch ? [...idsMatch[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]) : [];
+
+if (!idsMatch) {
+  errors++;
+  console.error("ERROR src/boot/kernel.lua");
+  console.error("      APP_IDS table not found");
+}
+for (const id of registered) {
+  if (!appFiles.includes(id)) {
+    errors++;
+    console.error("ERROR src/apps/" + id + ".lua");
+    console.error("      registered in APP_IDS but the app file is missing");
+  }
+}
+for (const id of appFiles) {
+  if (!registered.includes(id)) {
+    errors++;
+    console.error("ERROR src/apps/" + id + ".lua");
+    console.error("      app is not registered in APP_IDS (src/boot/kernel.lua)");
+  }
+}
+
+const appIds = [...new Set([...registered, ...appFiles])];
+const libPath = path.join(repoRoot, "src", "lib").replace(/\\/g, "/");
+const srcPath = path.join(repoRoot, "src").replace(/\\/g, "/");
+const idsLua = appIds.map((id) => JSON.stringify(id)).join(", ");
+const modulePath = JSON.stringify(libPath + "/?.lua;" + srcPath + "/?.lua");
+const appScript = `
+package.path = ${modulePath}
+local text = require("tc.text")
+local ids = { ${idsLua} }
+local failures = {}
+local function fail(message) failures[#failures + 1] = message end
+for _, id in ipairs(ids) do
+  local ok, app = pcall(require, "apps." .. id)
+  if not ok or type(app) ~= "table" then
+    fail("src/apps/" .. id .. ".lua: could not load (" .. tostring(app) .. ")")
+  else
+    if app.id ~= id then
+      fail("src/apps/" .. id .. ".lua: id is " .. tostring(app.id))
+    end
+    if type(app.icon) ~= "string" or text.width(app.icon) ~= 3 then
+      fail("src/apps/" .. id .. ".lua: icon must be a 3-cell code")
+    end
+    if type(app.short) ~= "string" or app.short == "" then
+      fail("src/apps/" .. id .. ".lua: short label is required")
+    end
+    if app.iconStyle ~= nil and app.iconStyle ~= "accent" then
+      fail("src/apps/" .. id .. ".lua: unknown iconStyle " .. tostring(app.iconStyle))
+    end
+    if type(app.iconArt) ~= "table" or #app.iconArt ~= 5 then
+      fail("src/apps/" .. id .. ".lua: iconArt must contain 5 rows")
+    else
+      for row = 1, 5 do
+        if type(app.iconArt[row]) ~= "string" or text.width(app.iconArt[row]) ~= 9 then
+          fail("src/apps/" .. id .. ".lua: iconArt row " .. row .. " must be 9 cells")
+        end
+      end
+    end
+  end
+end
+return table.concat(failures, "\\n")
+`;
+const appStatus = lauxlib.luaL_dostring(L, to_luastring(appScript));
+if (appStatus !== lua.LUA_OK) {
+  errors++;
+  console.error("ERROR app icon check failed to run: " + to_jsstring(lua.lua_tostring(L, -1) || ""));
+} else {
+  const appFailures = to_jsstring(lua.lua_tostring(L, -1) || "");
+  if (appFailures !== "") {
+    for (const line of appFailures.split("\n")) {
+      errors++;
+      console.error("ERROR " + line);
+    }
+  }
+}
+lua.lua_settop(L, 0);
+
 console.log(files.length + " files checked, " + errors + " errors");
 console.log("manifest: " + (manifest ? manifest.length : "missing") + " files");
 process.exit(errors ? 1 : 0);

@@ -1,10 +1,10 @@
 eeprom/init.lua
-src/apps/about.lua
 src/apps/console.lua
 src/apps/dashboard.lua
 src/apps/files.lua
 src/apps/notes.lua
 src/apps/settings.lua
+src/apps/update.lua
 src/boot/apply.lua
 src/boot/kernel.lua
 src/init.lua

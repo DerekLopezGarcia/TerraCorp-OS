@@ -7,6 +7,13 @@ notes.id = "notes"
 notes.title = "Notes"
 notes.short = "Notes"
 notes.icon = "NTS"
+notes.iconArt = {
+  " ┌────┐  ",
+  " │    │╲ ",
+  " │ ▄▄ │ │",
+  " │ ▄▄ │ │",
+  " └────┘─┘",
+}
 notes.order = 5
 
 local PATH = "/var/notes.txt"

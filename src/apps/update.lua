@@ -1,23 +1,30 @@
--- About: product identity, platform information, and corporate lore.
+-- Update: product version, system information, and GitHub Releases updates.
 
 local updater = require("tc.updater")
 
-local about = {}
-about.__index = about
+local update = {}
+update.__index = update
 
-about.id = "about"
-about.title = "About"
-about.short = "About"
-about.icon = "INF"
-about.order = 6
+update.id = "update"
+update.title = "Update"
+update.short = "Update"
+update.icon = "UPD"
+update.iconArt = {
+  "    │    ",
+  "    ▼    ",
+  "  ═════  ",
+  " ┌─────┐ ",
+  " └─────┘ ",
+}
+update.order = 6
 
-function about.create(ctx)
-  local self = setmetatable({ updateState = "check", updateStatus = "Check GitHub Releases for a stable update." }, about)
+function update.create(ctx)
+  local self = setmetatable({ updateState = "check", updateStatus = "Check GitHub Releases for a stable update." }, update)
   self:refreshSystem(ctx)
   return self
 end
 
-function about:refreshSystem(ctx)
+function update:refreshSystem(ctx)
   local used, total = ctx.kernel:memory()
   local storageUsed, storageTotal = ctx.kernel:storage()
   local components = ctx.kernel:components()
@@ -30,20 +37,15 @@ function about:refreshSystem(ctx)
   }
 end
 
-local LORE_BRIEF = {
-  "TERRACORP: THE ARCHITECTS OF DAWN",
-  "Born from the Last Project as civilization collapsed.",
-  "Mandate: secure human continuity at any cost.",
-  "",
-  "RECLAIM THE CRADLE · Purge Earth of Residuals and Xeno-parasites.",
-  "BREAK THE YOKE · Resist the Federation's grip on the orbital frontier.",
-  "SOW THE COSMOS · Build a refuge beyond the Earth-Luna system.",
-  "",
-  "ETHICS OF PERSISTENCE: What works is ethical. Survival is moral.",
-  "The refuge may be humanity's salvation—or TerraCorp's first empire.",
+local UPDATE_NOTES = {
+  "SOURCE: GitHub Releases · stable channel",
+  "Updates replace OS files only.",
+  "Settings, notes, and the desktop layout are preserved.",
+  "The boot volume and BIOS/EEPROM are never rewritten.",
+  "Install and restart: the boot applier shows progress.",
 }
 
-function about:draw(ctx)
+function update:draw(ctx)
   local c = ctx.colors
   local v = ctx.view
 
@@ -63,7 +65,7 @@ function about:draw(ctx)
   v:clear(" ", c.text, c.deep)
 
   v:put(1, 1, "TERRACORP", c.accent, c.deep)
-  v:put(11, 1, "OS", c.text, c.deep)
+  v:put(11, 1, "UPDATE", c.text, c.deep)
   local buttonRow = math.max(4, ctx.h - 2)
 
   if ctx.h >= 9 then
@@ -110,7 +112,7 @@ function about:draw(ctx)
     end
 
     if showHeaders then
-      v:put(2, row, "PRODUCT", c.accent, c.deep)
+      v:put(2, row, "RELEASE", c.accent, c.deep)
       row = row + 1
     end
     drawPairs(product)
@@ -123,18 +125,16 @@ function about:draw(ctx)
     end
     drawPairs(system)
 
-    -- The lore is secondary information. Show it only when the window has room
-    -- for the system details, a divider, and a useful part of the brief.
+    -- Update notes are secondary. Show them only when the window has room for
+    -- the system details, a divider, and a useful part of the notes.
     if ctx.h >= 30 and row <= buttonRow - 3 then
       v:hline(1, row, ctx.w, ctx.glyphs.h, c.panel, c.deep)
       row = row + 1
-      for _, line in ipairs(LORE_BRIEF) do
+      for _, line in ipairs(UPDATE_NOTES) do
         if row > buttonRow - 2 then
           break
         end
-        if line ~= "" then
-          v:put(2, row, ctx.text.truncate(line, ctx.w - 2), c.dim, c.deep)
-        end
+        v:put(2, row, ctx.text.truncate(line, ctx.w - 2), c.dim, c.deep)
         row = row + 1
       end
     end
@@ -152,7 +152,7 @@ function about:draw(ctx)
   end
 end
 
-function about:updateLabel()
+function update:updateLabel()
   if self.updateState == "install" and self.release then
     return "Install " .. self.release.version .. " and restart"
   elseif self.updateState == "restart" then
@@ -161,7 +161,7 @@ function about:updateLabel()
   return "Check for updates"
 end
 
-function about:handle(ctx, name, x, y)
+function update:handle(ctx, name, x, y)
   if name == "key" then
     if x == "r" then
       self:refreshSystem(ctx)
@@ -233,7 +233,7 @@ function about:handle(ctx, name, x, y)
   return false
 end
 
-function about:close()
+function update:close()
 end
 
-return about
+return update

@@ -5,7 +5,7 @@
 -- progress screen, and cannot leave the running OS half-replaced without
 -- restoring it first.
 --
--- /var/update/pending is written by the About app:
+-- /var/update/pending is written by the Update app:
 --   version=0.1.9
 --   tag=v0.1.9
 --

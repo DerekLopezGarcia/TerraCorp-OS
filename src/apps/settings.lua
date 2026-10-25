@@ -7,6 +7,13 @@ settings.id = "settings"
 settings.title = "Settings"
 settings.short = "Settings"
 settings.icon = "SET"
+settings.iconArt = {
+  "  █   █  ",
+  " ███ ███ ",
+  "███   ███",
+  " ███ ███ ",
+  "  █   █  ",
+}
 settings.order = 4
 
 function settings.create()
