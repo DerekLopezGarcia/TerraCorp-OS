@@ -26,12 +26,63 @@ npm run test:updater-rollback
 npm run test:updater-recover
 npm run test:boot-update
 npm run test:notes
+npm run test:nodes
+npm run test:cluster
 npm run test:faults
 npm run test:screens
 ```
 
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
+
+## 0.3.0 rack and netboot checks
+
+`npm run test:cluster` runs pure Lua module tests under Fengari against fake
+filesystem, floppy, and modem components:
+
+1. `TC1` frames encode and decode escaped values, reject missing or duplicate
+   fields, reject field names that do not start lowercase, reject oversized
+   frames, and reject malformed or non-`TC1` input.
+2. The registry loads, merges duplicate IDs, skips malformed lines, defaults an
+   invalid role, and saves back to `/var/nodes.tsv`.
+3. Provisioning fills a floppy with `/init.lua`, `/payload`, and `/install.log`,
+   rejects a floppy that holds foreign data, and refuses a payload that does not
+   fit in 512 KB.
+4. The install guard accepts an empty HDD, refuses a finished TerraCorp install,
+   accepts one that carries `/var/install-incomplete`, and removes the marker
+   only after a complete copy.
+5. The master answers `HELLO` with `ASSIGN` only while the installer window is
+   armed, names the node, persists the assignment, marks a silent node offline,
+   pings it, and accepts a later `STATUS`.
+6. A node persists a runtime `ASSIGN`, adopts a replacement master from `PING`,
+   sends `PONG` to the pinging master, and ignores a stale token.
+7. The netboot installer completes a full run: picks the first HDD, writes the
+   runtime and node configuration, sets the boot address to that HDD, sends
+   `ACK`, writes `/install.log`, and reboots.
+
+`npm run test:nodes` runs the Nodes app in the desktop harness with a fake
+floppy, rack drive, and wired modem. It presses F7, verifies the rack list, and
+presses P to prepare the installer. The strict pass requires `Rack nodes`,
+`Installer armed`, and `/payload/.ready` on the fake floppy.
+
+Manual in-game checks for 0.3.0:
+
+- Build the master and rack as described in [`cluster.md`](cluster.md). The
+  master's card is wired; the rack relay is disabled; power and data use
+  different faces.
+- Insert a formatted floppy, open Nodes with F7, and press **Prepare installer**.
+  The floppy contains `/init.lua`, `/payload`, and `/install.log`; the window
+  shows a countdown.
+- Sneak-right-click one unprovisioned server. It boots the floppy, appears in
+  Nodes as installing, then reboots into its HDD and reports online with its
+  memory and disk.
+- Start a second server on the same cable. It gets its own name and address;
+  both remain listed after a master reboot and after an OS update.
+- Confirm `/var/install-incomplete` is gone from the node after the install, and
+  that the server's EEPROM and `/etc/terracorp.cfg` on the master are untouched.
+- Remove power from one node (or let it go offline); Nodes marks it offline
+  after the grace period and a **Ping** sends a frame once it returns.
+- Rename a node and cycle its role; verify `/var/nodes.tsv` and the list update.
 
 ## 0.2.3 desktop pictogram checks
 
@@ -153,7 +204,7 @@ Manual in-game checks add what the harness cannot prove:
 2. Reboot and time startup until the desktop appears.
 3. Read `/var/log/tc.log` from TerraCorp's boot volume. Record the `gpu` line's
    resolution/free-memory values and the uptime on `First render OK`.
-4. Run a 30-minute session. Open all six apps by icon and by F1-F6; verify the
+4. Run a 30-minute session. Open all seven apps by icon and by F1-F7; verify the
    desktop selection, Enter-to-open, and taskbar chips. Drag two icons to swap
    their cells, restart, and confirm the order remains. In System, verify uptime
    advances once per second and readings refresh every two seconds. In Update,
@@ -213,11 +264,19 @@ on 2026-10-25. In-game pictogram rendering, drag smoothness over windows, the
 `about` → `update` migration on a real 0.2.2 install, and a 50x16 two-row layout
 are pending confirmation.
 
+0.3.0 Rack: all local harness gates pass, including the cluster protocol,
+registry, provisioning, install-guard, master/nodes, netboot integration, Nodes
+scenario, seven-app screen matrix, and the existing installer, boot, downloader,
+updater, and GPU-fault suites. Published as
+[`v0.3.0`](https://github.com/DerekLopezGarcia/TerraCorp-OS/releases/tag/v0.3.0)
+on 2026-10-26. The in-game rack build, floppy netboot, two-node online state, and
+post-update registry persistence are pending confirmation.
+
 ## F0 exit checklist
 
 | Criterion | Status |
 |---|---|
-| All six apps usable in-game | Tested by user; Terminal input still needs an in-game retest on 0.1.11+ |
+| All seven apps usable in-game | Tested by user; Terminal input still needs an in-game retest on 0.1.11+ |
 | 30-minute session without errors | Not met in the supplied 0.1.0 log; repeat on the published build |
 | At least 250 KB free on Tier 2 | Recorded logs exceed the threshold; confirm CPU/GPU tier |
 | First render within 2 seconds | Recorded values are 1.05 s and 1.25 s; confirm on Tier 2 hardware |

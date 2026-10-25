@@ -60,6 +60,58 @@ Verified scan-code subset:
 - Component filesystem handles are opaque values passed to `read`, `write`, and
   `close`. EOF reads return `nil` without a reason.
 
+## Racks and servers
+
+Verified against `master-MC1.12` (1.8.x) and the pack's 1.8.9a build.
+
+- A rack holds four mountables: servers, Terminal Servers, and mountable disk
+  drives. A server runs only while installed in a rack.
+- The rack GUI exposes five internal buses: **Top**, **Bottom**, **Left**,
+  **Right**, and **Back**. The front face has no bus. The labels are relative to
+  the rack's front, so "Left" is the side to the player's left when facing the
+  front.
+- Each mountable has one primary connection (thick dot) and up to three
+  secondary connections (slim dots). The primary allows component access. The
+  secondary only passes network messages. Clicking a dot toggles it.
+- Relay mode is off by default. It relays messages between the rack's side buses
+  only; it does not expose components across buses. Leave it off for a cluster.
+- A rack is not a component. There is no rack address; discovery must use its
+  mountables.
+- A server's mountable node is its machine node. Its internal components,
+  including its HDD filesystem, stay `Visibility.Neighbors`, so another computer
+  on the bus cannot read the server's disks or use its internal components.
+- Network cards are the only `RackBusConnectable` components. A server's network
+  card appears as a secondary connection; its modem messages cross the bus, but
+  the card itself is not exposed as a component.
+- The mountable disk drive sets the floppy filesystem to `Visibility.Network`,
+  so the master and every server on the same side bus can see the floppy. This
+  is the netboot path: a server with no boot address boots the floppy's
+  `/init.lua`.
+- Server power-on is a sneak-use on the front face. Normal use opens the server
+  GUI. There is no API to start another server, and servers do not auto-start
+  after a world reload.
+- Tier limits (one CPU per server):
+
+| Server | CPU | RAM | HDD | Component Bus | Cards | EEPROM |
+|---|---|---|---|---|---|---|
+| Tier 1 | 1x Tier 2 | 2x Tier 2 | 2x Tier 2 | 1x Tier 2 | 2x Tier 2 | 1 |
+| Tier 2 | 1x Tier 3 | 3x Tier 3 | 3x Tier 3 | 2x Tier 3 | 2x Tier 2 + 1x Tier 3 | 1 |
+| Tier 3 | 1x Tier 3 | 4x Tier 3 | 4x Tier 3 | 3x Tier 3 | 2x Tier 2 + 2x Tier 3 | 1 |
+
+- A CPU alone provides 8/12/16 component slots (Tier 1/2/3); a component bus
+  adds 8/12/16 more. A Tier 2 CPU is enough for a network card and the rack
+  floppy, so a component bus is optional for a basic node.
+- RAM comes in half tiers (1, 1.5, 2, 2.5, 3, 3.5). The driver reports
+  `item tier / 2`, so a 3.5 module counts as tier 3 and fits a Tier 3 server;
+  the six sizes are 192, 256, 384, 512, 768, and 1024 KB.
+- Component buses raise the component limit but are **not** `RackBusConnectable`:
+  they do not join the rack bus and do not expose a server's HDDs to the master.
+  Only the network card's connections cross the bus.
+- A floppy holds 512 KB in Supersymmetry, enough for the TerraCorp runtime. The
+  pack allows 8192-byte network packets; the rack's built-in switch is tier 1.
+  When relay mode is enabled, the switch relays one packet per five ticks with a
+  queue of 20; same-bus packets do not cross the switch.
+
 ## GPU and colors
 
 - `gpu.setResolution` changes the virtual resolution; `gpu.maxResolution()`

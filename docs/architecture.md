@@ -9,9 +9,17 @@ OpenComputers BIOS or optional EEPROM manager
   -> mount the boot filesystem as the VFS
   -> load core modules from /lib/tc
   -> read /etc/terracorp.cfg and draw the splash
-  -> create the desktop and load /apps modules
+  -> desktop role: create the desktop and load /apps modules
+     node role: start the headless node loop instead
   -> process computer.pullSignal events
 ```
+
+A rack server that carries no boot address starts from the provisioning floppy
+instead. The stock BIOS runs `/init.lua` from the floppy, which loads
+`/boot/netboot.lua`; that script installs the runtime from `/payload` onto the
+first HDD, writes the node configuration, sets the HDD boot address, and
+reboots. The installed node then follows the normal boot sequence in `node`
+role. See [`cluster.md`](cluster.md).
 
 The boot volume contains the contents of `src/`: `init.lua` at its root and the
 kernel under `/boot`. Standard BIOS boot does not require the custom EEPROM
@@ -23,8 +31,8 @@ manager.
 |---|---|---|
 | Entry point | `/init.lua` | Find the boot volume, load the kernel, bind the GPU |
 | Kernel | `/boot/kernel.lua` | VFS, module loader, services, event loop |
-| Core | `/lib/tc/` | Version, utilities, text, logging, configuration, theme, graphics, UI, updater |
-| Apps | `/apps/*.lua` | App-specific UI and behavior |
+| Core | `/lib/tc/` | Version, utilities, text, logging, configuration, theme, graphics, UI, updater, cluster |
+| Apps | `/apps/*.lua` | App-specific UI and behavior, including the Nodes app |
 
 TerraCorp does not use OpenOS `require`, `event`, `fs`, or `shell`. The kernel
 loads modules with `load(source, "=/path", "t", env)` into a sandbox containing
@@ -61,7 +69,8 @@ installed or out-of-range apps in the first free cell.
 `iconLayout` and `iconOrder` are migrated in place. The 0.2.x app `about` is now
 `update`, so the UI maps `about` to `update` when loading either key. An existing
 desktop therefore keeps Update in its old slot without rewriting the user's file
-until the next drag saves the layout.
+until the next drag saves the layout. The node registry at `/var/nodes.tsv` is
+user data like `/var/notes.txt`: the updater never replaces it.
 
 ## Framebuffer and rendering
 
@@ -83,16 +92,16 @@ The desktop is drawn under the windows. It contains a responsive full-screen ico
 grid and a one-row taskbar; windows are drawn over the grid.
 
 - Every app declares a 3-cell `icon` code (`SYS`, `FIL`, `TRM`, `SET`, `NTS`,
-  `UPD`) and a 9x5 `iconArt` pictogram. The desktop tile is 9 cells wide and 5
-  rows tall, with the `short` label on the row below. `npm run check` rejects an
-  app without a registered ID, a 3-cell code, a label, or five 9-cell art rows,
-  so an app cannot ship without a visible desktop icon.
+  `UPD`, `NOD`) and a 9x5 `iconArt` pictogram. The desktop tile is 9 cells wide
+  and 5 rows tall, with the `short` label on the row below. `npm run check`
+  rejects an app without a registered ID, a 3-cell code, a label, or five 9-cell
+  art rows, so an app cannot ship without a visible desktop icon.
 - The grid covers every column that fits the screen width and every row that
   fits above the taskbar. All cells are drop slots, including empty ones. Tiles
-  use no vertical gap so two rows fit on a 50x16 Tier 1 screen.
+  use no vertical gap so three rows fit on a 40x16 Tier 1 screen.
 - Pictograms are ASCII/CP437 box-drawing art: System is a computer monitor,
   Terminal a command window, Settings a gear, Notes a dog-eared page, Files a
-  folder, and Update a down arrow above a disk.
+  folder, Update a down arrow above a disk, and Nodes a stacked rack.
 - Positions come from `iconLayout` (`id@slot`) in `/etc/terracorp.cfg`.
   Dropping on an empty cell moves the icon there; dropping on an occupied cell
   swaps the two icons. Dropping saves the layout. If the saved layout is empty,
@@ -105,9 +114,10 @@ grid and a one-row taskbar; windows are drawn over the grid.
 - An app may set `iconStyle = "accent"` to draw its tile with the accent
   background (System uses this). The art is drawn in the inverse color, so the
   tile is highlighted without an inset box.
-- Tile height shrinks from five rows to two or one when the screen cannot fit
-  even one full row. On a reduced tile the app's 3-cell `icon` code is drawn
-  instead of the 9x5 art so nothing is clipped; the label stays on the row below.
+- Tile height shrinks from five rows to three, two, or one when the screen
+  cannot fit every app. The UI chooses the largest height that fits all seven
+  apps, then draws the app's 3-cell `icon` code instead of the 9x5 art so nothing
+  is clipped; the label stays on the row below.
 - An open window is indicated by the accent-colored icon label; the tile itself
   does not change.
 - Windows open below the lowest occupied icon row when at least the minimum
@@ -116,7 +126,7 @@ grid and a one-row taskbar; windows are drawn over the grid.
 - The taskbar lists open windows as chips. Clicking a chip focuses its window;
   clicking the focused chip minimizes it. The focused window is highlighted.
 - With no focused window, arrows move the icon selection, Home/End jump to the
-  first/last occupied cell, and Enter opens the selected app. F1-F6 always open
+  first/last occupied cell, and Enter opens the selected app. F1-F7 always open
   an app by `order`, independent of the grid arrangement.
 - The empty-desktop hint is drawn only when no window is open and the grid
   leaves room for it.
@@ -130,7 +140,7 @@ The UI keeps a z-ordered window list, focus, drag state, and the icon selection.
 | `touch` | Desktop icon, taskbar chip, window controls/title bar, or focused app. An icon press is remembered until `drop`. |
 | `drag` / `drop` | Move a window, drag the pressed icon across the full-screen grid, or forward to an app. A drop without movement opens the pressed icon; a drop that moves or swaps icons saves the layout. |
 | `scroll` | Forward to app under pointer |
-| `key_down` | Global Esc/F1-F6; arrows/Home/End/Enter when no window is focused; otherwise the focused app |
+| `key_down` | Global Esc/F1-F7; arrows/Home/End/Enter when no window is focused; otherwise the focused app |
 | `screen_resized` | Rebind GPU and resize UI |
 | `interrupted` | Ignored so Ctrl+Alt+C does not terminate the OS |
 
@@ -198,7 +208,30 @@ when the tile must shrink below five rows; keep it as the compact fallback.
 `iconLayout` positions override the initial grid position but never the
 shortcut. `iconStyle = "accent"` draws the tile with the accent background.
 
+## Cluster
+
+The kernel reads `role` from `/etc/terracorp.cfg`. `desktop` starts the UI and
+`cluster` service; `node` skips GPU setup and starts the headless runtime.
+
+| Module | Responsibility |
+|---|---|
+| `tc.net` | `TC1` text framing, validation, percent escaping, modem transport |
+| `tc.registry` | `/var/nodes.tsv` load/save, merging, state and role updates |
+| `tc.provision` | Floppy safety/capacity checks, payload copy, install guard, config serialization |
+| `tc.cluster` | Master modem, installer window, HELLO/ASSIGN, ACK/STATUS/PONG, offline tracking |
+| `tc.node` | Node boot loop, identity adoption, STATUS and PING/PONG, runtime ASSIGN |
+| `boot.netboot` | Floppy installer: HELLO/ASSIGN, first-HDD copy, boot-address write, ACK, reboot |
+
+The kernel forwards `modem_message` signals to the cluster before the desktop
+sees them. A node never requires a GPU, but if a screen is present it may show a
+small status page. The installer window is gated by both a token and a
+ten-minute expiry on the master, so a stale floppy cannot overwrite a node that
+already has a valid install. The floppy also writes `/var/install-incomplete`
+before copying and removes it only after a complete install; a retry may
+overwrite an incomplete target, but never a finished one.
+
 ## Power and known limits
+
 
 `kernel:energyPercent()` returns 100 if the computer does not report energy.
 `kernel:poweroff(reboot)` is the only code path allowed to call

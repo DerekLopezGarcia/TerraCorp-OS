@@ -19,8 +19,9 @@ local MIN_HEIGHT = 10
 
 -- Desktop icon grid. Every app draws a 9x5 pictogram (`iconArt`) inside its
 -- tile, with the label on the row below. The grid covers the whole desktop:
--- every column and row that fits is a drop slot, even when empty. Rows use no
--- vertical gap so two rows still fit on a 50x16 Tier 1 screen.
+-- every column and row that fits is a drop slot, even when empty. When the
+-- screen is too short for a 5-row tile to hold every app, fall back to a
+-- smaller tile so no app becomes unreachable.
 local ICON_TILE_WIDTH = 9
 local ICON_TILE_HEIGHT = 5
 local ICON_CELL_WIDTH = 9
@@ -89,12 +90,18 @@ function ui:resize()
   self.iconDrag = nil
   self.iconCols = self:iconColumns()
 
-  local tileHeight = ICON_TILE_HEIGHT
-  if self:iconRowsFor(tileHeight) < 1 then
-    tileHeight = 2
-    if self:iconRowsFor(tileHeight) < 1 then
-      tileHeight = 1
+  -- Pick the largest tile height that still fits every app. A 40x16 screen
+  -- with seven apps needs a 3-row tile; tiny screens fall back to 2 or 1.
+  local neededRows = math.ceil(#self.order / self.iconCols)
+  local tileHeight = 1
+  for _, candidate in ipairs({ ICON_TILE_HEIGHT, 3, 2, 1 }) do
+    if self:iconRowsFor(candidate) >= neededRows then
+      tileHeight = candidate
+      break
     end
+  end
+  if self:iconRowsFor(tileHeight) < 1 then
+    tileHeight = 1
   end
   self.iconTileHeight = tileHeight
   self.iconRows = math.max(1, self:iconRowsFor(tileHeight))

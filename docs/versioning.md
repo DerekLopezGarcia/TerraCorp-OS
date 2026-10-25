@@ -44,14 +44,15 @@ from an interrupted attempt is restored on the next start instead of blocking
 updates. The result is written to `/var/update/status` and shown in Update.
 
 The updater changes only OS files on the boot filesystem. It does not modify
-`/etc` settings, user data (including `/var/notes.txt`), OpenOS, the BIOS, or
-the EEPROM. An Internet Card and permission for HTTPS requests are required. If
-there is no Internet Card, no stable release, insufficient disk space, or a
-download/validation error, the current installation remains in place.
+`/etc` settings, user data (including `/var/notes.txt` and `/var/nodes.tsv`),
+OpenOS, the BIOS, or the EEPROM. An Internet Card and permission for HTTPS
+requests are required. If there is no Internet Card, no stable release,
+insufficient disk space, or a download/validation error, the current
+installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.2.3 Glyph; the latest published stable release is 0.2.2
+The current build is 0.3.0 Rack; the latest published stable release is 0.2.3
 (2026-10-25).
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS

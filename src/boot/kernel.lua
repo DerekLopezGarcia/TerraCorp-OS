@@ -11,7 +11,7 @@ local MODULE_ROOTS = {
   apps = "/apps/",
 }
 
-local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update" }
+local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes" }
 
 local function packCall(fn, ...)
   local result = table.pack(pcall(fn, ...))
@@ -21,150 +21,30 @@ local function packCall(fn, ...)
   return table.unpack(result, 2, result.n)
 end
 
-local function splitPath(path)
-  local parts = {}
-  for part in tostring(path):gmatch("[^/]+") do
-    parts[#parts + 1] = part
+-- Bootstrap reader used to load tc.vfs from the boot volume. Everything after
+-- that uses the shared filesystem module, including mounted node disks.
+local function bootRead(volume, path)
+  local handle, reason = packCall(volume.open, path, "r")
+  if not handle then
+    return nil, reason
   end
-  return parts
-end
 
--- Minimal filesystem layer over the boot-volume component.
-local function makeVfs(volume)
-  local vfs = {}
-
-  function vfs.read(path)
-    local handle, reason = packCall(volume.open, path, "r")
-    if not handle then
-      return nil, reason
-    end
-
-    local chunks = {}
-    while true do
-      local data, why = packCall(volume.read, handle, 4096)
-      -- Stop on an empty string as well as nil to avoid a driver-induced loop.
-      if type(data) ~= "string" or data == "" then
-        packCall(volume.close, handle)
-        if why then
-          return nil, why
-        end
-        break
+  local chunks = {}
+  while true do
+    local data, why = packCall(volume.read, handle, 4096)
+    -- Stop on an empty string as well as nil to avoid a driver-induced loop.
+    if type(data) ~= "string" or data == "" then
+      packCall(volume.close, handle)
+      if why then
+        return nil, why
       end
-      chunks[#chunks + 1] = data
+      break
     end
-
-    packCall(volume.close, handle)
-    return table.concat(chunks)
+    chunks[#chunks + 1] = data
   end
 
-  local function writeMode(path, data, mode)
-    local handle, reason = packCall(volume.open, path, mode)
-    if not handle then
-      return nil, reason
-    end
-    local ok, why = packCall(volume.write, handle, data)
-    packCall(volume.close, handle)
-    if not ok then
-      return nil, why
-    end
-    return true
-  end
-
-  function vfs.write(path, data)
-    return writeMode(path, data, "w")
-  end
-
-  function vfs.append(path, data)
-    return writeMode(path, data, "a")
-  end
-
-  function vfs.exists(path)
-    local ok, value = pcall(volume.exists, path)
-    return ok and value == true
-  end
-
-  function vfs.isDirectory(path)
-    local ok, value = pcall(volume.isDirectory, path)
-    return ok and value == true
-  end
-
-  function vfs.size(path)
-    local value = packCall(volume.size, path)
-    return tonumber(value)
-  end
-
-  -- The component returns a 1..n table of names (see docs/opencomputers.md).
-  -- Accept iterators as well for compatibility with older drivers.
-  function vfs.list(path)
-    local result, reason = packCall(volume.list, path)
-
-    if type(result) == "function" then
-      local names = {}
-      local ok = pcall(function()
-        for name in result do
-          names[#names + 1] = tostring(name)
-        end
-      end)
-      if not ok then
-        return nil, "could not list " .. tostring(path)
-      end
-      table.sort(names)
-      return names
-    end
-
-    if type(result) ~= "table" then
-      return nil, reason or ("could not list " .. tostring(path))
-    end
-
-    local names = {}
-    for _, name in ipairs(result) do
-      names[#names + 1] = tostring(name)
-    end
-
-    -- Also support a table whose keys are not sequential.
-    if #names == 0 and next(result) ~= nil then
-      for _, name in pairs(result) do
-        names[#names + 1] = tostring(name)
-      end
-    end
-
-    table.sort(names)
-    return names
-  end
-
-  function vfs.ensureDir(path)
-    local current = ""
-    for _, part in ipairs(splitPath(path)) do
-      current = current .. "/" .. part
-      if not vfs.exists(current) then
-        local ok, reason = packCall(volume.makeDirectory, current)
-        if not ok and not vfs.exists(current) then
-          return nil, reason
-        end
-      end
-    end
-    return true
-  end
-
-  function vfs.remove(path)
-    return packCall(volume.remove, path)
-  end
-
-  function vfs.rename(from, to)
-    return packCall(volume.rename, from, to)
-  end
-
-  -- OpenComputers reports spaceUsed/spaceTotal in bytes; the OS uses KB.
-  function vfs.space()
-    local used = packCall(volume.spaceUsed)
-    local total = packCall(volume.spaceTotal)
-    if type(used) ~= "number" or type(total) ~= "number" then
-      return nil
-    end
-    return used / 1024, total / 1024
-  end
-
-  return vfs
+  packCall(volume.close, handle)
+  return table.concat(chunks)
 end
 
 --------------------------------------------------------------------------------
@@ -244,6 +124,38 @@ end
 
 function kernel:storage()
   return self.vfs.space()
+end
+
+--- Mount another filesystem component through the shared VFS.
+-- The cluster uses this to inspect a floppy and to pass a prepared payload to
+-- the netboot installer. Mounts are cached until the component disappears.
+function kernel:mount(address)
+  if type(address) ~= "string" or address == "" then
+    return nil, "missing filesystem address"
+  end
+  local cached = self.mounts and self.mounts[address]
+  if cached then
+    return cached
+  end
+
+  local volume = component.proxy(address)
+  if not volume then
+    return nil, "the filesystem is not responding"
+  end
+
+  local ok, mounted = pcall(self.vfsModule.new, volume)
+  if not ok or not mounted then
+    return nil, ok and "could not wrap the filesystem" or tostring(mounted)
+  end
+
+  self.mounts[address] = mounted
+  return mounted
+end
+
+function kernel:unmount(address)
+  if self.mounts then
+    self.mounts[address] = nil
+  end
 end
 
 function kernel:applyTheme()
@@ -332,12 +244,36 @@ function kernel:loop()
     elseif pack[2] then
       local name = pack[2]
       if name == "shutdown" or name == "reboot" then
+        if self.cluster then
+          self.cluster:shutdown()
+        end
         return
       end
+
+      if name == "component_removed" and pack[3] then
+        self:unmount(pack[3])
+      end
+
       if name ~= "interrupted" then
-        local ok, reason = pcall(self.ui.dispatch, self.ui, table.unpack(pack, 2, pack.n))
-        if not ok then
-          self.log.error("Event " .. tostring(name) .. ": " .. tostring(reason))
+        local handled = false
+        if name == "modem_message" and self.cluster then
+          local ok, routed = pcall(
+            self.cluster.handle,
+            self.cluster,
+            table.unpack(pack, 2, pack.n)
+          )
+          if not ok then
+            self.log.error("cluster event: " .. tostring(routed))
+          else
+            handled = routed == true
+          end
+        end
+
+        if not handled then
+          local ok, reason = pcall(self.ui.dispatch, self.ui, table.unpack(pack, 2, pack.n))
+          if not ok then
+            self.log.error("Event " .. tostring(name) .. ": " .. tostring(reason))
+          end
         end
       end
     end
@@ -345,6 +281,12 @@ function kernel:loop()
     local now = computer.uptime()
     if now - lastTick >= 1 then
       lastTick = now
+      if self.cluster then
+        local ok, reason = pcall(self.cluster.tick, self.cluster)
+        if not ok then
+          self.log.error("cluster tick: " .. tostring(reason))
+        end
+      end
       pcall(self.ui.tick, self.ui)
     end
 
@@ -393,7 +335,12 @@ function kernel.start(boot)
     error("TerraCorp OS: boot volume " .. tostring(boot.address) .. " is not responding", 0)
   end
 
-  local vfs = makeVfs(volume)
+  -- Only `read` is needed to load the shared filesystem module itself.
+  local vfs = {
+    read = function(path)
+      return bootRead(volume, path)
+    end,
+  }
   local cache = {}
 
   local BASE = {
@@ -474,6 +421,12 @@ function kernel.start(boot)
     return result
   end
 
+  local vfsModule = requireModule("tc.vfs")
+  vfs = vfsModule.new(volume)
+  if not vfs then
+    error("TerraCorp OS: boot volume is not readable", 0)
+  end
+
   local version = requireModule("tc.version")
   local util = requireModule("tc.util")
   local text = requireModule("tc.text")
@@ -510,9 +463,50 @@ function kernel.start(boot)
 
   log.trace("Booting " .. version.product .. " " .. version.version .. " on " .. hostname)
 
+  local theme = themeModule.build(config)
+  local instance = setmetatable({
+    version = version,
+    util = util,
+    text = text,
+    log = log,
+    config = config,
+    theme = theme,
+    themeModule = themeModule,
+    gfxModule = gfxModule,
+    vfs = vfs,
+    vfsModule = vfsModule,
+    mounts = {},
+    volume = volume,
+    volumeAddress = boot.address,
+    address = address,
+    hostname = hostname,
+  }, { __index = kernel })
+
+  -- A node has no desktop and may not have a GPU. Start the headless runtime
+  -- before any screen work so a rack server can boot without a monitor.
+  if config.get("role") == "node" then
+    log.trace("Node role: starting the headless cluster runtime")
+    local nodeModule = requireModule("tc.node")
+    local runtime = nodeModule.new({
+      kernel = instance,
+      config = config,
+      vfs = vfs,
+      log = log,
+      version = version,
+      theme = theme,
+      gfxModule = gfxModule,
+      component = component,
+      computer = computer,
+      os = os,
+    })
+    instance.node = runtime
+    runtime:run()
+    return
+  end
+
   local gpuAddress = component.list("gpu")()
   if not gpuAddress then
-    error("TerraCorp OS: a GPU is required to boot", 0)
+    error("TerraCorp OS: a GPU is required to boot the desktop", 0)
   end
 
   local screenAddress = component.list("screen")()
@@ -520,8 +514,8 @@ function kernel.start(boot)
     pcall(component.invoke, gpuAddress, "bind", screenAddress)
   end
 
-  local theme = themeModule.build(config)
   local gfx = gfxModule.new(gpuAddress)
+  instance.gfx = gfx
 
   -- Use the screen's current resolution. Window geometry is proportional and
   -- clamped to fit, so both small and large screens are supported.
@@ -562,23 +556,6 @@ function kernel.start(boot)
     drawSplash(0.25, "Loading core services")
   end
 
-  local instance = setmetatable({
-    version = version,
-    util = util,
-    text = text,
-    log = log,
-    config = config,
-    theme = theme,
-    themeModule = themeModule,
-    gfxModule = gfxModule,
-    gfx = gfx,
-    vfs = vfs,
-    volume = volume,
-    volumeAddress = boot.address,
-    address = address,
-    hostname = hostname,
-  }, { __index = kernel })
-
   -- Record the GPU, screen, and resolution for black-screen diagnostics.
   log.trace(string.format(
     "gpu %s · screen %s · %dx%d · %d KB free",
@@ -609,6 +586,22 @@ function kernel.start(boot)
     apps = apps,
     util = util,
   })
+
+  local okCluster, clusterModule = pcall(requireModule, "tc.cluster")
+  if okCluster and type(clusterModule) == "table" then
+    instance.cluster = clusterModule.new({
+      kernel = instance,
+      vfs = vfs,
+      config = config,
+      log = log,
+      version = version,
+      component = component,
+      computer = computer,
+    })
+    instance.cluster:start()
+  else
+    log.error("Cluster service unavailable: " .. tostring(clusterModule))
+  end
 
   if splash then
     drawSplash(0.75, "Starting desktop")

@@ -4,10 +4,11 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.2.3 Glyph**. The prototype boots into a desktop shell with
-six apps, persists settings, notes, and the desktop icon layout, and logs errors.
-Local simulations cover the OpenComputers API contract; in-game testing is
-tracked in [`docs/tests.md`](docs/tests.md).
+Current version: **0.3.0 Rack**. The prototype boots into a desktop shell with
+seven apps, persists settings, notes, and the desktop icon layout, and logs
+errors. The Nodes app provisions rack servers over a wired network and keeps a
+node registry. Local simulations cover the OpenComputers API contract; in-game
+testing is tracked in [`docs/tests.md`](docs/tests.md).
 
 ## Features
 
@@ -21,6 +22,9 @@ tracked in [`docs/tests.md`](docs/tests.md).
 - **Notes:** a persistent multi-line scratchpad stored at `/var/notes.txt`.
 - **Update:** version details, a SYSTEM section (memory, storage, screen,
   devices, boot volume, address), and a GitHub Releases updater.
+- **Nodes:** discover rack servers on a wired network, prepare a floppy
+  netboot installer, watch a node install, and rename or reassign nodes in
+  `/var/nodes.tsv`.
 - Difference-based framebuffer rendering.
 - No OpenOS runtime dependency: TerraCorp loads its own modules and filesystem.
 
@@ -39,8 +43,8 @@ tracked in [`docs/tests.md`](docs/tests.md).
 The desktop uses the screen's actual resolution and adapts from 40x16 to
 160x50. The icon grid covers the full desktop width and height; windows open
 below the lowest occupied icon row when the remaining height is usable, and
-centered otherwise. On a 50x16 Tier 1 screen the grid still fits all six
-pictograms in two rows. Below 80x25, System cards are compressed.
+centered otherwise. On a 50x16 Tier 1 screen the grid still fits all seven
+pictograms in three rows. Below 80x25, System cards are compressed.
 
 ## Installation
 
@@ -92,6 +96,27 @@ settings. It does not need Internet and does not write the EEPROM. If it finds
 multiple eligible target volumes, provide the TerraCorp filesystem address as
 the final argument.
 
+## Rack cluster
+
+0.3.0 turns an existing TerraCorp computer into the master of a small wired
+cluster. A rack-mounted server with no boot address boots the provisioning
+floppy, announces itself over a wired network card, receives a name and role,
+copies the runtime to its first HDD, sets its own boot address, and reboots
+headless. The master tracks nodes in `/var/nodes.tsv` and shows them in the
+Nodes app.
+
+- The master needs a wired network card, a rack with a mountable disk drive and
+  a floppy, a cable to the rack's data bus, and power on a separate bus.
+- Servers are not remote-controlled: a player must sneak-right-click each front
+  face to start it. They stay off after a world reload.
+- No EEPROM is written; a server's stock Lua BIOS boots the floppy once, then
+  boots its own HDD afterwards.
+- Back up `/var/nodes.tsv` with `/etc/terracorp.cfg` and `/var/notes.txt`. The
+  updater preserves all three.
+
+See [`docs/cluster.md`](docs/cluster.md) for the bill of materials, rack GUI
+wiring, provisioning procedure, protocol, and failure modes.
+
 ## Controls
 
 - **Desktop:** click an icon once to open its app. Drag an icon to any cell on
@@ -100,7 +125,7 @@ the final argument.
   smoothly, like a dragged window. The new layout is saved on release and
   restored after a reboot or update. With no window focused, the arrow keys move
   the selection, Home/End jump to the ends, and Enter opens the selected app.
-  F1-F6 open the six apps directly; Esc minimizes the focused window.
+  F1-F7 open the seven apps directly; Esc minimizes the focused window.
 - **Taskbar:** click a window chip to focus it; clicking the focused chip
   minimizes it.
 - **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.
@@ -116,6 +141,9 @@ the final argument.
   on its own progress screen, and rolls back if anything fails. Requires an
   Internet Card. Saved 0.2.x layouts that name the old `about` app migrate to
   `update` in place.
+- **Nodes:** P prepares the floppy installer and arms a ten-minute window; S
+  stops it. Arrows select a node, R renames, O cycles its role, and G pings it.
+  Enter commits a rename and Tab cancels it.
 - **0.1.9 and 0.1.10 updater repair:** those builds reject the filesystem's
   successful `close` (which returns no value) while staging, so an in-game update
   stops with `could not stage ... (nil)`. From OpenOS, replace `/boot/apply.lua`
@@ -128,8 +156,9 @@ the final argument.
 src/                  boot-volume contents
   init.lua            entry point
   boot/kernel.lua     filesystem, services, module loader, event loop
-  lib/tc/             core libraries, graphics, UI, and updater
-  apps/               system, files, terminal, settings, notes, update
+  boot/netboot.lua    floppy netboot installer
+  lib/tc/             core libraries, graphics, UI, updater, and cluster
+  apps/               system, files, terminal, settings, notes, update, nodes
 eeprom/init.lua       optional boot manager (not required for normal installs)
 tools/                OpenOS installer, downloader, and manifest
 tools/harness/        local Node.js simulation and tests
@@ -157,6 +186,8 @@ npm run test:updater-rollback
 npm run test:updater-recover
 npm run test:boot-update
 npm run test:notes
+npm run test:nodes
+npm run test:cluster
 npm run test:install
 npm run test:fetch
 npm run test:boot

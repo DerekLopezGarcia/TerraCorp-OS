@@ -158,7 +158,7 @@ end
 assert(select("#", fsApi.close(0)) == 0, "filesystem close must return no values")
 
 function fsApi.exists(path)
-  return readReal(path) ~= nil or directories[path] == true
+  return readReal(path) ~= nil or isDirectoryPath(path)
 end
 
 function fsApi.isDirectory(path)
@@ -222,6 +222,176 @@ function fsApi.rename(from, to)
   written[from] = nil
   deleted[from] = true
   return true
+end
+
+-- ---------------------------------------------------------------------------
+-- Independent in-memory filesystem (rack floppy)
+-- ---------------------------------------------------------------------------
+-- The Nodes scenario prepares a payload onto a floppy. That volume must not
+-- share the boot volume's store, so it gets the same component contract with
+-- its own files and capacity.
+
+local function normalizePath(path)
+  path = tostring(path or "/")
+  path = "/" .. path:gsub("^/+", "")
+  if #path > 1 then
+    path = path:gsub("/+$", "")
+  end
+  return path
+end
+
+local function newVolume(capacity)
+  local volume = {}
+  local store = {}
+  local dirs = { ["/"] = true }
+  local openHandles = {}
+  local nextId = 0
+
+  local function newHandle(path, kind)
+    nextId = nextId + 1
+    openHandles[nextId] = { path = path, kind = kind, position = 1 }
+    return nextId
+  end
+
+  function volume.open(path, mode)
+    path = normalizePath(path)
+    mode = mode or "r"
+    if mode == "r" then
+      if store[path] == nil then
+        return nil, "no such file: " .. path
+      end
+    elseif mode == "w" then
+      store[path] = ""
+      dirs[path] = nil
+    elseif mode == "a" then
+      store[path] = store[path] or ""
+    else
+      return nil, "unsupported mode: " .. tostring(mode)
+    end
+    return newHandle(path, mode)
+  end
+
+  function volume.read(id, count)
+    local handle = openHandles[id]
+    if not handle or handle.kind ~= "r" then
+      return nil, "invalid handle"
+    end
+    local content = store[handle.path] or ""
+    if handle.position > #content then
+      return nil
+    end
+    count = count or #content
+    local chunk = content:sub(handle.position, handle.position + count - 1)
+    handle.position = handle.position + #chunk
+    return chunk
+  end
+
+  function volume.write(id, data)
+    local handle = openHandles[id]
+    if not handle or handle.kind == "r" then
+      return nil, "invalid handle"
+    end
+    store[handle.path] = (store[handle.path] or "") .. data
+    return true
+  end
+
+  function volume.close(id)
+    openHandles[id] = nil
+  end
+
+  function volume.exists(path)
+    path = normalizePath(path)
+    return store[path] ~= nil or dirs[path] == true
+  end
+
+  function volume.isDirectory(path)
+    path = normalizePath(path)
+    if path == "/" or dirs[path] then
+      return true
+    end
+    local prefix = path .. "/"
+    for full in pairs(store) do
+      if full:sub(1, #prefix) == prefix then
+        return true
+      end
+    end
+    return false
+  end
+
+  function volume.isReadOnly()
+    return false
+  end
+
+  function volume.size(path)
+    local content = store[normalizePath(path)]
+    return content and #content or nil
+  end
+
+  function volume.list(path)
+    path = normalizePath(path)
+    local prefix = path == "/" and "/" or (path .. "/")
+    local seen, names = {}, {}
+    local function consider(full)
+      if full:sub(1, #prefix) ~= prefix then
+        return
+      end
+      local name = full:sub(#prefix + 1):match("^([^/]+)")
+      if name and not seen[name] then
+        seen[name] = true
+        names[#names + 1] = name
+      end
+    end
+    for full in pairs(store) do
+      consider(full)
+    end
+    for full in pairs(dirs) do
+      if full ~= "/" then
+        consider(full)
+      end
+    end
+    table.sort(names)
+    return names
+  end
+
+  function volume.makeDirectory(path)
+    path = normalizePath(path)
+    dirs[path] = true
+    return true
+  end
+
+  function volume.remove(path)
+    path = normalizePath(path)
+    store[path] = nil
+    dirs[path] = nil
+    return true
+  end
+
+  function volume.rename(from, to)
+    from = normalizePath(from)
+    to = normalizePath(to)
+    if store[from] == nil and dirs[from] == nil then
+      return nil, "source does not exist"
+    end
+    store[to] = store[from]
+    store[from] = nil
+    dirs[to] = dirs[from]
+    dirs[from] = nil
+    return true
+  end
+
+  function volume.spaceUsed()
+    local used = 0
+    for _, data in pairs(store) do
+      used = used + #data
+    end
+    return used
+  end
+
+  function volume.spaceTotal()
+    return capacity
+  end
+
+  return volume
 end
 
 -- ---------------------------------------------------------------------------
@@ -342,6 +512,7 @@ local fakeUpdateRollback = rawget(_G, "SCENARIO") == "updater_rollback"
 local fakeLegacyInternet = rawget(_G, "SCENARIO") == "updater_legacy"
 local fakeUpdateRecover = rawget(_G, "SCENARIO") == "updater_recover"
 local fakeBootUpdate = rawget(_G, "SCENARIO") == "boot_update"
+local nodesScenario = rawget(_G, "SCENARIO") == "nodes"
 local savedIconOrder = rawget(_G, "SCENARIO") == "icon_order_saved"
 local savedIconSlot = rawget(_G, "SCENARIO") == "icon_slot_saved"
 local savedUpdateIcon = rawget(_G, "SCENARIO") == "icon_update"
@@ -384,6 +555,9 @@ if savedUpdateIcon then
     .. '  iconLayout = "dashboard@1,console@2,settings@3,notes@4,files@5,about@6",\n'
     .. '}\n'
 end
+local nodesFloppy = nodesScenario and newVolume(512 * 1024) or nil
+local modemPackets = 0
+
 local kinds = {
   ["gpu-1"] = "gpu",
   ["screen-1"] = "screen",
@@ -393,10 +567,20 @@ local kinds = {
 if updateScenario then
   kinds["internet-1"] = "internet"
 end
+if nodesScenario then
+  kinds["floppy-1"] = "filesystem"
+  kinds["drive-1"] = "disk_drive"
+  kinds["modem-1"] = "modem"
+end
 
 local kindOrder = { "eeprom-1", "fs-boot", "gpu-1", "screen-1" }
 if updateScenario then
   kindOrder[#kindOrder + 1] = "internet-1"
+end
+if nodesScenario then
+  kindOrder[#kindOrder + 1] = "floppy-1"
+  kindOrder[#kindOrder + 1] = "drive-1"
+  kindOrder[#kindOrder + 1] = "modem-1"
 end
 
 component = {}
@@ -423,6 +607,8 @@ function component.proxy(address)
     return fsApi
   elseif address == "gpu-1" then
     return gpu
+  elseif address == "floppy-1" then
+    return nodesFloppy
   end
   return nil
 end
@@ -434,6 +620,24 @@ function component.invoke(address, method, ...)
       return nil, "unknown method: " .. tostring(method)
     end
     return fn(...)
+  elseif address == "floppy-1" then
+    local fn = nodesFloppy and nodesFloppy[method]
+    if not fn then
+      return nil, "unknown method: " .. tostring(method)
+    end
+    return fn(...)
+  elseif address == "drive-1" and method == "filesystem" then
+    return "floppy-1"
+  elseif address == "modem-1" then
+    if method == "isWired" then
+      return true
+    elseif method == "send" or method == "broadcast" then
+      modemPackets = modemPackets + 1
+      return true
+    elseif method == "open" or method == "close" then
+      return true
+    end
+    return nil, "unknown method: " .. tostring(method)
   elseif address == "gpu-1" and method == "bind" then
     return true
   elseif address == "internet-1" and method == "request" then
@@ -578,11 +782,32 @@ local function iconColumns()
   return math.max(1, fit)
 end
 
+local ICON_APPS = 7
+
+local function iconRowsFor(tile)
+  local desktopTop = 3
+  local available = (taskbarY - 1) - (desktopTop + 1) + 1
+  local pitch = tile + 1
+  return math.floor((available - (tile + 1)) / pitch) + 1
+end
+
+-- Match ui:resize: use the largest 5/3/2/1 tile that still fits every app.
+local function iconTileHeight()
+  local columns = iconColumns()
+  local needed = math.ceil(ICON_APPS / columns)
+  for _, candidate in ipairs({ 5, 3, 2, 1 }) do
+    if iconRowsFor(candidate) >= needed then
+      return candidate
+    end
+  end
+  return 1
+end
+
 local function iconGridBottom()
   local desktopTop = 3
-  local rows = math.ceil(6 / iconColumns())
-  -- 9x5 tiles with no vertical gap: tile + label row + next tile.
-  local tile = 5
+  local columns = iconColumns()
+  local tile = iconTileHeight()
+  local rows = math.ceil(ICON_APPS / columns)
   local lastY = desktopTop + 1 + (rows - 1) * (tile + 1)
   return lastY + tile
 end
@@ -770,6 +995,13 @@ elseif scenario == "notes" then
   ev("key_down", "screen-1", nil, 0x01, "tester") -- Esc minimizes and saves on blur
   idle(1)
   ev("key_down", "screen-1", nil, 0x3F, "tester") -- reopen the same note
+  idle(2)
+elseif scenario == "nodes" then
+  -- F7 opens the seventh app. Preparing writes the runtime to the rack floppy
+  -- and arms the ten-minute installer window.
+  ev("key_down", "screen-1", nil, 0x41, "tester") -- F7 opens Nodes
+  idle(1)
+  typeText("p")
   idle(2)
 elseif scenario == "boot_update" then
   idle(2)
@@ -1026,14 +1258,18 @@ if STRICT then
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
     if not preferences:find(
-      'iconOrder = "files,dashboard,console,settings,notes,update"',
+      'iconOrder = "files,dashboard,console,settings,notes,update,nodes"',
       1,
       true
     ) then
       errors = errors + 1
       print("FAIL: the desktop icon order was not saved")
     end
-    if not preferences:find('iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6"', 1, true) then
+    if not preferences:find(
+      'iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6,nodes@7"',
+      1,
+      true
+    ) then
       errors = errors + 1
       print("FAIL: the desktop icon layout was not saved")
     end
@@ -1065,7 +1301,11 @@ if STRICT then
       print("FAIL: the dragged icon did not render in the empty full-screen slot")
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
-    if not preferences:find('iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,files@32"', 1, true) then
+    if not preferences:find(
+      'iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,nodes@7,files@32"',
+      1,
+      true
+    ) then
       errors = errors + 1
       print("FAIL: the empty-slot layout was not saved")
     end
@@ -1091,6 +1331,20 @@ if STRICT then
     if not screen:find("UPDATE", 1, true) or not screen:find("Check for updates", 1, true) then
       errors = errors + 1
       print("FAIL: the migrated Update icon did not open the Update app")
+    end
+  end
+  if scenario == "nodes" then
+    if not screen:find("Rack nodes", 1, true) then
+      errors = errors + 1
+      print("FAIL: F7 did not open the Nodes app")
+    end
+    if not screen:find("Installer armed", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Nodes app did not arm the installer")
+    end
+    if not nodesFloppy.exists("/payload/.ready") then
+      errors = errors + 1
+      print("FAIL: the install payload was not written to the floppy")
     end
   end
   if (scenario == "updater" or scenario == "updater_legacy") then

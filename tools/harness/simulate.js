@@ -1,6 +1,6 @@
 // Run TerraCorp OS outside Minecraft and print the resulting screen.
 //
-//   node tools/harness/simulate.js [dashboard|console|files|settings|all] [--strict] [--fault=N] [--screen=WxH]
+//   node tools/harness/simulate.js [dashboard|console|files|settings|nodes|all] [--strict] [--fault=N] [--screen=WxH]
 //
 // Bundle src/ in memory, expose it as a boot volume to API-faithful fake
 // components, and replay events. This smoke test does not replace in-game

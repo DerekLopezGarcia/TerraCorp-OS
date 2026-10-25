@@ -15,6 +15,10 @@ config.defaults = {
   hostname = "",
   iconOrder = "",
   iconLayout = "",
+  role = "desktop",
+  nodeRole = "worker",
+  master = "",
+  masterId = "",
 }
 
 config.data = {}
@@ -22,10 +26,14 @@ config.data = {}
 local ACCENTS = { "cyan", "orange", "lime", "lightblue", "yellow", "purple" }
 local CHARSETS = { "unicode", "ascii" }
 local LOG_LEVELS = { "debug", "info", "warn", "error" }
+local ROLES = { desktop = true, node = true }
+local NODE_ROLES = { worker = true, storage = true, node = true }
 
 config.accents = ACCENTS
 config.charsets = CHARSETS
 config.logLevels = LOG_LEVELS
+config.roles = ROLES
+config.nodeRoles = NODE_ROLES
 
 local function copyDefaults()
   local data = {}
@@ -82,6 +90,12 @@ local function accepted(key, value)
   end
   if key == "clock24" or key == "splash" then
     return type(value) == "boolean"
+  end
+  if key == "role" then
+    return ROLES[value] == true
+  end
+  if key == "nodeRole" then
+    return NODE_ROLES[value] == true
   end
   return type(value) == "string"
 end

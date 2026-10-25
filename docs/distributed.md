@@ -2,7 +2,8 @@
 
 This document records the target architecture for OpenComputers and the
 Supersymmetry modpack. The design is a single application server with
-lightweight terminals in each factory; only the local core exists today.
+lightweight terminals in each factory; 0.3.x adds the first cable-connected
+cluster, while sessions remain local until 0.4.
 
 ## Mod constraints
 
@@ -20,15 +21,42 @@ lightweight terminals in each factory; only the local core exists today.
 An 80x25 display has 2,000 cells. A full colored frame is roughly 4-6 KB, so
 sending every cell at relay speed is not viable. Send changed spans instead.
 
+## 0.3.x cluster
+
+The first cluster is deliberately small and wired:
+
+- The existing computer is the **master**. It keeps the desktop, the node
+  registry, and the provisioning payload.
+- A **rack** holds servers and one mountable disk drive. The rack is not a
+  component; the master discovers it through the drive and through node
+  announcements.
+- Each server runs a headless TerraCorp system from its first HDD. The master
+  provisions it from the rack floppy: the server copies the runtime, writes
+  `role` and `master` to `/etc/terracorp.cfg`, and sets its boot address.
+- Nodes speak to the master over a wired network card using `tc.net`. The same
+  side bus also carries the floppy filesystem, which is `Visibility.Network`.
+- Server HDDs and internal components stay `Visibility.Neighbors`; the master
+  cannot read them over the cable. Storage must be a service (0.3.2), not bus
+  access.
+- There is no remote power-on. After a world reload, a player starts each server
+  with a sneak-use. A chunk loader must cover the rack.
+
+The physical build, rack GUI wiring, and protocol are in
+[`cluster.md`](cluster.md).
+
 ## Roles and sessions
 
 | Role | Hardware | Responsibility |
 |---|---|---|
-| `core` | Server with CPU/RAM, no screen | Runtime, sessions, apps, logging |
+| `core` / `master` | Server or desktop with CPU/RAM, no screen required | Runtime, sessions, apps, logging, registry |
 | `terminal` | Computer with screen, keyboard, and network | Render session and send input |
 | `storage` | RAID server | Files, replicas, backups |
 | `worker` | Headless server | Batch jobs |
 | `gateway` | Relay/Net Splitter | Segment networks; run no services |
+
+In 0.3.x the `core` is the existing desktop and is called the master. The
+`worker` and `storage` roles are assigned to rack nodes; `terminal` arrives with
+remote sessions in 0.4.
 
 Each terminal has its own desktop session (windows, apps, focus). Profiles are
 `desktop` and `kiosk:<app>`. Session state lives on the server so a replacement
@@ -46,13 +74,13 @@ Reuse the local row-delta renderer. Send spans as
   is a network bandwidth policy, not an OpenComputers screen refresh limit.
 - RLE may encode repeated row backgrounds; do not send video or images.
 
-F2 introduces `tc.display.local`, `tc.display.remote`, and
+0.4 introduces `tc.display.local`, `tc.display.remote`, and
 `tc.display.headless` backends.
 
 ## Memory budget
 
 The current Lua-table framebuffer may consume 200-250 KB per 80x25 session, so
-it cannot support multiple tier-2 sessions. F2 packs each cell into two bytes:
+it cannot support multiple tier-2 sessions. 0.4 packs each cell into two bytes:
 
 | Allocation | Estimate |
 |---|---:|
@@ -100,6 +128,8 @@ must not corrupt data or take down the remaining system.
 ## Security, risks, and open work
 
 - No accounts; attribute `touch`, `drag`, and `key_down` to the player.
+- 0.3.x uses a per-provisioning token to reject stale assignments. It is not
+  authentication; the cluster is a local cable segment.
 - A per-segment shared key pairs machines; it does not authenticate people.
 - Remote jobs invoke contracted methods only; they cannot request components.
 - Main risks: relay saturation, per-session memory, chunk loading, power policy,

@@ -9,7 +9,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const simulate = path.join(__dirname, "simulate.js");
-const scenarios = ["dashboard", "desktop", "console", "files", "settings", "notes", "updater"];
+const scenarios = ["dashboard", "desktop", "console", "files", "settings", "notes", "updater", "nodes"];
 const screens = [
   { width: 160, height: 50 },
   { width: 120, height: 40 },
