@@ -43,6 +43,7 @@ jobs:
           npm run test:updater-rollback
           npm run test:updater-recover
           npm run test:boot-update
+          npm run test:notes
           npm run test:install
           npm run test:fetch
           npm run test:boot

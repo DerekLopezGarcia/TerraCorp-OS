@@ -70,7 +70,7 @@ The UI keeps a z-ordered window list, focus, and drag state.
 | `touch` | Dock, window controls/title bar, or focused app |
 | `drag` / `drop` | Move window or forward to app |
 | `scroll` | Forward to app under pointer |
-| `key_down` | Global Esc/F1-F5 shortcuts or focused app |
+| `key_down` | Global Esc/F1-F6 shortcuts or focused app |
 | `screen_resized` | Rebind GPU and resize UI |
 | `interrupted` | Ignored so Ctrl+Alt+C does not terminate the OS |
 
@@ -105,6 +105,10 @@ end
 
 function app:tick(ctx)
   return false
+end
+
+-- Focus left the window (another app opened or it was minimized).
+function app:blur(ctx)
 end
 
 function app:close(ctx)

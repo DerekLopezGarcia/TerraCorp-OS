@@ -11,7 +11,7 @@ local MODULE_ROOTS = {
   apps = "/apps/",
 }
 
-local APP_IDS = { "dashboard", "files", "console", "settings", "about" }
+local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "about" }
 
 local function packCall(fn, ...)
   local result = table.pack(pcall(fn, ...))

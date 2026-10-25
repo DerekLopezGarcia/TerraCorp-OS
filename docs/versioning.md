@@ -44,17 +44,18 @@ from an interrupted attempt is restored on the next start instead of blocking
 updates. The result is written to `/var/update/status` and shown in About.
 
 The updater changes only OS files on the boot filesystem. It does not modify
-`/etc` settings, user data, OpenOS, the BIOS, or the EEPROM. An Internet Card
-and permission for HTTPS requests are required. If there is no Internet Card,
-no stable release, insufficient disk space, or a download/validation error, the
-current installation remains in place.
+`/etc` settings, user data (including `/var/notes.txt`), OpenOS, the BIOS, or
+the EEPROM. An Internet Card and permission for HTTPS requests are required. If
+there is no Internet Card, no stable release, insufficient disk space, or a
+download/validation error, the current installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.1.9. Versions through 0.1.6 had Internet Card
+The current build is 0.1.10. Versions through 0.1.6 had Internet Card
 compatibility issues and rejected non-`src/` entries in the repository manifest;
 install 0.1.9 manually from OpenOS on those. Versions 0.1.7 and 0.1.8 can update
-to 0.1.9 in-game, but cannot retry a release that left a backup behind after an
-interrupted install; from 0.1.9 the boot-time applier restores such leftovers.
+to the latest release in-game, but cannot retry a release that left a backup
+behind after an interrupted install; from 0.1.9 the boot-time applier restores
+such leftovers.
 The automated tests cover modern and legacy handles, a full repository manifest,
 backup recovery, rollback, and the boot-time install.

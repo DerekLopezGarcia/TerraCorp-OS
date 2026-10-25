@@ -637,6 +637,16 @@ elseif scenario == "files" then
 elseif scenario == "settings" then
   ev("touch", "screen-1", 40, dockY, 0, "tester")
   idle(3)
+elseif scenario == "notes" then
+  ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens Notes
+  idle(1)
+  typeText("Reactor inspection due Friday")
+  ev("key_down", "screen-1", nil, 0x1C, "tester") -- new line, saving the note
+  typeText("coolant loop check")
+  ev("key_down", "screen-1", nil, 0x01, "tester") -- Esc minimizes and saves on blur
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x3F, "tester") -- reopen the same note
+  idle(2)
 elseif scenario == "boot_update" then
   idle(2)
 elseif scenario == "updater" or scenario == "updater_legacy" or scenario == "updater_recover" then
@@ -653,7 +663,7 @@ elseif scenario == "updater" or scenario == "updater_legacy" or scenario == "upd
     written[backup .. "/lib/tc/version.lua"] = 'return { version = "0.0.1" }\n'
   end
   local wx, wy, winWidth, winHeight = windowRect()
-  ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens About
+  ev("key_down", "screen-1", nil, 0x40, "tester") -- F6 opens About
   idle(1)
   local contentHeight = winHeight - 3
   local buttonRow = math.max(4, contentHeight - 2)
@@ -667,7 +677,7 @@ elseif scenario == "updater_rollback" then
   -- /boot/apply.lua is unavailable.
   deleted["/boot/apply.lua"] = true
   local wx, wy, winWidth, winHeight = windowRect()
-  ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens About
+  ev("key_down", "screen-1", nil, 0x40, "tester") -- F6 opens About
   idle(1)
   local contentHeight = winHeight - 3
   local buttonRow = math.max(4, contentHeight - 2)
@@ -686,7 +696,7 @@ else
   ev("key_down", "screen-1", nil, 0x3D, "tester")
   typeText("help")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
-  ev("key_down", "screen-1", nil, 0x3F, "tester")
+  ev("key_down", "screen-1", nil, 0x40, "tester")
 end
 
 -- ---------------------------------------------------------------------------
@@ -846,6 +856,21 @@ if STRICT then
   if scenario == "files" and stats.listReturned == 0 then
     errors = errors + 1
     print("FAIL: Files scenario did not list a directory")
+  end
+  if scenario == "notes" then
+    local content = readReal("/var/notes.txt")
+    if not content then
+      errors = errors + 1
+      print("FAIL: Notes did not write /var/notes.txt")
+    elseif not content:find("Reactor inspection due Friday", 1, true)
+      or not content:find("coolant loop check", 1, true) then
+      errors = errors + 1
+      print("FAIL: Notes did not persist both lines")
+    end
+    if not screen:find("Station notes", 1, true) then
+      errors = errors + 1
+      print("FAIL: Notes did not redraw the saved note")
+    end
   end
   if scenario == "dashboard" and stats.spaceCalls == 0 then
     errors = errors + 1

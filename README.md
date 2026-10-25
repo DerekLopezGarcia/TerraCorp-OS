@@ -4,9 +4,10 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.1.9 Foundry**. The prototype boots, provides five apps,
-persists settings, and logs errors. Local simulations cover the OpenComputers
-API contract; in-game testing is tracked in [`docs/tests.md`](docs/tests.md).
+Current version: **0.1.10 Ledger**. The prototype boots, provides six apps,
+persists settings and notes, and logs errors. Local simulations cover the
+OpenComputers API contract; in-game testing is tracked in
+[`docs/tests.md`](docs/tests.md).
 
 ## Features
 
@@ -15,6 +16,7 @@ API contract; in-game testing is tracked in [`docs/tests.md`](docs/tests.md).
 - **Files:** browse the boot volume, view sizes, and preview text files.
 - **Console:** built-in shell (`ls`, `cd`, `cat`, `log`, `open`, `theme`, etc.).
 - **Settings:** accent color, character set, clock format, boot splash, and log level.
+- **Notes:** a persistent multi-line scratchpad stored at `/var/notes.txt`.
 - **About:** version details and a GitHub Releases updater.
 - Difference-based framebuffer rendering.
 - No OpenOS runtime dependency: TerraCorp loads its own modules and filesystem.
@@ -86,12 +88,15 @@ the final argument.
 
 ## Controls
 
-- **Dock:** click Dashboard, Files, Console, Settings, or About.
-- **Keyboard:** F1-F5 open the corresponding app; Esc minimizes the focused window.
+- **Dock:** click Dashboard, Files, Console, Settings, Notes, or About.
+- **Keyboard:** F1-F6 open the corresponding app; Esc minimizes the focused window.
 - **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.
 - **Files:** arrows select, Enter opens, Backspace goes up, R reloads.
 - **Console:** type commands and press Enter; `help` lists commands.
 - **Settings:** click a value to cycle it.
+- **Notes:** type to edit; Enter starts a line and saves. PgUp/PgDn scroll,
+  arrows/Home/End move the cursor, and clicking a line places the cursor.
+  Losing focus also saves.
 - **Updater:** open About, check for updates, press **Install** and let the
   computer restart. The update downloads and installs before the desktop starts,
   on its own progress screen, and rolls back if anything fails. Requires an
@@ -104,7 +109,7 @@ src/                  boot-volume contents
   init.lua            entry point
   boot/kernel.lua     filesystem, services, module loader, event loop
   lib/tc/             core libraries, graphics, UI, and updater
-  apps/               dashboard, files, console, settings, about
+  apps/               dashboard, files, console, settings, notes, about
 eeprom/init.lua       optional boot manager (not required for normal installs)
 tools/                OpenOS installer, downloader, and manifest
 tools/harness/        local Node.js simulation and tests
@@ -129,6 +134,7 @@ npm run test:updater-legacy
 npm run test:updater-rollback
 npm run test:updater-recover
 npm run test:boot-update
+npm run test:notes
 npm run test:install
 npm run test:fetch
 npm run test:boot

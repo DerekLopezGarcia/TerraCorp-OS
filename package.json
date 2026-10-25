@@ -1,6 +1,6 @@
 {
   "name": "terracorp-os",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "description": "TerraCorp OS: industrial desktop operating system for OpenComputers in the Supersymmetry modpack",
   "license": "MIT",
@@ -13,6 +13,8 @@
     "sim:console": "node tools/harness/simulate.js console",
     "sim:files": "node tools/harness/simulate.js files",
     "sim:settings": "node tools/harness/simulate.js settings",
+    "sim:notes": "node tools/harness/simulate.js notes",
+    "test:notes": "node tools/harness/simulate.js notes --strict",
     "test:install": "node tools/harness/test-install.js",
     "test:boot": "node tools/harness/test-boot.js",
     "test:faults": "node tools/harness/test-faults.js",

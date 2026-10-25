@@ -8,7 +8,7 @@ about.__index = about
 about.id = "about"
 about.title = "About"
 about.short = "About"
-about.order = 5
+about.order = 6
 
 function about.create()
   return setmetatable({ updateState = "check", updateStatus = "Check GitHub Releases for a stable update." }, about)

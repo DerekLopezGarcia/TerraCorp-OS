@@ -2,7 +2,7 @@
 --
 -- App contract (see docs/architecture.md):
 --   module = { id, title, order, create(ctx) -> instance }
---   instance = { draw(ctx), handle(ctx, name, ...), close(ctx) }
+--   instance = { draw(ctx), handle(ctx, name, ...), blur(ctx), close(ctx) }
 -- `ctx.view` is a clipped gfx subview with local coordinates 1..w / 1..h.
 
 local text = require("tc.text")
@@ -138,7 +138,19 @@ function ui:focusNextWindow()
   self:setFocus(best)
 end
 
+function ui:blur(win)
+  if win and win.instance and win.instance.blur then
+    local ok, reason = pcall(win.instance.blur, win.instance, self:context(win))
+    if not ok then
+      self.log.warn("App blur failed in " .. tostring(win.id) .. ": " .. tostring(reason))
+    end
+  end
+end
+
 function ui:setFocus(win)
+  if self.focus and self.focus ~= win then
+    self:blur(self.focus)
+  end
   if win and win.minimized then
     win.minimized = false
   end
@@ -234,6 +246,7 @@ function ui:minimize(win)
   if not win then
     return
   end
+  self:blur(win)
   win.minimized = true
   if self.focus == win then
     self.focus = nil
@@ -312,7 +325,8 @@ function ui:drawDock()
 
   self.gfx:fill(1, row, self.w, 1, " ", c.dim, c.panel)
   self.gfx:fill(1, self.h, self.w, 1, " ", c.panel, c.bg)
-  self.gfx:put(2, self.h, "F1-F5 open · Esc minimize · drag the title bar to move a window", c.dim, c.bg)
+  local shortcut = "F1-F" .. tostring(math.min(#self.order, 10))
+  self.gfx:put(2, self.h, shortcut .. " open · Esc minimize · drag the title bar to move a window", c.dim, c.bg)
 
   local column = 2
   for index, module in ipairs(self.order) do
@@ -699,7 +713,7 @@ function ui:onKey(char, code)
   end
 
   if code then
-    for index = 1, math.min(#self.order, 5) do
+    for index = 1, math.min(#self.order, 10) do
       if code == keys["F" .. index] then
         self:open(self.order[index].id)
         return
