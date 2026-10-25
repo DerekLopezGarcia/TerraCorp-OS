@@ -52,12 +52,14 @@ and regression test, not a replacement for the game test.
 
    It must return no lines. Record warnings separately.
 6. Repeat with Tier 2 CPU/GPU and a Tier 2 screen at 80x25.
-7. Install 0.1.9 manually from OpenOS, reboot, then in About press **Install**
-   for 0.1.10 and confirm the boot-time progress screen appears before the
-   desktop. Confirm the version changes, settings persist, a note written in
-   Notes survives, the EEPROM is unchanged, and `/var/update/pending` is gone
-   afterwards. Turn the computer off during the progress screen once and verify
-   the next start restores the previous version instead of hanging.
+7. Recover the 0.1.9 or 0.1.10 updater: from OpenOS, copy the 0.1.11
+   `src/boot/apply.lua` onto the TerraCorp volume as `/boot/apply.lua` (do not
+   reinstall the whole tree). Reboot, then in About press **Install** for 0.1.11
+   and confirm the boot-time progress screen appears before the desktop. Confirm
+   the version changes, settings persist, a note written in Notes survives, the
+   EEPROM is unchanged, and `/var/update/pending` is gone afterwards. Turn the
+   computer off during the progress screen once and verify the next start
+   restores the previous version instead of hanging.
 
 ## Results log
 
@@ -71,12 +73,12 @@ and regression test, not a replacement for the game test.
 | Criterion | Status |
 |---|---|
 | All six apps usable in-game | Tested by user; console input errors still need an in-game retest |
-| 30-minute session without errors | Not met in the supplied 0.1.0 log; repeat on the published 0.1.9 build |
+| 30-minute session without errors | Not met in the supplied 0.1.0 log; repeat on the published 0.1.11 build |
 | At least 250 KB free on Tier 2 | Recorded logs exceed the threshold; confirm CPU/GPU tier |
 | First render within 2 seconds | Recorded values are 1.05 s and 1.25 s; confirm on Tier 2 hardware |
 | Resolution adaptation and GPU retry tests | Verified by `npm run test:screens` and `npm run test:faults` |
-| Updater detects, stages, installs, and restarts from a stable release | Modern/legacy response paths, full manifest filtering, backup recovery, rollback, and the boot-time applier pass in the harness; real update from 0.1.9 pending |
-| Notes persist across restarts and updates | `npm run test:notes` verifies `/var/notes.txt`; confirm in-game after the 0.1.10 update |
+| Updater detects, stages, installs, and restarts from a stable release | Modern/legacy response paths, full manifest filtering, backup recovery, rollback, and the boot-time applier (including a successful close with no return value) pass in the harness; real 0.1.9 → 0.1.11 update pending the one-file repair |
+| Notes persist across restarts and updates | `npm run test:notes` verifies `/var/notes.txt`; confirm in-game after the 0.1.11 update |
 | Dashboard uptime advances every second | `npm run test:dashboard-tick` passes; verify in-game |
 | UI loop requests 30 Hz idle cadence | `npm run test:refresh-rate` verifies the 1/30 s signal wait; actual display cadence must be measured in-game |
 | Window drag signal rate | In-game: Console `dragtest`, drag its title bar for 5-10 seconds, release, then `log 10` |

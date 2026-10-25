@@ -51,11 +51,15 @@ download/validation error, the current installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.1.10. Versions through 0.1.6 had Internet Card
+The current build is 0.1.11. Versions through 0.1.6 had Internet Card
 compatibility issues and rejected non-`src/` entries in the repository manifest;
 install 0.1.9 manually from OpenOS on those. Versions 0.1.7 and 0.1.8 can update
 to the latest release in-game, but cannot retry a release that left a backup
 behind after an interrupted install; from 0.1.9 the boot-time applier restores
-such leftovers.
+such leftovers. Versions 0.1.9 and 0.1.10 treat the filesystem `close`
+callback's Unit return as a failure, so they cannot stage any update; replace
+`/boot/apply.lua` with the 0.1.11 file from OpenOS (or reinstall) before
+retrying. 0.1.11 fixes the applier.
 The automated tests cover modern and legacy handles, a full repository manifest,
-backup recovery, rollback, and the boot-time install.
+backup recovery, rollback, the boot-time install, and a successful close that
+returns no value.

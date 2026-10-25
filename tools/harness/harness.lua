@@ -149,8 +149,13 @@ end
 
 function fsApi.close(id)
   handles[id] = nil
-  return true
+  -- OpenComputers declares the filesystem `close` callback as Unit, so real
+  -- computers receive no value on success. Returning true here would hide
+  -- updater bugs that reject a successful close.
 end
+
+-- Guard the fake itself: a callback that returns values cannot model OC.
+assert(select("#", fsApi.close(0)) == 0, "filesystem close must return no values")
 
 function fsApi.exists(path)
   return readReal(path) ~= nil or directories[path] == true

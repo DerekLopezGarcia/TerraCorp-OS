@@ -4,7 +4,7 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.1.10 Ledger**. The prototype boots, provides six apps,
+Current version: **0.1.11 Ledger**. The prototype boots, provides six apps,
 persists settings and notes, and logs errors. Local simulations cover the
 OpenComputers API contract; in-game testing is tracked in
 [`docs/tests.md`](docs/tests.md).
@@ -101,6 +101,11 @@ the final argument.
   computer restart. The update downloads and installs before the desktop starts,
   on its own progress screen, and rolls back if anything fails. Requires an
   Internet Card.
+- **0.1.9 and 0.1.10 updater repair:** those builds reject the filesystem's
+  successful `close` (which returns no value) while staging, so an in-game update
+  stops with `could not stage ... (nil)`. From OpenOS, replace `/boot/apply.lua`
+  on the TerraCorp volume with the 0.1.11 file, or reinstall from OpenOS. Settings
+  and `/var/notes.txt` are preserved either way.
 
 ## Repository layout
 

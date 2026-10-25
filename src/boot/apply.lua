@@ -50,7 +50,6 @@ local function readFile(path)
     end
     chunks[#chunks + 1] = data
   end
-  fs("close", handle)
   return table.concat(chunks)
 end
 
@@ -97,9 +96,12 @@ local function writeFile(path, body)
       return nil, writeError or ("could not write " .. path)
     end
   end
+  -- OpenComputers declares the filesystem `close` callback as Unit, so it
+  -- returns no values on success. Treating a nil result as failure rejected
+  -- every staged file; only an explicit false or an exception is an error.
   local ok, closeError = fs("close", handle)
-  if not ok then
-    return nil, closeError
+  if ok == false or closeError ~= nil then
+    return nil, closeError or ("could not close " .. path)
   end
   return true
 end
