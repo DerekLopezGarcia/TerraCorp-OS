@@ -4,7 +4,7 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.1.5 Foundry**. The prototype boots, provides five apps,
+Current version: **0.1.6 Foundry**. The prototype boots, provides five apps,
 persists settings, and logs errors. Local simulations cover the OpenComputers
 API contract; in-game testing is tracked in [`docs/tests.md`](docs/tests.md).
 
@@ -62,6 +62,28 @@ required.
    EEPROM. **Do not use `--eeprom` unless you intentionally want to replace the
    BIOS.**
 
+### Offline installer floppy
+
+A 512 KiB floppy is large enough for the current installer bundle (about
+133 KiB). In OpenOS, connect and format the floppy, find its mount under
+`/mnt`, then download the bundle directly onto it:
+
+```lua
+wget https://raw.githubusercontent.com/DerekLopezGarcia/TerraCorp-OS/main/tools/fetch.lua /tmp/fetch.lua
+lua /tmp/fetch.lua /mnt/<floppy-mount>
+```
+
+On later installs or repairs, insert the floppy and run:
+
+```lua
+lua /mnt/<floppy-mount>/tools/install.lua /mnt/<floppy-mount>
+```
+
+The installer can update an existing TerraCorp boot volume while preserving
+settings. It does not need Internet and does not write the EEPROM. If it finds
+multiple eligible target volumes, provide the TerraCorp filesystem address as
+the final argument.
+
 ## Controls
 
 - **Dock:** click Dashboard, Files, Console, Settings, or About.
@@ -99,6 +121,7 @@ npm run sim
 npm run sim:oc
 npm run test:dashboard-tick
 npm run test:refresh-rate
+npm run test:drag-metric
 npm run test:updater
 npm run test:updater-legacy
 npm run test:updater-rollback

@@ -131,6 +131,7 @@ function console:command(ctx, line)
       "mem            show node memory",
       "comps          list connected components",
       "log [n]        show recent log entries",
+      "dragtest       measure window-drag event rate",
       "apps           list available apps",
       "open <id>      open an app",
       "theme <name>   change the accent color",
@@ -253,6 +254,12 @@ function console:command(ctx, line)
       end
       self:push(string.format("%s %s %s", entry.time, entry.tag, entry.message), kind)
     end
+    return
+  end
+
+  if name == "dragtest" then
+    ctx.ui:armDragTest()
+    self:push("Drag test armed. Drag this Console title bar for 5-10 seconds, then run `log 10`.", "ok")
     return
   end
 

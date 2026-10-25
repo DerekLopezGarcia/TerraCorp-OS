@@ -41,6 +41,7 @@ npm run sim
 npm run sim:oc
 npm run test:dashboard-tick
 npm run test:refresh-rate
+npm run test:drag-metric
 npm run test:updater
 npm run test:updater-legacy
 npm run test:updater-rollback

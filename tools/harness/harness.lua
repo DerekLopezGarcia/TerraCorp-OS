@@ -583,6 +583,20 @@ if scenario == "dashboard_tick" then
   stats.dashboardTickChecked = true
 elseif scenario == "refresh_rate" then
   idle(1)
+elseif scenario == "drag_metric" then
+  local wx, wy = windowRect()
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Console
+  idle(1)
+  typeText("dragtest")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  ev("touch", "screen-1", wx + 2, wy, 0, "tester")
+  for index = 1, 6 do
+    idle(8)
+    ev("drag", "screen-1", wx + 2 + index, wy + 1, 0, "tester")
+  end
+  ev("drop", "screen-1", wx + 8, wy + 1, 0, "tester")
+  idle(1)
 elseif scenario == "dashboard" then
   ev("touch", "screen-1", 3, dockY, 0, "tester")
   idle(12)
@@ -746,6 +760,10 @@ if STRICT then
       errors = errors + 1
       print("FAIL: idle signal wait exceeds the 30 Hz target")
     end
+  end
+  if scenario == "drag_metric" and not screen:find("Drag test:", 1, true) then
+    errors = errors + 1
+    print("FAIL: drag-event measurement was not displayed")
   end
 
   if screen:find("could not list", 1, true) then

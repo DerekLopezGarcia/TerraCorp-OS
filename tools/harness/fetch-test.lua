@@ -138,6 +138,7 @@ end
 
 if scenario == "ok" then
   check(has("RESULT: OK"), "success result was not reported")
+  check(not has("--eeprom"), "default install instructions must not flash the EEPROM")
   check(disk["/home/TerraCorp-OS/src/init.lua"] == "return 1\n", "init.lua was truncated")
   check(disk["/home/TerraCorp-OS/src/boot/kernel.lua"] == "return 2\n", "kernel.lua was truncated")
 elseif scenario == "404" then

@@ -45,6 +45,8 @@ function ui.new(env)
   self.focus = nil
   self.z = 0
   self.dragging = nil
+  self.dragTestArmed = false
+  self.dragTest = nil
   self.notice = nil
   self.dirty = true
 
@@ -84,6 +86,12 @@ end
 
 function ui:markDirty()
   self.dirty = true
+end
+
+function ui:armDragTest()
+  self.dragTestArmed = true
+  self.dragTest = nil
+  self:notify("info", "Drag test armed: drag a title bar for 5-10 seconds, then release.")
 end
 
 function ui:findWindow(id)
@@ -531,6 +539,10 @@ function ui:onTouch(x, y, button)
       return
     end
     self.dragging = { win = win, dx = x - win.x, dy = y - win.y }
+    if self.dragTestArmed then
+      self.dragTestArmed = false
+      self.dragTest = { count = 0, firstAt = nil, lastAt = nil, maxGap = 0 }
+    end
     return
   end
 
@@ -541,6 +553,18 @@ end
 
 function ui:onDrag(x, y, button)
   if self.dragging then
+    local metrics = self.dragTest
+    if metrics then
+      local now = self.kernel:uptime()
+      if metrics.lastAt then
+        metrics.maxGap = math.max(metrics.maxGap, now - metrics.lastAt)
+      else
+        metrics.firstAt = now
+      end
+      metrics.lastAt = now
+      metrics.count = metrics.count + 1
+    end
+
     local win = self.dragging.win
     win.x = util.clamp(x - self.dragging.dx, 1, self.w - win.w + 1)
     win.y = util.clamp(y - self.dragging.dy, 1, self.h - win.h + 1)
@@ -557,6 +581,20 @@ end
 function ui:onDrop(x, y, button)
   if self.dragging then
     self.dragging = nil
+    local metrics = self.dragTest
+    self.dragTest = nil
+    if metrics then
+      local elapsed = metrics.lastAt and metrics.firstAt and metrics.lastAt - metrics.firstAt or 0
+      local rate = elapsed > 0 and (metrics.count - 1) / elapsed or 0
+      local report = string.format(
+        "Drag test: %d signals, %.1f Hz avg, %.0f ms max gap",
+        metrics.count,
+        rate,
+        metrics.maxGap * 1000
+      )
+      self.log.info(report)
+      self:notify("info", report)
+    end
     self.dirty = true
     return
   end
