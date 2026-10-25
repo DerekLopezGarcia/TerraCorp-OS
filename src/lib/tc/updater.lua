@@ -192,14 +192,20 @@ local function manifestPaths(body)
   for line in body:gmatch("[^\r\n]+") do
     line = line:gsub("^%s+", ""):gsub("%s+$", "")
     if line ~= "" and line:sub(1, 1) ~= "#" then
-      if not line:match("^src/[%w_%-./]+%.lua$") or line:find("..", 1, true) then
-        return nil, "The release manifest contains an unsafe path."
-      end
-      if not seen[line] then
-        seen[line] = true
-        paths[#paths + 1] = line
-        if #paths > MAX_FILES then
-          return nil, "The release contains too many files."
+      -- The repository manifest also contains EEPROM and OpenOS tooling files.
+      -- The updater installs only the OS tree, so ignore entries outside src/.
+      if line:sub(1, 4) == "src/" then
+        if not line:match("^src/[%w_%-./]+%.lua$")
+          or line:find("..", 1, true)
+          or line:find("//", 1, true) then
+          return nil, "The release manifest contains an unsafe OS path."
+        end
+        if not seen[line] then
+          seen[line] = true
+          paths[#paths + 1] = line
+          if #paths > MAX_FILES then
+            return nil, "The release contains too many OS files."
+          end
         end
       end
     end

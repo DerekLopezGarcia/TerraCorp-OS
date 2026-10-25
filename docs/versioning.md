@@ -13,7 +13,7 @@ published, non-draft, non-prerelease GitHub Release stable.
 3. Commit the release and create a matching annotated tag, for example:
 
    ```sh
-   git tag -a v0.1.6 -m "TerraCorp OS 0.1.6"
+   git tag -a v0.1.7 -m "TerraCorp OS 0.1.7"
    git push origin main --tags
    ```
 
@@ -44,8 +44,8 @@ current installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.1.6. Updater builds through 0.1.4 did not handle both
-the asynchronous response handshake and older Internet Card handles that omit
-`finishConnect`. Install 0.1.5 manually from OpenOS on those versions; the
-updater can then be tested against a later stable release. The automated tests
-cover both handle variants with a mocked next-patch release.
+The current build is 0.1.7. Updater versions through 0.1.6 had Internet Card
+compatibility issues and rejected non-`src/` entries in the repository manifest.
+Install 0.1.7 manually from OpenOS on those versions; the updater can then be
+used normally. The automated tests cover modern and legacy handles, a full
+repository manifest, and a mocked next-patch release.

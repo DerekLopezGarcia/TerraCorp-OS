@@ -399,7 +399,7 @@ function component.invoke(address, method, ...)
     if url:find("/releases/latest", 1, true) then
       body = '{"tag_name":"v' .. mockedReleaseVersion .. '"}'
     elseif url:find("/tools/manifest.txt", 1, true) then
-      body = "src/init.lua\nsrc/boot/kernel.lua\nsrc/lib/tc/version.lua\n"
+      body = "eeprom/init.lua\nsrc/init.lua\nsrc/boot/kernel.lua\nsrc/lib/tc/version.lua\ntools/fetch.lua\n"
     elseif url:find("/src/lib/tc/version.lua", 1, true) then
       body = 'return { product = "TerraCorp OS", company = "TerraCorp", tagline = "Architects of Dawn", version = "'
         .. mockedReleaseVersion .. '", codename = "Foundry", api = 1, license = "MIT" }\n'

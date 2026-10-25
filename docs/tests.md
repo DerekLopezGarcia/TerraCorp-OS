@@ -49,8 +49,8 @@ and regression test, not a replacement for the game test.
 
    It must return no lines. Record warnings separately.
 6. Repeat with Tier 2 CPU/GPU and a Tier 2 screen at 80x25.
-7. Install/publish 0.1.6 manually from OpenOS, then publish a later stable
-   release with a matching tag. From 0.1.6, update in About and restart. Confirm
+7. Install/publish 0.1.7 manually from OpenOS, then publish a later stable
+   release with a matching tag. From 0.1.7, update in About and restart. Confirm
    the version changes, settings persist, and the EEPROM is unchanged.
 
 ## Results log
@@ -65,11 +65,11 @@ and regression test, not a replacement for the game test.
 | Criterion | Status |
 |---|---|
 | All five apps usable in-game | Tested by user; console input errors still need an in-game retest |
-| 30-minute session without errors | Not met in the supplied 0.1.0 log; repeat on the published 0.1.6 build |
+| 30-minute session without errors | Not met in the supplied 0.1.0 log; repeat on the published 0.1.7 build |
 | At least 250 KB free on Tier 2 | Recorded logs exceed the threshold; confirm CPU/GPU tier |
 | First render within 2 seconds | Recorded values are 1.05 s and 1.25 s; confirm on Tier 2 hardware |
 | Resolution adaptation and GPU retry tests | Verified by `npm run test:screens` and `npm run test:faults` |
-| Updater detects, stages, installs, and restarts from a stable release | Modern/legacy async response paths and injected rollback pass in the harness; real update from 0.1.6 pending |
+| Updater detects, stages, installs, and restarts from a stable release | Modern/legacy response paths, full manifest filtering, and injected rollback pass in the harness; real update from 0.1.7 pending |
 | Dashboard uptime advances every second | `npm run test:dashboard-tick` passes; verify in-game |
 | UI loop requests 30 Hz idle cadence | `npm run test:refresh-rate` verifies the 1/30 s signal wait; actual display cadence must be measured in-game |
 | Window drag signal rate | In-game: Console `dragtest`, drag its title bar for 5-10 seconds, release, then `log 10` |
