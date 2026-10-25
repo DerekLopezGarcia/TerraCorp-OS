@@ -1,12 +1,10 @@
--- Arnés de ejecución de TerraCorp OS fuera de Minecraft: componentes falsos,
--- disco en memoria (volcado desde el repo real por gen.js), GPU que rasteriza
--- en una matriz y señales guionizadas. Detecta errores de ejecución.
+-- Run TerraCorp OS outside Minecraft using fake components, an in-memory disk,
+-- a matrix-rasterizing GPU, and scripted events. Detect runtime errors.
 
 local files = BUNDLE
 local STRICT = STRICT == true
--- Inyección de fallos: la GPU real devuelve nil, "not enough energy" cuando no
--- tiene energía. FAULT.set = N hace que las primeras N escrituras fallen, para
--- comprobar que el OS reintenta y acaba pintando la pantalla.
+-- Fault injection: the real GPU may return nil, "not enough energy". Set
+-- FAULT.set = N to reject the first N writes and verify that the OS retries.
 local FAULT = rawget(_G, "FAULT") or {}
 local faultsLeft = tonumber(FAULT.set) or 0
 local faultsInjected = 0
@@ -55,8 +53,8 @@ end
 
 local fsApi = {}
 
--- El sistema de ficheros real exige que el directorio padre exista para
--- abrir en escritura; sin esto el arnés oculta fallos de `ensureDir`.
+-- The real filesystem requires the parent directory before opening for write;
+-- otherwise the harness could hide `ensureDir` failures.
 local function isDirectoryPath(path)
   if path == "/" or directories[path] then
     return true
@@ -116,7 +114,7 @@ end
 function fsApi.read(id, count)
   local handle = handles[id]
   if not handle then
-    return nil, "handle inválido"
+    return nil, "invalid handle"
   end
   if handle.kind ~= "r" then
     return nil
@@ -133,10 +131,10 @@ end
 function fsApi.write(id, data)
   local handle = handles[id]
   if not handle then
-    return nil, "handle inválido"
+    return nil, "invalid handle"
   end
   if handle.kind == "r" then
-    return nil, "handle de lectura"
+    return nil, "read-only handle"
   end
   written[handle.path] = written[handle.path] .. data
   return true
@@ -158,7 +156,7 @@ function fsApi.isDirectory(path)
   return #entriesUnder(path) > 0
 end
 
--- El componente `filesystem` real devuelve una tabla 1..n con los nombres
+-- The real `filesystem` component returns a 1..n table of names
 -- (`list` es `String[]` en FileSystem.scala y se convierte a tabla Lua).
 function fsApi.list(path)
   local names = entriesUnder(path)
@@ -202,12 +200,11 @@ function fsApi.rename(from, to)
 end
 
 -- ---------------------------------------------------------------------------
--- GPU que rasteriza en memoria
+-- In-memory rasterizing GPU
 -- ---------------------------------------------------------------------------
 
 local width, height = 80, 25
--- Resolución máxima de la pantalla simulada; el guion puede cambiarla para
--- probar el mismo OS en monitores pequeños y grandes.
+-- Maximum simulated resolution; scenarios can test small and large screens.
 local maxWidth = tonumber(rawget(_G, "MAX_WIDTH")) or 160
 local maxHeight = tonumber(rawget(_G, "MAX_HEIGHT")) or 50
 local cells = {}
@@ -247,8 +244,8 @@ function gpu.setResolution(w, h)
   return true
 end
 
--- Igual que el componente: devuelven true si escriben y nil, motivo si la GPU
--- no tiene energía. El OS usa ese valor para reintentar el tramo.
+-- Match the component: return true on success and nil/reason when GPU power is
+-- insufficient. The OS uses this to retry a span.
 function gpu.setBackground(_, isPaletteIndex)
   backgroundIsPalette = isPaletteIndex == true
   return true
@@ -312,17 +309,30 @@ end
 resetScreen()
 
 -- ---------------------------------------------------------------------------
--- Componentes y ordenador
+-- Components and computer
 -- ---------------------------------------------------------------------------
 
+local fakeUpdates = rawget(_G, "SCENARIO") == "updater"
+local mockedReleaseVersion
+if fakeUpdates then
+  local currentVersion = files["/lib/tc/version.lua"]:match('version%s*=%s*"([^"]+)"')
+  local major, minor, patch = currentVersion:match("^(%d+)%.(%d+)%.(%d+)$")
+  mockedReleaseVersion = string.format("%s.%s.%d", major, minor, tonumber(patch) + 1)
+end
 local kinds = {
   ["gpu-1"] = "gpu",
   ["screen-1"] = "screen",
   ["fs-boot"] = "filesystem",
   ["eeprom-1"] = "eeprom",
 }
+if fakeUpdates then
+  kinds["internet-1"] = "internet"
+end
 
 local kindOrder = { "eeprom-1", "fs-boot", "gpu-1", "screen-1" }
+if fakeUpdates then
+  kindOrder[#kindOrder + 1] = "internet-1"
+end
 
 component = {}
 
@@ -356,11 +366,44 @@ function component.invoke(address, method, ...)
   if address == "fs-boot" then
     local fn = fsApi[method]
     if not fn then
-      return nil, "método desconocido: " .. tostring(method)
+      return nil, "unknown method: " .. tostring(method)
     end
     return fn(...)
   elseif address == "gpu-1" and method == "bind" then
     return true
+  elseif address == "internet-1" and method == "request" then
+    local url = select(1, ...)
+    local body
+    if url:find("/releases/latest", 1, true) then
+      body = '{"tag_name":"v' .. mockedReleaseVersion .. '"}'
+    elseif url:find("/tools/manifest.txt", 1, true) then
+      body = "src/init.lua\nsrc/boot/kernel.lua\nsrc/lib/tc/version.lua\n"
+    elseif url:find("/src/lib/tc/version.lua", 1, true) then
+      body = 'return { product = "TerraCorp OS", company = "TerraCorp", tagline = "Plant systems", version = "'
+        .. mockedReleaseVersion .. '", codename = "Foundry", api = 1, license = "MIT" }\n'
+    elseif url:find("/src/init.lua", 1, true) then
+      body = "return 1\n"
+    elseif url:find("/src/boot/kernel.lua", 1, true) then
+      body = "return 2\n"
+    else
+      return nil, "not found"
+    end
+    local sent = false
+    return {
+      response = function()
+        return 200, "OK", {}
+      end,
+      read = function()
+        if sent then
+          return nil
+        end
+        sent = true
+        return body
+      end,
+      close = function()
+        return true
+      end,
+    }
   end
   return true
 end
@@ -421,7 +464,7 @@ function computer.shutdown()
 end
 
 -- ---------------------------------------------------------------------------
--- Guion de interacción (anclado a la resolución simulada, no a filas fijas)
+-- Interaction script anchored to simulated resolution, not fixed screen rows.
 -- ---------------------------------------------------------------------------
 
 local scenario = SCENARIO or "all"
@@ -434,17 +477,16 @@ end
 
 local function typeText(value)
   for character in value:gmatch(".") do
-    ev("key_down", "screen-1", character, nil, "tester")
+    ev("key_down", "screen-1", utf8.codepoint(character), nil, "tester")
   end
 end
 
--- Los guiones se anclan a la resolución simulada, no a columnas fijas: el dock
--- está en la penúltima fila y las ventanas son proporcionales a la pantalla.
+-- Scenarios use simulated resolution; the dock is on the penultimate row and
+-- windows scale with the screen.
 local dockY = maxHeight - 1
 
--- Misma geometría que `ui:defaultGeometry` para la primera ventana (offset 0).
--- Sólo sirve para apuntar los gestos del ratón; si el diseño cambia, el gesto
--- puede caer fuera y el escenario deja de cubrirlo, pero no falla en falso.
+-- Match `ui:defaultGeometry` for the first window (offset 0). Pointer gestures
+-- may miss if layout changes; this should not create false-positive coverage.
 local function windowRect()
   local desktopTop = 3
   local desktopBottom = dockY - 1
@@ -456,7 +498,47 @@ local function windowRect()
   return x, y, w, h
 end
 
-if scenario == "dashboard" then
+if scenario == "dashboard_tick" then
+  local source = files["/apps/dashboard.lua"]
+  local chunk = assert(load(source, "=apps/dashboard.lua", "t", {
+    setmetatable = setmetatable,
+    tonumber = tonumber,
+  }))
+  local module = chunk("apps.dashboard")
+  local now, expensiveReads = 0, 0
+  local kernelMock = {
+    memory = function()
+      expensiveReads = expensiveReads + 1
+      return 256, 1024
+    end,
+    energy = function()
+      expensiveReads = expensiveReads + 1
+      return 10, 10
+    end,
+    storage = function()
+      expensiveReads = expensiveReads + 1
+      return 1, 10
+    end,
+    components = function()
+      expensiveReads = expensiveReads + 1
+      return { total = 1, entries = {} }
+    end,
+    uptime = function()
+      return now
+    end,
+  }
+  local app = module.create({ kernel = kernelMock })
+  local initialReads = expensiveReads
+  now = 1
+  assert(app:tick({ kernel = kernelMock }), "uptime tick did not request a redraw")
+  assert(app.uptime == 1, "uptime did not advance after one second")
+  assert(expensiveReads == initialReads, "expensive readings refreshed before two seconds")
+  now = 2
+  assert(app:tick({ kernel = kernelMock }), "two-second sample did not request a redraw")
+  assert(app.uptime == 2 and app.samplesAt == 2, "two-second sample was not refreshed")
+  assert(expensiveReads == initialReads + 4, "expected one full sensor refresh at two seconds")
+  stats.dashboardTickChecked = true
+elseif scenario == "dashboard" then
   ev("touch", "screen-1", 3, dockY, 0, "tester")
   idle(12)
 elseif scenario == "console" then
@@ -465,25 +547,36 @@ elseif scenario == "console" then
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(2)
 elseif scenario == "files" then
-  -- Teclado: la lista se navega igual en cualquier tamaño de pantalla.
-  ev("key_down", "screen-1", nil, 0x3C, "tester")   -- F2 abre Ficheros
+  -- Keyboard navigation should work at any screen size.
+  ev("key_down", "screen-1", nil, 0x3C, "tester")   -- F2 opens Files
   idle(1)
   ev("key_down", "screen-1", nil, 0xD0, "tester")   -- abajo x3 hasta /lib
   ev("key_down", "screen-1", nil, 0xD0, "tester")
   ev("key_down", "screen-1", nil, 0xD0, "tester")
   ev("key_down", "screen-1", nil, 0x1C, "tester")   -- entra
   idle(1)
-  ev("key_down", "screen-1", nil, 0xD0, "tester")   -- baja un nivel más
-  ev("key_down", "screen-1", nil, 0x1C, "tester")   -- entra
-  ev("key_down", "screen-1", nil, 0x0E, "tester")   -- vuelve atrás
+  ev("key_down", "screen-1", nil, 0xD0, "tester")   -- move down one level
+  ev("key_down", "screen-1", nil, 0x1C, "tester")   -- open
+  ev("key_down", "screen-1", nil, 0x0E, "tester")   -- go up
   idle(2)
 elseif scenario == "settings" then
   ev("touch", "screen-1", 40, dockY, 0, "tester")
   idle(3)
+elseif scenario == "updater" then
+  local wx, wy, winWidth, winHeight = windowRect()
+  ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens About
+  idle(1)
+  local contentHeight = winHeight - 3
+  local buttonRow = math.max(4, contentHeight - 2)
+  local buttonX = wx + 1 + math.floor((winWidth - 2) / 2)
+  ev("touch", "screen-1", buttonX, wy + 1 + buttonRow, 0, "tester")
+  idle(1)
+  ev("touch", "screen-1", buttonX, wy + 1 + buttonRow, 0, "tester")
+  idle(2)
 else
   local wx, wy = windowRect()
   ev("touch", "screen-1", 3, dockY, 0, "tester")     -- abre Panel
-  ev("touch", "screen-1", wx + 2, wy, 0, "tester")   -- agarra la barra de título
+  ev("touch", "screen-1", wx + 2, wy, 0, "tester")   -- grab the title bar
   ev("drop", "screen-1", wx + 3, wy + 1, 0, "tester")
   ev("scroll", "screen-1", wx + 2, wy + 1, 1, "tester")
   ev("key_down", "screen-1", "r", 0x13, "tester")
@@ -494,12 +587,12 @@ else
 end
 
 -- ---------------------------------------------------------------------------
--- Ejecución
+-- Run
 -- ---------------------------------------------------------------------------
 
 local chunk, loadError = load(files["/init.lua"], "=/init.lua")
 if not chunk then
-  print("NO SE PUDO COMPILAR /init.lua: " .. tostring(loadError))
+  print("COULD NOT COMPILE /init.lua: " .. tostring(loadError))
   TC_ERRORS = 1
   return
 end
@@ -507,21 +600,20 @@ end
 local ok, failure = pcall(chunk)
 
 print("")
-print("=== EJECUCIÓN ===")
-print("resultado : " .. (ok and "ok" or ("ERROR: " .. tostring(failure))))
-print("apagado   : " .. tostring(shutdownFlag))
-print("llamadas gpu.set: " .. setCalls)
+print("=== RUN ===")
+print("result      : " .. (ok and "ok" or ("ERROR: " .. tostring(failure))))
+print("powered off : " .. tostring(shutdownFlag))
+print("gpu.set calls: " .. setCalls)
 if faultsInjected > 0 then
-  print("fallos inyectados: " .. faultsInjected .. " (sin energía)")
+  print("injected faults: " .. faultsInjected .. " (insufficient power)")
 end
-print("resolución: " .. width .. "x" .. height)
-print("escenario : " .. tostring(scenario) .. (STRICT and " (estricto)" or ""))
+print("resolution  : " .. width .. "x" .. height)
+print("scenario    : " .. tostring(scenario) .. (STRICT and " (strict)" or ""))
 
--- Medidas para F0 (ver docs/pruebas.md). En el arnés el arranque es síncrono:
--- el primer frame se pinta antes de consumir ninguna señal, así que el tiempo
--- real de arranque y la memoria sólo se pueden medir en juego (uptime y
--- computer.freeMemory, que el kernel apunta en /var/log/tc.log). Aquí se mide
--- el coste de pintado, que sí es comparable entre versiones.
+-- F0 measurements (see docs/tests.md). Harness startup is synchronous:
+-- The first frame draws before any event is consumed, so real boot time and
+-- memory must be measured in-game (uptime and computer.freeMemory in the log).
+-- This harness measures rendering cost, which is comparable across versions.
 local painted = 0
 for y = 1, height do
   for x = 1, width do
@@ -533,20 +625,20 @@ end
 local totalCells = width * height
 
 print("")
-print("=== MEDIDAS ===")
-print(string.format("pintado   : %d de %d celdas (%.1f %%) en %d llamadas a gpu.set · %d señales",
+print("=== METRICS ===")
+print(string.format("painted   : %d of %d cells (%.1f %%) in %d gpu.set calls · %d events",
   painted, totalCells, painted * 100 / totalCells, setCalls, clock / 0.25))
 
 print("")
-print("=== PANTALLA FINAL ===")
+print("=== FINAL SCREEN ===")
 for y = 1, height do
   print("|" .. table.concat(cells[y]) .. "|")
 end
 
 local journal = written["/var/log/tc.log"]
 print("")
-print("=== REGISTRO PERSISTIDO ===")
-print(journal or "(vacío)")
+print("=== PERSISTED LOG ===")
+print(journal or "(empty)")
 
 local errors = 0
 if not ok then
@@ -559,9 +651,7 @@ if setCalls == 0 then
   errors = errors + 1
 end
 
--- Comprobaciones estrictas: verifican el resultado visible, no solo que se
--- llamó al componente. Si el OS deja de hablar la API real, el error acaba
--- pintado en pantalla y esto lo detecta.
+-- Strict checks validate visible output as well as component calls.
 if STRICT then
   local rows = {}
   for y = 1, height do
@@ -569,35 +659,46 @@ if STRICT then
   end
   local screen = table.concat(rows, "\n")
 
-  if screen:find("no se pudo listar", 1, true) then
+  if screen:find("could not list", 1, true) then
     errors = errors + 1
-    print("FALLO: la app Ficheros no pudo listar (¿se espera un iterador en vez de tabla?)")
+    print("FAIL: Files could not list entries (expected a table, not an iterator)")
   end
-  if screen:find("No se pudo leer el disco", 1, true) then
+  if screen:find("Could not read boot disk", 1, true) then
     errors = errors + 1
-    print("FALLO: el panel no pudo leer el volumen (spaceUsed/spaceTotal)")
+    print("FAIL: Dashboard could not read storage (spaceUsed/spaceTotal)")
   end
   if scenario == "files" and stats.listReturned == 0 then
     errors = errors + 1
-    print("FALLO: el escenario de Ficheros no listó ningún directorio")
+    print("FAIL: Files scenario did not list a directory")
   end
   if scenario == "dashboard" and stats.spaceCalls == 0 then
     errors = errors + 1
-    print("FALLO: el panel no consultó spaceUsed")
+    print("FAIL: Dashboard did not query spaceUsed")
+  end
+  if scenario == "updater" and not screen:find("Installed 3 files", 1, true) then
+      errors = errors + 1
+      print("FAIL: the updater did not detect or install the mocked GitHub release")
+  end
+  if scenario == "dashboard_tick" and not stats.dashboardTickChecked then
+    errors = errors + 1
+    print("FAIL: dashboard one-second uptime tick was not verified")
+  end
+  if scenario == "updater" and screen:find("Could not install", 1, true) then
+    errors = errors + 1
+    print("FAIL: the updater could not commit the staged release")
   end
 
   if not backgroundIsPalette or not foregroundIsPalette then
     errors = errors + 1
-    print("FALLO: la GPU recibió colores como RGB en vez de índices de paleta")
+    print("FAIL: GPU colors were sent as RGB instead of palette indexes")
   end
   if paletteWrites ~= 16 then
     errors = errors + 1
-    print("FALLO: no se inicializaron los 16 colores de la paleta OpenComputers")
+    print("FAIL: the 16 OpenComputers palette colors were not initialized")
   end
 
-  -- Tras inyectar fallos de GPU la pantalla debe acabar pintada: si el OS da
-  -- por buenas las escrituras que la GPU rechazó, se queda en negro para
-  -- siempre porque el volcado por diferencias nunca las reintenta.
+  -- After GPU faults, the display must be painted. If rejected writes are
+  -- treated as successful, the differential renderer leaves permanent gaps.
   if faultsInjected > 0 then
     local visible = 0
     for y = 1, height do
@@ -609,14 +710,14 @@ if STRICT then
     end
     if visible == 0 then
       errors = errors + 1
-      print("FALLO: pantalla en negro después de que la GPU rechazara escrituras")
+      print("FAIL: display is blank after rejected GPU writes")
     end
   end
 end
 
 print("")
-print("=== VEREDICTO ===")
-print("list: " .. stats.listCalls .. " llamadas, " .. stats.listReturned .. " entradas · spaceUsed: " .. stats.spaceCalls)
-print(errors == 0 and "sin errores" or (errors .. " problema(s)"))
+print("=== SUMMARY ===")
+print("list: " .. stats.listCalls .. " calls, " .. stats.listReturned .. " entries · spaceUsed: " .. stats.spaceCalls)
+print(errors == 0 and "no errors" or (errors .. " problem(s)"))
 
 TC_ERRORS = errors

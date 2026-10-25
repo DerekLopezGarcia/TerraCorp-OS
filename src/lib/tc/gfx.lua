@@ -1,8 +1,7 @@
--- Framebuffer virtual con doble búfer y volcado por diferencias.
+-- Virtual double-buffered framebuffer with differential flush.
 --
--- Todo se dibuja en memoria y se envía a la GPU solo lo que cambió respecto al
--- frame anterior, agrupando celdas contiguas del mismo color. Así una pantalla
--- de 120x45 no cuesta 5400 llamadas por frame.
+-- Draw into memory and send only changed cells to the GPU, grouping adjacent
+-- cells that share colors. This avoids one GPU call per screen cell.
 
 local text = require("tc.text")
 local theme = require("tc.theme")
@@ -28,14 +27,13 @@ function gfx.new(address)
   local self = setmetatable({}, { __index = gfx })
   self.address = address
   self.gpu = component.proxy(address)
-  -- Tier 3 empieza con una paleta editable en escala de grises, a diferencia
-  -- de la paleta Minecraft de tier 2. Configura los colores clásicos de OC
-  -- cuando el hardware permite editarla.
+  -- Tier 3 starts with an editable grayscale palette, unlike the tier 2
+  -- Minecraft palette. Set classic OpenComputers colors when supported.
   for index, color in pairs(theme.paletteRGB) do
     pcall(self.gpu.setPaletteColor, index, color)
   end
   if not self:resize() then
-    error("TerraCorp OS: la GPU " .. tostring(address) .. " no responde", 0)
+    error("TerraCorp OS: GPU " .. tostring(address) .. " is not responding", 0)
   end
   return self
 end
@@ -73,7 +71,7 @@ function gfx:clear(bg, fg)
   end
 end
 
--- Escribe `value` en (x, y) recortando por ambos lados. Devuelve el ancho usado.
+-- Write `value` at (x, y), clipping both sides. Return the number of cells used.
 function gfx:put(x, y, value, fg, bg)
   if y < 1 or y > self.h then
     return 0
@@ -123,7 +121,7 @@ function gfx:fill(x, y, width, height, character, fg, bg)
   end
 end
 
--- Marco con relleno y título opcional en el borde superior.
+  -- Draw a filled frame with an optional title in its top border.
 function gfx:box(x, y, width, height, opts)
   opts = opts or {}
   if width < 2 or height < 2 then
@@ -160,7 +158,7 @@ function gfx:bar(x, y, width, ratio, fg, bg, glyph)
   end
 end
 
--- Subvista con origen propio y recorte: lo que usan las apps.
+  -- Clipped subview with a local origin, used by apps.
 function gfx:view(x, y, width, height)
   return setmetatable({
     buf = self,
@@ -218,7 +216,7 @@ function view:fill(x, y, width, height, character, fg, bg)
   self.buf:fill(self.x + x1 - 1, self.y + y1 - 1, x2 - x1 + 1, y2 - y1 + 1, character, fg, bg)
 end
 
--- Marco recortado al área de la subvista: nunca pinta fuera de la ventana.
+  -- Clip the frame to the subview so it never draws outside the window.
 function view:box(x, y, width, height, opts)
   local x1 = math.max(1, x)
   local y1 = math.max(1, y)
@@ -251,7 +249,7 @@ function view:clear(character, fg, bg)
   self:fill(1, 1, self.w, self.h, character, fg, bg)
 end
 
--- Volcado por diferencias: agrupa celdas contiguas con el mismo par fg/bg.
+  -- Differential flush groups adjacent cells with the same foreground/background.
 function gfx:flush()
   local gpu = self.gpu
   local width = self.w
@@ -290,9 +288,8 @@ function gfx:flush()
           cursor = cursor + 1
         end
 
-        -- La GPU puede rechazar la escritura (sin energía o sin pantalla):
-        -- devuelve nil. Solo entonces no se marca como pintado, para volver a
-        -- intentarlo en el siguiente frame en vez de dejar el hueco.
+        -- The GPU may reject a write (for example, due to power or no screen)
+        -- and return nil. Do not mark rejected cells as drawn; retry later.
         local colorsOk = true
         if bg ~= lastBg then
           local callOk, result = pcall(gpu.setBackground, bg, true)
@@ -319,8 +316,7 @@ function gfx:flush()
           written = written + (cursor - column)
         else
           failed = failed + 1
-          -- El estado de color de la GPU queda indeterminado: se fuerza a
-          -- reenviarlo en el siguiente tramo.
+          -- The GPU color state is now unknown; resend it on the next span.
           lastFg, lastBg = nil, nil
         end
 

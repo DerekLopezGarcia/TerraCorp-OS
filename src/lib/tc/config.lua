@@ -1,6 +1,6 @@
--- Preferencias del sistema en /etc/terracorp.cfg.
--- El fichero es una tabla Lua serializada que se carga en un entorno vacío:
--- así se puede leer sin `require` ni `serialization`.
+-- System preferences stored in /etc/terracorp.cfg.
+-- The file contains a serialized Lua table loaded in an empty environment,
+-- so it needs neither OpenOS `require` nor `serialization`.
 
 local config = {}
 
@@ -34,7 +34,7 @@ local function copyDefaults()
 end
 
 local function serialize(data)
-  local lines = { "-- TerraCorp OS: preferencias del sistema", "return {" }
+  local lines = { "-- TerraCorp OS: system preferences", "return {" }
   local names = {}
   for key in pairs(data) do
     names[#names + 1] = key
@@ -93,17 +93,17 @@ function config.load(vfs)
   config.reset()
   local source = vfs.read(config.path)
   if not source then
-    return false, "sin fichero de preferencias"
+  return false, "preferences file not found"
   end
 
   local chunk = load(source, "=terracorp.cfg", "t", {})
   if not chunk then
-    return false, "preferencias ilegibles"
+    return false, "could not parse preferences"
   end
 
   local ok, parsed = pcall(chunk)
   if not ok or type(parsed) ~= "table" then
-    return false, "preferencias inválidas"
+    return false, "invalid preferences"
   end
 
   for key, value in pairs(parsed) do
@@ -136,7 +136,7 @@ function config.set(key, value)
   return true
 end
 
--- Devuelve el siguiente valor de una lista cerrada (para botones de ajustes).
+-- Return the next value from a closed option list (used by settings controls).
 function config.cycle(key, options)
   local current = config.get(key)
   local nextIndex = 1

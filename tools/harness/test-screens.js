@@ -1,16 +1,15 @@
-// Comprueba que el OS usa la resolución real de la pantalla y se recoloca.
+// Verify that the OS adopts the actual screen resolution and reflows.
 //
 //   node tools/harness/test-screens.js
 //
-// El escritorio no impone una medida fija: en cada tamaño simulado debe
-// adoptar exactamente la resolución disponible y terminar sin errores, con
-// algo pintado. Es el gate de "la pantalla que exista".
+// The desktop must adapt to each simulated resolution, finish without errors,
+// and paint visible content.
 
 const path = require("path");
 const { spawnSync } = require("child_process");
 
 const simulate = path.join(__dirname, "simulate.js");
-const scenarios = ["dashboard", "console", "files", "settings"];
+const scenarios = ["dashboard", "console", "files", "settings", "updater"];
 const screens = [
   { width: 160, height: 50 },
   { width: 120, height: 40 },
@@ -28,34 +27,34 @@ for (const screen of screens) {
     const result = spawnSync(process.execPath, args, { encoding: "utf8" });
     const output = (result.stdout || "") + (result.stderr || "");
 
-    const reported = output.match(/resolución:\s*(\d+)x(\d+)/);
-    const actual = reported ? reported[1] + "x" + reported[2] : "(sin datos)";
+    const reported = output.match(/resolution\s*:\s*(\d+)x(\d+)/);
+    const actual = reported ? reported[1] + "x" + reported[2] : "(no data)";
 
     if (result.status !== 0) {
       problems += 1;
-      console.log("FALLO " + size + " " + scenario + ": el escenario termina con errores");
+      console.log("FAIL " + size + " " + scenario + ": scenario ended with errors");
       continue;
     }
     if (actual !== size) {
       problems += 1;
-      console.log("FALLO " + size + " " + scenario + ": usa " + actual + " en vez de la de la pantalla");
+      console.log("FAIL " + size + " " + scenario + ": reported the wrong screen resolution");
       continue;
     }
 
-    const start = output.indexOf("=== PANTALLA FINAL ===");
-    const end = output.indexOf("=== REGISTRO PERSISTIDO ===");
+    const start = output.indexOf("=== FINAL SCREEN ===");
+    const end = output.indexOf("=== PERSISTED LOG ===");
     const block = start >= 0 && end > start ? output.slice(start, end) : "";
     const painted = (block.match(/[^\s|]/g) || []).length;
     if (painted < 10) {
       problems += 1;
-      console.log("FALLO " + size + " " + scenario + ": pantalla prácticamente vacía");
+      console.log("FAIL " + size + " " + scenario + ": screen is nearly empty");
       continue;
     }
 
-    console.log("ok " + size + " " + scenario + " (" + painted + " celdas con contenido)");
+      console.log("ok " + size + " " + scenario + " (" + painted + " nonblank cells)");
   }
 }
 
 console.log("");
-console.log(problems === 0 ? "sin errores" : problems + " problema(s)");
+console.log(problems === 0 ? "no failures" : problems + " problem(s)");
 process.exit(problems === 0 ? 0 : 1);

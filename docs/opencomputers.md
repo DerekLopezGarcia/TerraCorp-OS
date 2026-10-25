@@ -1,97 +1,85 @@
-# Notas de OpenComputers
+# OpenComputers API Notes
 
-Hechos verificados contra el código de OpenComputers (`master-MC1.12`) antes de escribir el OS. Son la
-base de las decisiones del proyecto; si algo cambia, actualizar este documento.
+These facts were checked against OpenComputers source/documentation before
+implementation. Re-verify them if the target version changes.
 
-## Arranque
+## Boot environment
 
-- El BIOS (`lua/bios.lua`) enlaza la primera GPU a la primera pantalla y ejecuta `/init.lua` del volumen
-  de arranque con `load(buffer, "=init")`.
-- El volumen de arranque puede ser cualquier componente `filesystem`, no solo un disquete.
-- `computer.getBootAddress()` / `computer.setBootAddress(address)` permiten fijar el volumen.
-- En 1.7.x **esas dos funciones no existen en el entorno de la EEPROM**: las define `bios.lua` al
-  arrancar, guardando el volumen en la propia EEPROM (`eeprom.getData`/`setData`). Un gestor de arranque
-  propio debe crearlas o falla con `bios:NN: attempt to call a nil value (field 'getBootAddress')`.
-- En el entorno del BIOS solo están garantizados `component`, `computer`, `load` y las librerías
-  estándar de Lua. **No** hay `require`, `event`, `fs` ni `shell`: son de OpenOS.
-- `computer.beep(frequency, duration)` está disponible antes de cargar OpenOS.
+- The BIOS binds a GPU to a screen and executes `/init.lua` from the selected
+  boot filesystem using `load`.
+- Any filesystem component can be the boot volume.
+- The minimal BIOS environment guarantees `component`, `computer`, `load`, and
+  standard Lua libraries. It does not provide OpenOS `require`, `event`, `fs`,
+  or `shell`.
+- `computer.getBootAddress()` / `setBootAddress(address)` are available in the
+  running BIOS, but may be absent in the OpenComputers 1.7.x EEPROM sandbox.
+  The optional TerraCorp EEPROM manager supplies them using EEPROM data.
+- `computer.beep` is available before OpenOS.
 
-Conclusión: `src/init.lua` no puede asumir OpenOS y debe leer el kernel con `component.invoke(addr,
-"open"/"read"/"close")`.
+## Signals and keyboard
 
-## Señales
+`computer.pullSignal(timeout)` returns signal values directly and may return
+`nil` on timeout. Relevant events include `key_down`, `key_up`, `touch`,
+`drag`, `drop`, `scroll`, `screen_resized`, `component_added`,
+`component_removed`, `modem_message`, `interrupted`, and `shutdown`.
 
-- La API cruda es `computer.pullSignal(timeout)`, no `event.pull`. Devuelve la señal como valores
-  múltiples; puede devolver `nil` por timeout.
-- Señales relevantes: `key_down(addr, char, code)`, `key_up`, `touch(addr, x, y, button, player)`,
-  `drag`, `drop`, `scroll(addr, x, y, direction, player)`, `screen_resized(addr, w, h)`,
-  `component_added`, `component_removed`, `modem_message`, `interrupted`, `shutdown`.
-- `interrupted` es lo que emite Ctrl+Alt+C en OpenOS; el OS lo ignora a propósito.
-- Las coordenadas de `touch` son de la pantalla, con origen 1,1 arriba a la izquierda.
+The keyboard signal is `key_down(keyboardAddress, char, code, playerName)`.
+`char` is a numeric Unicode code point, or zero when no printable character is
+available. Use `code` for arrows and function keys. Touch coordinates start at
+1,1 in the upper-left corner. Ctrl/Alt modifiers arrive as their own key events.
 
-## Teclado
+Verified scan-code subset:
 
-Códigos (subconjunto de `openos/lib/keyboard.lua`), usados en `lib/tc/keys.lua`:
-
-| Tecla | Código | Tecla | Código |
-|---|---|---|---|
-| Esc | `0x01` | Retroceso | `0x0E` |
+| Key | Code | Key | Code |
+|---|---:|---|---:|
+| Esc | `0x01` | Backspace | `0x0E` |
 | Tab | `0x0F` | Enter | `0x1C` |
-| Espacio | `0x39` | Inicio | `0xC7` |
-| Flecha arriba | `0xC8` | RePág | `0xC9` |
-| Flecha izquierda | `0xCB` | Flecha derecha | `0xCD` |
-| Fin | `0xCF` | Flecha abajo | `0xD0` |
-| AvPág | `0xD1` | Suprimir | `0xD3` |
-| F1–F10 | `0x3B`–`0x44` | | |
+| Space | `0x39` | Home | `0xC7` |
+| Up | `0xC8` | Page Up | `0xC9` |
+| Left | `0xCB` | Right | `0xCD` |
+| End | `0xCF` | Down | `0xD0` |
+| Page Down | `0xD1` | Delete | `0xD3` |
+| F1-F10 | `0x3B`-`0x44` | | |
 
-`key_down` entrega `char` solo para teclas imprimibles; para flechas y funciones hay que usar `code`.
-Los eventos de modificadores (Ctrl/Alt) llegan como `key_down`/`key_up` de sus propios códigos, pero
-el OS no depende de ellos para los atajos.
+## Components and filesystems
 
-## Componentes
+- `component.list(kind)` returns an iterator of `(address, kind)` pairs.
+- `component.proxy(address)` returns a method table and is preferred for
+  repeated component operations.
+- `component.invoke(address, method, ...)` is used during minimal boot.
+- `computer.energy()` returns stored/maximum energy and may fail on nodes
+  without an energy component; call it under `pcall`.
+- `computer.totalMemory()` / `freeMemory()` and filesystem `spaceUsed()` /
+  `spaceTotal()` return bytes. OpenComputers has no filesystem `space()` method.
+- `filesystem.list(path)` returns a table; OpenOS wraps it as an iterator, but
+  the TerraCorp VFS works with the table.
+- Component filesystem handles are opaque values passed to `read`, `write`, and
+  `close`. EOF reads return `nil` without a reason.
 
-- `component.list(kind)` devuelve un iterador `(address, kind)`: `component.list("gpu")()` obtiene la
-  primera GPU.
-- `component.proxy(address)` devuelve una tabla con los métodos del componente; es mucho más rápido que
-  `component.invoke` por celda y es lo que usa `gfx`.
-- `component.invoke(address, method, ...)` es la vía sin proxy; se usa en el arranque, antes de tener
-  servicios.
-- `computer.energy()` devuelve `stored, maximum`; puede fallar si el ordenador no tiene bloque de
-  energía. Siempre con `pcall`.
-- `computer.totalMemory()` / `freeMemory()` en bytes; `filesystem.spaceUsed()` / `spaceTotal()` también en
-  bytes (no existe `filesystem.space()`). `vfs.space()` del kernel convierte a kilobytes.
-- `filesystem.list(path)` devuelve una **tabla 1..n** con los nombres, no un iterador. OpenOS la envuelve
-  en un iterador en `lib/filesystem.lua`; el kernel de TerraCorp trabaja con la tabla directamente.
-- Los handles de `filesystem` (`open` → `read`/`write`/`close`) se pasan a `component.invoke` como
-  valores opacos. Un `read` al final del fichero devuelve `nil` sin motivo.
+## GPU and colors
 
-## GPU
+- `gpu.setResolution` changes the virtual resolution; `gpu.maxResolution()`
+  reports the maximum for the bound GPU/screen pair.
+- `gpu.set`, `gpu.fill`, and `gpu.copy` write screen cells.
+- A GPU binds to one screen at a time. `gpu.getScreen()` reports its bound
+  screen on supported versions.
+- `setBackground(color, isPaletteIndex)` and `setForeground` treat the color as
+  24-bit RGB when `isPaletteIndex` is `nil`/false. Pass `true` for palette
+  indexes 0-15.
+- Tier 2 screens use the classic Minecraft palette. Tier 3 screens have an
+  editable 16-color palette initialized to grayscale plus a fixed 240-color
+  palette. TerraCorp sets its 16-color palette to the classic OpenComputers
+  colors before drawing.
+- GPU `set`/`fill`/`copy` return `true` on success. An energy-related failure
+  may return `nil, "not enough energy"`; do not mark a rejected span as drawn.
+- `setBackground` / `setForeground` return the previous color, not a success
+  boolean.
 
-- `gpu.setResolution(w, h)` cambia la resolución virtual; el máximo lo da `gpu.maxResolution()`.
-- `gpu.set(x, y, text)` escribe una cadena; `gpu.fill(x, y, w, h, ch)` rellena.
-- Los colores son 16 índices fijos (paleta de Minecraft), no RGB.
-- `gpu.bind(screen)` asocia una GPU a una pantalla; el BIOS ya lo hace, pero se repite al arrancar.
-- **Valor de retorno** (verificado en `GraphicsCard.scala`, rama `master-MC1.12`): `gpu.set`, `gpu.fill`
-  y `gpu.copy` devuelven `true` si escriben y `nil, "not enough energy"` si la GPU no tiene energía.
-  `gpu.setBackground`/`gpu.setForeground` devuelven el color anterior. Una escritura rechazada no se
-  puede dar por pintada: el volcado por diferencias tiene que reintentarla o deja huecos permanentes.
-  `npm run test:faults` lo comprueba comparando la pantalla con y sin fallos inyectados.
-- `gpu.setBackground(color, isPaletteIndex)` y `gpu.setForeground(color, isPaletteIndex)` interpretan
-  `color` como RGB de 24 bits si `isPaletteIndex` es `nil` o `false`; para índices 0..15 hay que pasar
-  `true`. La paleta editable de una pantalla T3 empieza en escala de grises, así que TerraCorp inicializa
-  los 16 índices con la paleta clásica de OpenComputers cuando el hardware permite editarla. Sin esto,
-  los índices 0..15 se interpretarían como RGB muy oscuros y el escritorio sería casi negro.
+## Display constraints
 
-## Trampas que afectan al diseño
-
-1. **Ancho de carácter**: OpenComputers dibuja una celda por punto de código. Los caracteres de doble
-   ancho (CJK, emoji) rompen la alineación; no se admiten. Los acentos ocupan una celda.
-2. **`#cadena` cuenta bytes**, no caracteres. Para anchos se usa `lib/tc/text.lua`.
-3. **`require` no existe fuera de OpenOS**. El kernel compila sus módulos con `load` y su propio
-   resolvedor.
-4. **`io.open` no es fiable como API del OS**: el volumen se lee con el componente `filesystem`, que
-   funciona con o sin OpenOS montado.
-5. **`os.sleep` existe en OpenOS**, no en el Lua del BIOS; se usa siempre con `pcall`.
-6. **Una señal con `nil` en medio** (por ejemplo `key_down` sin `char`) exige `table.pack`/`unpack` con
-   límites explícitos; `{...}` y `#` no son seguros.
-7. **Redibujar todo cada frame** es caro en tier 2; de ahí el volcado por diferencias.
+- Each Unicode code point occupies one cell. Wide CJK characters and emoji can
+  break alignment and are unsupported.
+- Lua `#string` counts bytes, not Unicode characters. Use `lib/tc/text.lua` for
+  display widths and slices.
+- GPU writes are budget/energy constrained. Difference rendering reduces the
+  number of direct writes; measure the real target hardware in-game.

@@ -1,8 +1,8 @@
--- TerraCorp OS - punto de entrada del volumen de arranque.
+-- TerraCorp OS boot-volume entry point.
 --
--- Lo carga el BIOS de OpenComputers (o la EEPROM de tools/install.lua) y debe
--- funcionar con el entorno mínimo garantizado: `component` y `computer`.
--- No usa `require`, ni `fs`, ni `event`: OpenOS puede no estar instalado.
+-- Loaded by the OpenComputers BIOS (or the optional EEPROM manager). It must
+-- run in the minimal environment, which guarantees `component` and `computer`.
+-- Do not use OpenOS `require`, `fs`, or `event` here.
 
 local component, computer = component, computer
 
@@ -17,7 +17,7 @@ end
 local function read(address, path)
   local handle, reason = invoke(address, "open", path, "r")
   if not handle then
-    return nil, reason or ("no se pudo abrir " .. path)
+    return nil, reason or ("could not open " .. path)
   end
 
   local chunks = {}
@@ -99,7 +99,7 @@ end
 
 local address = findVolume()
 if not address then
-  error("TerraCorp OS: no hay volumen de arranque con /boot/kernel.lua", 0)
+  error("TerraCorp OS: no boot volume contains /boot/kernel.lua", 0)
 end
 
 bindScreen()
@@ -111,7 +111,7 @@ end
 
 local chunk, compileError = load(source, "=boot/kernel.lua")
 if not chunk then
-  error("TerraCorp OS: kernel inválido: " .. tostring(compileError), 0)
+  error("TerraCorp OS: invalid kernel: " .. tostring(compileError), 0)
 end
 
 local kernel = chunk()

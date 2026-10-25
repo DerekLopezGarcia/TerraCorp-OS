@@ -1,9 +1,9 @@
-// Medidas de F0: tamaño del código y coste de pintado en el arnés.
+// F0 metrics: source size and harness rendering cost.
 //
 //   node tools/harness/measure.js
 //
-// No es un gate: imprime cifras para `docs/pruebas.md` y para comparar
-// versiones. Sale con error sólo si un escenario no termina bien.
+// This is not a gate: print metrics for `docs/tests.md` and version comparisons.
+// Exit with an error only if a scenario fails.
 
 const fs = require("fs");
 const path = require("path");
@@ -45,15 +45,15 @@ const appStats = stats(apps);
 const total = stats([...core, ...apps]);
 const kb = (bytes) => (bytes / 1024).toFixed(1) + " KB";
 
-console.log("TerraCorp OS — medidas locales (arnés, Lua 5.3)");
+console.log("TerraCorp OS — local metrics (Lua 5.3 harness)");
 console.log("-".repeat(70));
 console.log(
-  "núcleo : " + coreStats.lines + " líneas · " + kb(coreStats.bytes) + " · init " +
+  "core   : " + coreStats.lines + " lines · " + kb(coreStats.bytes) + " · init " +
   stats(entry).lines + " · boot " + stats(boot).lines + " · lib " + stats(lib).lines
 );
-console.log("apps   : " + appStats.lines + " líneas · " + kb(appStats.bytes) + " (" + apps.length + " apps)");
-console.log("total  : " + total.lines + " líneas · " + kb(total.bytes) + " en " +
-  (core.length + apps.length) + " módulos (disco tier 2: 1 MB)");
+console.log("apps   : " + appStats.lines + " lines · " + kb(appStats.bytes) + " (" + apps.length + " apps)");
+console.log("total  : " + total.lines + " lines · " + kb(total.bytes) + " across " +
+  (core.length + apps.length) + " modules (tier 2 disk: 1 MB)");
 console.log("");
 
 const scenarios = ["dashboard", "console", "files", "settings", "all"];
@@ -65,8 +65,8 @@ const screens = [
 let problems = 0;
 
 console.log(
-  "escenario".padEnd(11) + "pantalla".padEnd(10) + "pintado".padEnd(21) +
-  "gpu.set".padEnd(9) + "señales"
+  "scenario".padEnd(11) + "screen".padEnd(10) + "painted".padEnd(21) +
+  "gpu.set".padEnd(9) + "events"
 );
 
 for (const screen of screens) {
@@ -81,29 +81,29 @@ for (const screen of screens) {
 
     if (result.status !== 0) {
       problems += 1;
-      console.log(scenario.padEnd(11) + size.padEnd(10) + "FALLO: el escenario no termina bien");
+      console.log(scenario.padEnd(11) + size.padEnd(10) + "FAIL: scenario did not complete");
       continue;
     }
 
     const painted = output.match(
-      /pintado\s*:\s*(\d+) de (\d+) celdas \(([\d.]+) %\).*?(\d+) llamadas a gpu\.set · (\d+) señales/
+      /painted\s*:\s*(\d+) of (\d+) cells \(([\d.]+) %\).*?(\d+) gpu\.set calls · (\d+) events/
     );
 
     console.log(
       scenario.padEnd(11) +
       size.padEnd(10) +
-      (painted ? painted[1] + "/" + painted[2] + " (" + painted[3] + " %)" : "(sin datos)").padEnd(21) +
-      (painted ? painted[4] : "(sin datos)").padEnd(9) +
-      (painted ? painted[5] : "(sin datos)")
+      (painted ? painted[1] + "/" + painted[2] + " (" + painted[3] + " %)" : "(no data)").padEnd(21) +
+      (painted ? painted[4] : "(no data)").padEnd(9) +
+      (painted ? painted[5] : "(no data)")
     );
   }
 }
 
 console.log("");
 console.log(
-  "El arnés arranca de forma síncrona: el primer frame se pinta antes de consumir\n" +
-  "ninguna señal, así que el tiempo real de arranque y la memoria sólo se miden en\n" +
-  "juego (uptime y computer.freeMemory, apuntados en /var/log/tc.log)."
+  "Harness startup is synchronous: the first frame draws before any event is read,\n" +
+  "so measure real boot time and memory in-game (uptime and computer.freeMemory,\n" +
+  "recorded in /var/log/tc.log)."
 );
 
 process.exit(problems === 0 ? 0 : 1);

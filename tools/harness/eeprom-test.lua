@@ -1,6 +1,6 @@
--- Prueba de eeprom/init.lua con el entorno de la EEPROM simulado.
--- El runner inyecta EEPROM_SOURCE (contenido de eeprom/init.lua).
--- uso: node test-boot.js <escenario 175|18>
+-- Test eeprom/init.lua in a simulated EEPROM environment.
+-- The runner injects EEPROM_SOURCE (the contents of eeprom/init.lua).
+-- Usage: node test-boot.js <scenario 175|18>
 local scenario = ...
 
 local volumes = {}
@@ -48,12 +48,12 @@ function component.invoke(address, method, ...)
       storedAddress = (...)
       return true
     end
-    return nil, "método desconocido: " .. tostring(method)
+    return nil, "unknown method: " .. tostring(method)
   end
 
   local files = volumes[address]
   if not files then
-    return nil, "sin volumen"
+    return nil, "no filesystem"
   end
 
   if method == "open" then
@@ -69,7 +69,7 @@ function component.invoke(address, method, ...)
     local handle, count = ...
     local state = handles[handle]
     if not state then
-      return nil, "handle inválido"
+      return nil, "invalid handle"
     end
     if state.position > #state.content then
       return nil
@@ -82,18 +82,18 @@ function component.invoke(address, method, ...)
     return true
   end
 
-  return nil, "método desconocido: " .. tostring(method)
+  return nil, "unknown method: " .. tostring(method)
 end
 
 local computer = {}
 
 if scenario == "18" then
-  -- 1.8+: la API ya viene en el sandbox.
+  -- 1.8+: the API already exists in the sandbox.
   computer.getBootAddress = function() return storedAddress end
   computer.setBootAddress = function(address) storedAddress = address; return true end
   patched = false
 else
-  -- 1.7.x: no existe; el script debe crearla.
+  -- 1.7.x: the API is missing; the script must provide it.
   patched = true
 end
 
@@ -128,16 +128,16 @@ end
 local chunk = assert(load(EEPROM_SOURCE, "=bios", "t", sandbox))
 chunk()
 
-assert(type(computer.getBootAddress) == "function", "no creó getBootAddress")
-assert(type(computer.setBootAddress) == "function", "no creó setBootAddress")
+assert(type(computer.getBootAddress) == "function", "getBootAddress was not created")
+assert(type(computer.setBootAddress) == "function", "setBootAddress was not created")
 assert(storedAddress == "hdd-02", "boot address = " .. tostring(storedAddress))
-assert(sandbox.BOOTED == 1, "/init.lua del volumen bueno no se ejecutó")
-assert(computer.getBootAddress() == "hdd-02", "getBootAddress no lee la EEPROM")
+assert(sandbox.BOOTED == 1, "valid-volume /init.lua did not run")
+assert(computer.getBootAddress() == "hdd-02", "getBootAddress does not read EEPROM data")
 
 if scenario == "18" then
-  assert(not patched, "no debería parchear si la API existe")
+  assert(not patched, "should not patch an existing API")
 else
-  assert(patched, "escenario 1.7.x sin API")
+  assert(patched, "expected the 1.7.x API to be missing")
 end
 
-print("OK arranque " .. scenario)
+print("OK boot " .. scenario)

@@ -1,159 +1,154 @@
 # Roadmap
 
-> Principio rector: **núcleo mínimo, todo lo demás opcional**. TerraCorp OS debe arrancar y ser útil en
-> un solo ordenador, sin red y con 1 MB. La red, los servidores y el CPD se añaden por capas, y ninguna
-> capa puede romper el caso de un nodo aislado.
+> Guiding principle: **minimal core, everything else optional**. TerraCorp OS
+> must boot and remain useful on one offline computer with 1 MB of storage.
+> Networking, servers, and the data center are added in layers and must never
+> break the isolated-node use case.
 >
-> Modelo objetivo: **un servidor de aplicaciones y terminales ligeras en cada fábrica**. Ver
-> `distribuido.md`.
+> Target model: **one application server and lightweight terminals in each
+> factory**. See [`distributed.md`](distributed.md).
 
-## Fases
+Each phase has measurable exit criteria. Do not start the next phase until the
+current phase meets its criteria.
 
-Cada fase tiene un criterio de salida medible. No se abre la siguiente sin cumplirlo.
+## F0 — Tested prototype (0.1.x) · current
 
-### F0 — Prototipo congelado (0.1.x) · ahora
+**Goal:** validate the existing OS in Supersymmetry, document real behavior,
+and provide a safe update path before architectural expansion.
 
-**Objetivo:** dejar de añadir funciones y averiguar cómo se comporta lo que ya hay.
+- Test with Tier 2 CPU and Tier 2/3 screens.
+- Measure free memory, time to first render, and redraw activity.
+- Exercise all five apps and fix issues found in-game.
+- Add an About-screen updater backed by stable GitHub Releases.
+- Version stable builds with matching semantic Git tags and GitHub Releases.
+- Keep settings, user data, boot configuration, and EEPROM outside the updater's
+  write set.
+- Record in-game results in [`tests.md`](tests.md).
 
-- Probar en Supersymmetry con CPU tier 2 y pantalla tier 2/3.
-- Medir: memoria libre, tiempo de arranque, celdas redibujadas por segundo.
-- Corregir lo que salga; decidir qué apps sobran.
-- Rellenar `docs/pruebas.md` con el resultado real (protocolo y medidas del arnés ya están allí).
+**Exit criteria:** 30 minutes without `ERR` entries, at least 250 KB free on a
+Tier 2 node, first render within 2 seconds, and a tested release update that
+preserves settings and supports rollback on handled installation failures.
 
-**Salida:** 30 min de sesión sin errores, ≥ 250 KB libres en tier 2, arranque ≤ 2 s.
+## F1 — Minimal core (0.2)
 
-### F1 — Núcleo mínimo (0.2)
+**Goal:** reduce the core surface before adding distributed features.
 
-**Objetivo:** reducir superficie antes de crecer.
+- Separate the kernel (boot, VFS, signals) from services (logging and APIs).
+- Apps consume services instead of calling kernel internals.
+- Keep Shell, Files, and Editor in the core; move Dashboard and Settings to
+  system apps.
+- Raise the app API to version 2 and document app/service contracts.
+- Remove unused code.
 
-- Separar `kernel` (arranque, vfs, señales) de `services` (registro e interfaces).
-- Las apps dejan de llamar a `kernel.*`: piden servicios.
-- Recorte: Shell, Ficheros y Editor como apps núcleo; Panel y Ajustes como apps del sistema.
-- Subir `api` a 2 y documentar contratos de app y de servicio.
-- Suprimir lo que no se use.
+**Exit criteria:** core at or below 1,200 lines, boot within 1.5 seconds,
+unchanged user-visible behavior, and a green contract-test harness.
 
-**Salida:** núcleo ≤ 1 200 líneas, arranque ≤ 1,5 s, mismas funciones, arnés verde con tests de contrato.
+## F2 — Sessions and displays (0.3)
 
-### F2 — Sesiones y pantalla (0.3)
+**Goal:** replace the desktop singleton with sessions, enabling an application
+server later.
 
-**Objetivo:** que el escritorio deje de ser un singleton. Es el cambio estructural que hace posible el
-servidor de aplicaciones; si se deja para F3, F3 es una reescritura.
+- Add `tc.session` for per-session windows, apps, focus, and lifecycle.
+- Add `tc.display` backends: local GPU, remote terminal spans, and headless.
+- Pack the framebuffer into strings (2 bytes per cell) instead of Lua tables.
+- Add `desktop` and `kiosk:<app>` session profiles.
+- Keep the local session behavior unchanged.
 
-- `tc.session`: estado por sesión (ventanas, apps, foco) y gestor de sesiones.
-- `tc.display` con tres backends: `local` (GPU), `remote` (tramos hacia una terminal) y `headless`.
-- Framebuffer **empaquetado en cadenas** (2 bytes/celda) en lugar de tablas Lua.
-- Perfiles de sesión: `desktop` y `kiosk:<app>` (el kiosko puede quedar como esqueleto).
-- La sesión local es una más: el comportamiento actual no cambia.
+**Exit criteria:** two headless sessions and one local session under 200 KB
+total, at most 64 KB per session, boot within 1.5 seconds, and a multi-session
+harness test.
 
-**Salida:** dos sesiones headless y una local por debajo de 200 KB; ≤ 64 KB por sesión; arranque ≤ 1,5 s;
-arnés con test de sesión múltiple.
+## F3 — Application server and terminals (0.4)
 
-### F3 — Servidor de aplicaciones y terminales (0.4)
+**Goal:** run apps on a server and use lightweight terminals in factories.
 
-**Objetivo:** el escenario pedido: apps en un servidor, terminales en las fábricas.
+- Add `tc.net` framing, measured payload limits, ACKs, retries, and idempotency.
+- Define `HELLO`, `SESSION`, `FRAME`, `INPUT`, and `PING` messages.
+- Resume a terminal's session after reconnect.
+- Discover cores and use a shared per-segment key.
+- Add a minimal terminal client and kiosk profile.
+- Limit refresh to 10 Hz and group spans.
 
-- `tc.net`: tramas, tamaño máximo medido, ACK, reintento, idempotencia.
-- Protocolo de sesión: `HELLO` (versión, pantalla, capacidades), `SESSION`, `FRAME` (tramos), `INPUT`
-  (teclas y clic), `PING`.
-- Reconexión con reanudación: una terminal que se cae vuelve a su sesión.
-- Descubrimiento de cores y clave compartida por segmento.
-- Cliente de terminal (nodo mínimo con pantalla) y perfil kiosko.
-- Límite de refresco 10 Hz y agrupación de tramos.
+**Exit criteria:** two terminals (cable and Linked Card) connected to a
+headless core, reconnect under 5 seconds, documented bandwidth/latency, and no
+session-state loss when a terminal disconnects.
 
-**Salida:** dos terminales (una por cable, otra por Linked Card) contra un core sin pantalla; reconexión
-< 5 s; ancho de banda y latencia medidos y documentados; sin pérdida de estado al caer una terminal.
+## F3.5 — Long-distance links and tablets (optional; does not block F4)
 
-### F3.5 — Larga distancia y tablets (opcional, no bloquea F4)
+- Verify Redstone Control bandwidth/tick behavior, the OpenComputers Adapter
+  API, interdimensional wireless availability, and tablet limits before coding.
+- Add Redstone Control as a `tc.net` transport: 32-bit frames, ACKs for commands,
+  best-effort state updates.
+- Use Linked Cards as the primary inter-base link.
+- Add a resumable tablet client; sessions do not survive dimension changes or
+  reconnects without an explicit resume.
+- Add a reduced lunar kiosk for status and emergency controls.
 
-**Objetivo:** operar una base en otra dimensión sin depender de la distancia.
+**Exit criteria:** transfer 1 KB with a valid CRC between dimensions, command
+round-trip under 2 seconds, and emergency control remains available if the
+primary link fails. See [`long-distance.md`](long-distance.md).
 
-- Spike previo obligatorio: ancho y tick de Redstone Control, API del Adapter de OC, wireless
-  interdimensional de la instancia y límites de la tablet.
-- Transporte RC como variante de `tc.net`: tramas de 32 bits, ACK para comandos, estado best-effort.
-- Linked Card como enlace principal entre bases.
-- Cliente de tablet con reanudación de sesión (no persiste al cambiar de dimensión ni al reconectar).
-- Kiosko lunar reducido: estado y botones de emergencia, sin escritorio completo.
+## F4 — Data center and storage (0.5)
 
-**Salida:** 1 KB con CRC correcto entre dos dimensiones; comando ida-vuelta < 2 s; la caída del enlace
-principal no deja la base sin control. Ver `larga-distancia.md`.
+- Inventory nodes, disks, power, and network links.
+- Assign `core`, `storage`, `worker`, and `edge` roles.
+- Add UPS and power-plant monitoring, reserve budgets, and staged shedding.
+- Automatically boot in stages above 60% UPS charge, with per-node checks and
+  a watchdog.
+- Shut down in order: workers, terminals, storage, then core.
+- Document the permanent chunk-loader requirement.
+- Provide remote RAID storage with a second-node copy.
+- Attribute operator names in the UI/log without user accounts.
+- Display a data-center map and node/disk/relay/UPS alerts.
 
-### F4 — CPD y almacenamiento (0.5)
+**Exit criteria:** inventory two racks/six nodes, automatic startup after world
+reload above 60% charge, terminal file reads/writes, and one-node failure
+without data corruption or taking down the rest of the system.
 
-**Objetivo:** operar la sala de servidores y servir datos a las terminales.
+## F5 — Lightweight cluster (0.6)
 
-- Inventario: nodos, discos, energía y red.
-- Roles por nodo: `core`, `storage`, `worker`, `edge`.
-- SAI y central propia: lectura de producción/consumo, presupuesto de respaldo y descarte por escalones.
-- Arranque automático escalonado al superar la SAI el 60 %, con verificación por nodo y watchdog.
-- Apagado ordenado: workers → terminales → storage → core (el último).
-- Chunkloader permanente como requisito documentado.
-- `storage` remoto sobre RAID, con copia en segundo nodo.
-- Atribución de operador (nombre en barra y registro, sin cuentas).
-- Mapa del CPD y alertas: nodo caído, disco lleno, relay saturado, SAI baja.
+- Queue jobs for workers and return results to the requesting terminal.
+- Replicate files to two verified copies.
+- Fail over the log if the core fails.
+- Add plant CLI commands such as `plant status` and `node drain`.
 
-**Salida:** 2 racks / 6 nodos inventariados; el CPD arranca solo tras recargar el mundo al superar la SAI
-el 60 %; una terminal lee y escribe ficheros del storage; caída de un nodo sin corromper datos ni tumbar
-el resto.
+**Exit criteria:** a batch job runs on a worker and returns to its requester;
+core failure does not lose data.
 
-### F5 — Cluster ligero (0.6)
+## F6 — Factory integration
 
-**Objetivo:** reparto de trabajo y continuidad, sin prometer alta disponibilidad.
+- Verify which GTCE inventories/tanks are exposed through the Adapter.
+- Add machine-stop alerts and production counters to the kiosk.
 
-- Cola de trabajos con workers y resultado devuelto al solicitante.
-- Réplica de ficheros (2 copias) y verificación.
-- Failover del registro si cae el core.
-- CLI de planta (`plant status`, `node drain`).
+Do not plan further work until this is tested in-game.
 
-**Salida:** un trabajo batch se ejecuta en un worker y el resultado aparece en la terminal que lo pidió;
-caída del core sin pérdida de datos.
+## Prioritized backlog
 
-### F6 — Exploración: fábrica
-
-**Objetivo:** integrar la planta con el pack, no solo con ordenadores.
-
-- Telemetría de máquinas GT mediante Adapter (inventarios/tanques): **por verificar** qué expone GTCE.
-- Alertas de parada y contadores de producción en el kiosko.
-
-No se planifica más hasta probarlo en partida.
-
-## Backlog priorizado
-
-| # | Tarea | Fase | Tamaño |
+| # | Work item | Phase | Size |
 |---|---|---|---|
-| 1 | Prueba real en Supersymmetry + `docs/pruebas.md` | F0 | S |
-| 2 | Medir RAM y arranque con el arnés y en juego | F0 | S |
-| 3 | Extraer `tc.service` y `tc.session` | F1–F2 | L |
-| 4 | Framebuffer empaquetado + backends de pantalla | F2 | L |
-| 5 | Recorte de apps y código muerto | F1 | S |
-| 6 | Contratos versionados (app y servicio) | F1 | S |
-| 7 | `tc.net` con tramas y ACK | F3 | L |
-| 8 | Protocolo de sesión (FRAME/INPUT) | F3 | L |
-| 9 | Cliente de terminal + kiosko | F3 | M |
-| 10 | Inventario, salud y energía del CPD | F4 | M |
-| 11 | Storage remoto sobre RAID | F4 | M |
-| 12 | Cola de trabajos | F5 | L |
-| 13 | Réplica de ficheros | F5 | M |
-| 14 | Spike de RC: ancho, tick y Adapter de OC | F3.5 | S |
-| 15 | Transporte RC (tramas de 32 bits + ACK) | F3.5 | M |
-| 16 | Cliente de tablet con reanudación | F3.5 | M |
-| 17 | Política de energía: SAI, escalones y alertas | F4 | M |
-| 18 | Arranque automático escalonado + watchdog | F4 | M |
+| 1 | In-game Supersymmetry test and results | F0 | S |
+| 2 | Measure RAM, boot, and redraw behavior | F0 | S |
+| 3 | GitHub Release versioning and in-OS updater | F0 | M |
+| 4 | Extract `tc.service` and `tc.session` | F1-F2 | L |
+| 5 | Packed framebuffer and display backends | F2 | L |
+| 6 | Trim apps/dead code and version app/service contracts | F1 | M |
+| 7 | `tc.net` framing and ACKs | F3 | L |
+| 8 | Session protocol (`FRAME`/`INPUT`) | F3 | L |
+| 9 | Terminal client and kiosk | F3 | M |
+| 10 | Data-center inventory, health, and power | F4 | M |
+| 11 | Remote RAID storage | F4 | M |
+| 12 | Job queue and file replication | F5 | L |
+| 13 | Redstone Control measurement spike/transport | F3.5 | M |
+| 14 | Resumable tablet client | F3.5 | M |
 
-## Decisiones
+## Decisions
 
-1. **Modelo:** servidor de aplicaciones + terminales ligeras. **Decidido.**
-2. **Multiusuario:** descartado. Varios jugadores, uno operando; atribución por nombre, sin cuentas.
-   **Decidido.**
-3. **Terminales:** Remote Terminal nativa para administrar el rack y terminal propia para las fábricas.
-   **Decidido.**
-4. **Autonomía del CPD:** arranque automático siempre, con SAI y central propia. **Decidido.** La SAI
-   cubre el arranque y permite apagar en orden; el descarte es por escalones.
-5. **Apps núcleo:** propuesta Shell, Ficheros y Editor; Panel y Ajustes como apps del sistema. Pendiente
-   de confirmar en F1.
-
-## Cómo se mide el éxito
-
-- **Núcleo:** arranque, memoria libre, líneas de código, dependencias (deben ser 0).
-- **Sesiones:** RAM por sesión, sesiones simultáneas, reanudación tras caída.
-- **Red:** latencia de un RPC, caudal de ficheros, paquetes perdidos por minuto, KB por frame.
-- **CPD:** nodos vivos, tiempo de arranque ordenado, datos verificados tras caída.
+1. **System model:** application server plus lightweight terminals — decided.
+2. **Multi-user:** no accounts; several players may connect, one operates at a
+   time, with operator attribution — decided.
+3. **Terminals:** native Remote Terminal for rack administration and TerraCorp
+   terminals for factory use — decided.
+4. **Data-center autonomy:** automatic boot with a UPS and dedicated power plant;
+   staged shedding and ordered shutdown — decided.
+5. **Core apps:** Shell, Files, and Editor proposed; Dashboard and Settings are
+   system apps. Confirm in F1.

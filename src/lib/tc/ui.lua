@@ -1,9 +1,9 @@
--- Escritorio: barra superior, dock, ventanas y envío de eventos a las apps.
+-- Desktop: top bar, dock, windows, and app event dispatch.
 --
--- Contrato de app (ver docs/arquitectura.md):
+-- App contract (see docs/architecture.md):
 --   module = { id, title, order, create(ctx) -> instance }
 --   instance = { draw(ctx), handle(ctx, name, ...), close(ctx) }
--- `ctx.view` es una subvista de gfx con coordenadas locales 1..w / 1..h.
+-- `ctx.view` is a clipped gfx subview with local coordinates 1..w / 1..h.
 
 local text = require("tc.text")
 local util = require("tc.util")
@@ -137,7 +137,7 @@ function ui:open(id)
 
   local module = self.apps[id]
   if not module then
-    self:notify("warn", "Aplicación desconocida: " .. tostring(id))
+      self:notify("warn", "Unknown application: " .. tostring(id))
     return nil
   end
 
@@ -160,15 +160,15 @@ function ui:open(id)
   local ctx = self:context(win)
   local ok, instance = pcall(module.create, ctx)
   if not ok then
-    self.log.error("no se pudo abrir " .. id .. ": " .. tostring(instance))
+    self.log.error("Could not open " .. id .. ": " .. tostring(instance))
     self.windows[#self.windows] = nil
-    self:notify("error", "Fallo al abrir " .. win.title)
+    self:notify("error", "Failed to open " .. win.title)
     self:focusNextWindow()
     return nil
   end
 
   win.instance = instance
-  self.log.info("app abierta: " .. id)
+  self.log.info("App opened: " .. id)
   self.dirty = true
   return win
 end
@@ -193,7 +193,7 @@ function ui:close(win)
     self:focusNextWindow()
   end
 
-  self.log.info("app cerrada: " .. tostring(win.id))
+  self.log.info("App closed: " .. tostring(win.id))
   self.dirty = true
 end
 
@@ -261,7 +261,7 @@ function ui:drawTopbar()
   self.gfx:put(2, 2, text.truncate(left, self.w - 30), c.text, c.panel)
 
   local energy = self.kernel:energyPercent()
-  local status = string.format("ENERGÍA %3d%%", math.floor(energy))
+  local status = string.format("POWER %3d%%", math.floor(energy))
   local statusColor = c.text
   if energy < 15 then
     statusColor = c.danger
@@ -279,7 +279,7 @@ function ui:drawDock()
 
   self.gfx:fill(1, row, self.w, 1, " ", c.dim, c.panel)
   self.gfx:fill(1, self.h, self.w, 1, " ", c.panel, c.bg)
-  self.gfx:put(2, self.h, "F1–F5 abrir · Esc minimizar · clic en la barra arrastra la ventana", c.dim, c.bg)
+  self.gfx:put(2, self.h, "F1-F5 open · Esc minimize · drag the title bar to move a window", c.dim, c.bg)
 
   local column = 2
   for index, module in ipairs(self.order) do
@@ -305,7 +305,7 @@ function ui:drawDock()
     column = column + width + 1
   end
 
-  local mark = g.mark .. " " .. tostring(#self.windows) .. ((#self.windows == 1) and " ventana" or " ventanas")
+  local mark = g.mark .. " " .. tostring(#self.windows) .. ((#self.windows == 1) and " window" or " windows")
   self.gfx:put(self.w - text.width(mark) - 1, row, mark, c.dim, c.panel)
 end
 
@@ -328,11 +328,10 @@ function ui:drawWindow(win)
   self.gfx:put(win.x + win.w - 6, win.y, "[-]", barFg, barBg)
   self.gfx:put(win.x + win.w - 3, win.y, "[x]", barFg, barBg)
 
-  -- Una app que falla al dibujar no debe dejar el marco vacío ni reintentar el
-  -- error en cada frame: se avisa en la ventana y, tras varios fallos
-  -- consecutivos, se congela el marco en vez de seguir llamándola.
+  -- A failing app must not leave an empty frame or retry the same error every
+  -- frame. Show the error and freeze the app after repeated failures.
   if win.broken then
-    self.gfx:put(win.x + 2, win.y + 2, "Aplicación detenida por errores.", c.danger, c.deep)
+    self.gfx:put(win.x + 2, win.y + 2, "App stopped after repeated errors.", c.danger, c.deep)
     self.gfx:put(win.x + 2, win.y + 3, tostring(win.broken):sub(1, win.w - 4), c.dim, c.deep)
     return
   end
@@ -343,10 +342,10 @@ function ui:drawWindow(win)
     if not ok then
       win.failures = (win.failures or 0) + 1
       self.log.error("draw " .. win.id .. " (" .. win.failures .. "): " .. tostring(reason))
-      self.gfx:put(win.x + 2, win.y + 2, "Error de dibujo: " .. tostring(reason), c.danger, c.deep)
+      self.gfx:put(win.x + 2, win.y + 2, "Draw error: " .. tostring(reason), c.danger, c.deep)
       if win.failures >= 3 then
         win.broken = tostring(reason)
-        self:notify("error", win.title .. " detenida: falla al dibujar")
+        self:notify("error", win.title .. " stopped after draw failures")
       end
     else
       win.failures = 0
@@ -384,11 +383,9 @@ function ui:render(force)
   end
   self.dirty = false
 
-  -- No se limpia el framebuffer entero a negro antes de dibujar. Si una
-  -- sección falla, el frame anterior sigue en pantalla en lugar de dejar un
-  -- hueco negro; y si TODO falla, el kernel puede pintar su aviso encima de
-  -- algo visible en vez de sobre negro. El fondo del escritorio se pinta
-  -- explícitamente.
+  -- Do not clear the entire framebuffer before drawing. If a section fails,
+  -- retain the previous frame rather than leaving a black hole. The desktop
+  -- background is drawn explicitly.
   local failures = {}
 
   local function section(name, fn)
@@ -398,7 +395,7 @@ function ui:render(force)
     end
   end
 
-  section("escritorio", function()
+    section("desktop", function()
     self.gfx:fill(
       1,
       self.desktopTop,
@@ -420,14 +417,14 @@ function ui:render(force)
 
   for _, win in ipairs(ordered) do
     if not win.minimized then
-      section("ventana " .. tostring(win.id), function()
+      section("window " .. tostring(win.id), function()
         self:drawWindow(win)
       end)
     end
   end
 
   if #self.windows == 0 then
-    section("escritorio vacío", function()
+    section("empty desktop", function()
       self:drawEmptyState()
     end)
   end
@@ -445,7 +442,7 @@ function ui:render(force)
   if #failures > 0 then
     self.failures = failures
     self.log.error("render: " .. table.concat(failures, " | "))
-    -- Aviso visible sin depender del framebuffer completo.
+    -- Draw a visible warning without depending on a successful full frame.
     pcall(function()
       local strip = " ERROR " .. table.concat(failures, " | ")
       self.gfx:fill(1, self.h, self.w, 1, " ", self.colors.onDanger, self.colors.danger)
@@ -461,7 +458,7 @@ end
 function ui:drawEmptyState()
   local c = self.colors
   local title = "TERRACORP OS"
-  local subtitle = "Planta sin sesión de trabajo. Abre un módulo en el dock."
+  local subtitle = "No active session. Open an app from the dock."
   local y = self.desktopTop + math.floor((self.desktopBottom - self.desktopTop) / 2) - 2
   self.gfx:put(math.floor((self.w - text.width(title)) / 2) + 1, y, title, c.accent, c.bg)
   self.gfx:put(math.floor((self.w - text.width(subtitle)) / 2) + 1, y + 2, subtitle, c.dim, c.bg)
@@ -493,8 +490,8 @@ function ui:forward(win, name, ...)
   local ctx = self:context(win)
   local ok, result = pcall(win.instance.handle, win.instance, ctx, name, ...)
   if not ok then
-    self.log.error("evento " .. name .. " en " .. win.id .. ": " .. tostring(result))
-    self:notify("error", win.title .. ": error interno")
+    self.log.error("Event " .. name .. " in " .. win.id .. ": " .. tostring(result))
+    self:notify("error", win.title .. ": internal error")
     return false
   end
 
@@ -591,6 +588,19 @@ function ui:onDockClick(x)
 end
 
 function ui:onKey(char, code)
+  -- OpenComputers supplies `char` as a numeric code point (zero when the key
+  -- has no text). Apps receive UTF-8 strings instead of the raw event value.
+  if type(char) == "number" then
+    if char > 0 then
+      local ok, value = pcall(utf8.char, char)
+      char = ok and value or nil
+    else
+      char = nil
+    end
+  elseif type(char) ~= "string" then
+    char = nil
+  end
+
   if code == keys.esc then
     self:minimize(self.focus)
     return
@@ -622,8 +632,7 @@ function ui:dispatch(name, a, b, c, d, e)
   elseif name == "key_down" then
     self:onKey(b, c)
   elseif name == "screen_resized" then
-    -- `rebindScreen` es un método del kernel: se invoca con `:` para que
-    -- `self` sea la instancia y no la tabla del módulo.
+    -- Call the kernel method with `:` so `self` is the kernel instance.
     self.kernel:rebindScreen()
   end
   local _ = a, e

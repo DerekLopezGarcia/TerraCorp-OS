@@ -1,163 +1,110 @@
-# TerraCorp — contexto para agentes
+# TerraCorp OS — Agent Guide
 
-> Proyecto **personal**. No usar la memoria de neXacom: el contexto vive aquí y en este repo.
+This is a personal project. Keep project context in this repository; do not put
+it in the neXacom memory.
 
-## Descripción
+## Project
 
-TerraCorp OS: sistema operativo con escritorio en Lua para OpenComputers, implementado dentro del
-modpack **Supersymmetry** (Minecraft 1.12.2 + Forge). Susy-Core es el coremod del pack, no el pack.
-El OS se instala en los ordenadores del jugador; no modifica el pack.
+TerraCorp OS is a Lua desktop OS for OpenComputers in the Supersymmetry
+modpack (Minecraft 1.12.2 + Forge). It runs on player-owned computers and does
+not modify or redistribute Supersymmetry or Susy-Core. MineOS is an
+architectural reference, not a code fork.
 
-## Referencia
+- Runtime: Lua 5.3; no build step.
+- OpenComputers: 1.7.x API verified; 1.8.x is a target.
+- Use the display's native resolution (tested from 40x16 to 160x50).
+- Product UI, source comments, and documentation are in English.
+- License: MIT.
 
-- GitHub (personal): `https://github.com/DerekLopezGarcia/TerraCorp-OS`. **Ojo:** `raw.githubusercontent.com`
-  distingue mayúsculas en el propietario; con `dereklopezagarcia` devuelve 404 y en juego se ve como
-  «HTTP request failed» (2026-10-23).
-- Rama base: `main`
-- Entorno objetivo: Supersymmetry · `https://github.com/SymmetricDevs/Supersymmetry`
-  (coremod `https://github.com/SymmetricDevs/Susy-Core`, GPLv3)
-- Inspiración: MineOS · `https://github.com/IgorTimofeev/MineOS` (MIT, **no** es un fork)
+## Layout
 
-## Datos estables
-
-- Runtime: **Lua 5.3** (el de OpenComputers). No hay build.
-- OpenComputers: 1.7.x probado a nivel de API; objetivo 1.8.x.
-- La resolución es **la de la pantalla**: el kernel no impone medidas (probado de 40x16 a 160x50). Por
-  debajo de 80x25 la UI queda comprimida pero funcional.
-- Idioma del producto y de los docs: español.
-- Licencia: MIT.
-- Verificación local: `npm run check` y `npm run sim` (Node 20+, fengari como devDependency).
-
-## Estructura
-
-```
-src/                  volumen de arranque
-  init.lua            entrada (BIOS/EEPROM) -> kernel
-  boot/kernel.lua     vfs, carga de módulos, servicios, bucle de señales
-  lib/tc/*.lua        version, util, text, log, config, theme, gfx, ui, keys
+```text
+src/                  boot volume
+  init.lua            entry point; finds the volume and loads the kernel
+  boot/kernel.lua     VFS, module loader, services, event loop
+  lib/tc/*.lua        core libraries, display, UI, updater
   apps/*.lua          dashboard, files, console, settings, about
-eeprom/init.lua       gestor de arranque para la EEPROM
-tools/install.lua     instalador bajo OpenOS
-tools/fetch.lua       descargador para OpenOS (sigue tools/manifest.txt)
-tools/make-manifest.js genera tools/manifest.txt desde el árbol
-tools/check.lua       comprobador de sintaxis bajo OpenOS
-tools/spike-rc.lua    banco de pruebas del enlace Redstone Control (spike)
-tools/harness/        arnés Node (fengari) + comprobador
-docs/                 arquitectura, opencomputers, roadmap, distribuido, larga-distancia, pruebas
+eeprom/init.lua       optional boot manager
+tools/install.lua     OpenOS installer
+tools/fetch.lua       OpenOS repository downloader
+tools/manifest.txt    files copied by fetch.lua
+tools/harness/        Node.js simulation and tests
+docs/                 architecture, testing, roadmap, release notes
 ```
 
-## Comandos
+## Commands
 
-```bash
-npm install        # solo para el arnés local
-npm run check      # sintaxis de todos los .lua (Lua 5.3) + manifiesto en sync
-npm run manifest   # regenera tools/manifest.txt (lo que descarga fetch.lua)
-npm run sim        # ejecuta el OS con componentes falsos y vuelca pantalla
-npm run sim:oc     # gate estricto: 4 escenarios con la API real de OpenComputers
-npm run test:install # detección de volumen y copia del instalador (OpenOS simulado)
-npm run test:fetch  # descargador: 404, fichero corto, disco lleno, sin tarjeta
-npm run test:boot  # gestor de arranque de la EEPROM (sandbox 1.7.x y 1.8+)
-npm run test:faults # GPU sin energía: la pantalla debe quedar igual que sin fallos
-npm run test:screens # mismo OS de 160x50 a 40x16, siempre a la resolución de la pantalla
-npm run measure    # líneas/bytes del código y coste de pintado (cifras para docs/pruebas.md)
+```sh
+npm install
+npm run check
+npm run manifest       # required after adding/removing Lua files
+npm run sim
+npm run sim:oc
+npm run test:dashboard-tick
+npm run test:updater
+npm run test:install
+npm run test:fetch
+npm run test:boot
+npm run test:faults
+npm run test:screens
+npm run measure
 ```
 
-En el juego: `wget .../tools/fetch.lua /tmp/fetch.lua` → `lua /tmp/fetch.lua` →
-`cd /home/TerraCorp-OS/tools && ./install.lua /home/TerraCorp-OS [dir] [--eeprom] [--yes] [--list]`.
-Sin `dir` detecta un volumen escribible, distinto del disco de OpenOS y vacío o ya TerraCorp; nunca
-uno con datos ajenos. Ojo: `install` a secas es el instalador de OpenOS.
+In OpenOS, bootstrap with `wget .../tools/fetch.lua /tmp/fetch.lua`, run
+`lua /tmp/fetch.lua`, then run `./install.lua /home/TerraCorp-OS` from the
+downloaded tools directory. Normal installation sets the boot volume; do not
+write the EEPROM unless explicitly required.
 
-## Convenciones
+## Architecture and conventions
 
-- **Núcleo mínimo**: el OS debe arrancar y ser útil en un solo nodo, sin red y con 1 MB. Nada entra en
-  el núcleo si puede ser un servicio o una app opcional.
-- Fase actual y criterios de salida: `docs/roadmap.md`. Modelo distribuido y límites del mod:
-  `docs/distribuido.md`. No adelantar fases.
-- Cada módulo devuelve una tabla; se carga con `require("tc.x")` / `require("apps.x")` **del kernel**,
-  nunca con el `require` de OpenOS.
-- Rutas de módulos: `tc.*` → `/lib/tc/*.lua`, `apps.*` → `/apps/*.lua`.
-- App = `{ id, title, short, order, create(ctx) }`; instancia = `{ draw(ctx), handle(ctx, name, a, b, c),
-  tick(ctx), close(ctx) }`. La UI llama con `:` (self = instancia).
-- Dibujo solo a través de `ctx.view` (subvista con recorte y coordenadas locales 1..w / 1..h).
-- Nada de `os.shutdown`/`computer.shutdown` fuera de `kernel:poweroff`.
-- Colores solo desde `theme.colors`; glifos desde `theme.glyphs` (hay juego ASCII alternativo).
-- Texto: usar `ctx.text` (UTF-8 por puntos de código), no `#cadena`, para contar columnas.
+- Keep the core useful on one offline node with 1 MB; optional features should
+  remain outside the boot-critical path.
+- Follow the current phase and exit criteria in `docs/roadmap.md`.
+- The kernel owns module loading. `tc.*` maps to `/lib/tc/*.lua`; `apps.*` maps
+  to `/apps/*.lua`. Do not depend on OpenOS `require`, `event`, `fs`, or `shell`.
+- Apps use `{ id, title, short, order, create(ctx) }`; instances provide
+  `draw`, `handle`, optional `tick`, and optional `close`. UI calls methods with
+  `:` so `self` is the app instance.
+- Apps draw only through `ctx.view`; its coordinates are local and clipped.
+- Use `theme.colors` and `theme.glyphs`; use `ctx.text` for display widths.
+- Only `kernel:poweroff` may call `computer.shutdown`.
+- Do not add runtime dependencies. Keep Lua files UTF-8 without a BOM.
 
-## Reglas duras
+## Hard rules
 
-- No `git push`: lo hace el usuario. `git commit` solo con OK explícito y solo con ficheros propios.
-- No tocar `node_modules/` ni añadir dependencias de runtime: el OS debe correr sin OpenOS.
-- Cualquier API de OpenComputers que se use debe estar verificada (ver `docs/opencomputers.md`);
-  lo no verificado se documenta como pendiente.
-- Los componentes falsos del arnés deben replicar la API real: `list` devuelve tabla y el espacio se lee
-  con `spaceUsed`/`spaceTotal` en bytes. Un arnés que invente la API da gates verdes falsos.
-- Si añades o quitas un `.lua` en `src/`, `eeprom/` o `tools/`, ejecuta `npm run manifest`: `npm run
-  check` falla si el manifiesto se desfasa, porque de él depende la instalación en partida.
-- Mantener el arnés pasando (`npm run check`, `npm run sim` y `npm run sim:oc`) antes de dar un cambio por hecho.
-- No escribir este proyecto en la memoria de neXacom.
+- Do not push commits; the user publishes changes. Commit only with explicit
+  approval.
+- Do not modify `node_modules/`.
+- Verify every OpenComputers API against `docs/opencomputers.md`; document
+  unverified behavior as pending.
+- Harness fakes must match the real API. In particular, `filesystem.list`
+  returns a table and disk space is reported in bytes by `spaceUsed` and
+  `spaceTotal`.
+- Keep `tools/manifest.txt` synchronized. `npm run check` verifies it.
+- Before considering a change complete, run `npm run check`, `npm run sim`, and
+  `npm run sim:oc`, plus focused tests for the changed feature.
 
-## Decisiones y trampas conocidas
+## Verified implementation details
 
-- Framebuffer virtual + volcado por diferencias: menos llamadas a la GPU; el volcado agrupa celdas
-  contiguas con el mismo par fg/bg (2026-10-23).
-- Sistema de ficheros propio sobre el componente `filesystem`: no se asume OpenOS montado.
-- `computer.pullSignal` es la API cruda de señales; `event` es de OpenOS y no se usa.
-- Ancho de carácter = 1. Sin CJK/emoji; los acentos ocupan una celda.
-- Las ventanas se apilan con desplazamiento 2; los bordes de la ventana inferior asoman un sliver.
-- CPD: arranque automático siempre, con SAI (capacitores) y central propia; descarte por escalones y el
-  core es el último en apagarse.
-- `filesystem.list` devuelve una tabla y el espacio se lee con `spaceUsed`/`spaceTotal` en bytes;
-  `vfs.space()` los convierte a KB (2026-10-23).
-- En OC 1.7.x el sandbox de la EEPROM no trae `computer.getBootAddress`/`setBootAddress`: las define
-  `bios.lua` en tiempo de ejecución sobre `eeprom.getData`/`setData`. Un gestor propio debe crearlas
-  (`eeprom/init.lua`) y el `init.lua` del volumen debe tolerar que falten (2026-10-23).
-- Un fallo de render vuelve a marcar el escritorio sucio y se registra con límite: nunca se deja la
-  pantalla congelada ni se escribe un error por frame (2026-10-23).
-- Contrato real de la GPU, verificado en `GraphicsCard.scala` (rama `master-MC1.12`):
-  `gpu.set`/`fill`/`copy` devuelven `true` al escribir y `nil, "not enough energy"` si no hay energía;
-  `setBackground`/`setForeground` devuelven el color anterior. El volcado por diferencias solo se da
-  por bueno cuando el retorno es `true` (2026-10-23).
-- `ui:render` no limpia el framebuffer a negro antes de dibujar: pinta el fondo del escritorio y cada
-  sección (barra, dock, ventanas, aviso) con `pcall` independiente. Si una falla, queda el frame
-  anterior y se pinta una banda de error; una app que falla 3 veces al dibujar se congela con aviso
-  en vez de reintentar el error cada frame (2026-10-23).
-- Referencia de arquitectura de MineOS estudiada en `docs/mineos-referencia.md` (2026-10-23).
-- El registro se abre justo después de `ensureDir /var/log` y antes de crear la GPU: si el arranque se
-  cuelga en vídeo o en el splash, `/var/log/tc.log` ya tiene la línea `arranque ...`, así que la pantalla
-  negra se puede diagnosticar sin adivinar (2026-10-23).
-- `log.trace` escribe **siempre** al disco aunque el nivel sea info; `log.info` solo vive en memoria y
-  warn/error sí se persisten. Los hitos de arranque usan `trace` para poder diagnosticar una pantalla
-  negra sin adivinar. Cada traza acaba en `[Ns]`, el uptime (`computer.uptime`) en ese instante, así
-  que el arranque real se lee de `/var/log/tc.log` sin cronómetro (2026-10-23).
-- El arnés **no mide** tiempo de arranque ni memoria: arranca de forma síncrona (el primer frame se
-  pinta antes de consumir señales) y fengari no implementa `lua_gc`, así que `collectgarbage("count")`
-  revienta con `lua_gc not implemented`. Mide líneas/bytes y coste de pintado (`npm run measure`); el
-  resto se lee en juego. Las cifras y el protocolo están en `docs/pruebas.md` (2026-10-23).
-- **No editar `src/*.lua` con `Get-Content`/`Set-Content` en PowerShell 5.1**: sin BOM lee UTF-8 como
-  CP1252 (duplica la codificación de los acentos) y `Set-Content -Encoding UTF8` añade BOM, que el
-  `load` del kernel rechaza (`unexpected symbol near '<\239>'`). Usar las herramientas de edición del
-  agente, que respetan UTF-8 sin BOM (2026-10-23). `npm run check` rechaza BOM y codificación
-  duplicada, así que la regresión no pasa desapercibida. `Get-Content` también **muestra** mal un
-  fichero correcto (`Núcleo` sale como `Nǧcleo`): no «arregles» lo que sólo está mal en pantalla.
-- `util.split(texto, "")` devuelve el texto entero: un separador vacío colgaba el bucle para siempre
-  (2026-10-23).
-- El kernel aplica `gpu.maxResolution()` **sin tope** (antes recortaba a 118x44): el escritorio ocupa
-  la pantalla real. La geometría de ventanas es proporcional (74% de ancho, 84% del escritorio) y
-  `clampWindow` recorta; `npm run test:screens` lo verifica en 160x50, 120x40, 80x25, 60x20 y 40x16
-  (2026-10-23).
-- Los guiones del arnés se anclan a la resolución simulada (`dockY = maxHeight - 1`) y navegan con
-  teclado; antes usaban filas fijas de 118x44 y dejaban de funcionar con otro tamaño (2026-10-23).
-- `tools/fetch.lua` resume en una línea `RESULTADO: OK|INCOMPLETO|ERROR` y verifica en disco
-  (`filesystem.size`) lo que acaba de escribir, en vez de fiarse de la escritura. Su salida es ASCII y
-  de ≤ 60 caracteres a propósito: en juego el terminal pinta mal (columnas corridas, colores cruzados)
-  y lo único legible es una línea corta. Distingue `HTTP 404` (ruta o mayúsculas del propietario) de un
-  fallo de red. Gate: `npm run test:fetch`, 6 escenarios; con el `fetch.lua` anterior fallan todos, así
-  que el gate no es vacuo (2026-10-23).
-- `npm run test:faults` inyecta fallos de GPU (`--fault=N`, las N primeras escrituras devuelven
-  `nil, "not enough energy"`) y exige que la pantalla final sea **idéntica** a la del mismo escenario
-  sin fallos. Es el gate que demuestra que el volcado por diferencias reintenta lo rechazado; con el
-  código anterior las cuatro pantallas quedaban con huecos (2026-10-23).
+- `computer.pullSignal` is the raw event API; OpenOS `event` is unavailable.
+- OpenComputers `key_down` supplies a numeric Unicode code point (zero when
+  absent) and a separate scan code. The UI normalizes it to UTF-8 for apps.
+- `filesystem.list` returns a Lua table; `spaceUsed` and `spaceTotal` return
+  bytes.
+- `gpu.setBackground` and `gpu.setForeground` require `true` to interpret a
+  value as a palette index. T3 screens begin with an editable grayscale palette;
+  TerraCorp initializes it to the classic OpenComputers colors.
+- `gpu.set`, `fill`, and `copy` return `true` on success and may return
+  `nil, "not enough energy"` on failure. Failed framebuffer spans must remain
+  dirty and be retried.
+- The EEPROM sandbox in OpenComputers 1.7.x may lack boot-address functions;
+  the optional custom boot manager supplies them. Standard BIOS boot does not
+  require that manager.
+- The local harness does not measure in-game memory or wall-clock boot time.
+  Use `/var/log/tc.log` and the F0 protocol for those results.
 
-## Memoria relacionada
+## Versioning and updates
 
-- Solo local: este repo y `Memoria/` del workspace **no** se usan para este proyecto.
+Use semantic versions in `src/lib/tc/version.lua`, matching Git tags
+`vMAJOR.MINOR.PATCH`. The updater reads the latest stable GitHub Release and
+downloads only the tagged `src/` files. See `docs/versioning.md`.

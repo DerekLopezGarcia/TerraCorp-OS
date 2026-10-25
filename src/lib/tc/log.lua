@@ -1,10 +1,10 @@
--- Registro en memoria con severidad y salida opcional a disco.
--- El kernel conecta `log.sink` para persistir avisos y errores.
+-- In-memory severity logger with an optional disk sink.
+-- The kernel connects `log.sink` to persist warnings and errors.
 
 local log = {}
 
 local LEVELS = { debug = 1, info = 2, warn = 3, error = 4 }
-local TAGS = { [1] = "DBG", [2] = "INF", [3] = "AVS", [4] = "ERR" }
+local TAGS = { [1] = "DBG", [2] = "INF", [3] = "WRN", [4] = "ERR" }
 log.levels = LEVELS
 log.tags = TAGS
 log.threshold = LEVELS.info
@@ -17,8 +17,8 @@ local function now()
   return ok and stamp or "--:--:--"
 end
 
--- Uptime del ordenador. En juego da el tiempo real de arranque (segundos desde
--- que arrancó el nodo), así que `cat /var/log/tc.log` mide F0 sin cronómetro.
+-- Computer uptime gives real elapsed time since node startup in-game, so the
+-- boot trace can measure F0 without a stopwatch.
 local function uptime()
   if type(computer) ~= "table" or type(computer.uptime) ~= "function" then
     return nil
@@ -61,10 +61,8 @@ function log.write(level, message)
   end
 end
 
--- Traza de arranque: se escribe SIEMPRE al disco, aunque el nivel sea info.
--- Sirve para saber hasta dónde llegó un arranque que acaba en pantalla negra;
--- el resto de mensajes info sigue viviendo sólo en memoria para no castigar
--- al sistema de ficheros.
+-- Boot traces are always persisted, even at info level. They identify how far
+-- a black-screen boot progressed; ordinary info messages stay in memory.
 function log.trace(message)
   local entry = {
     level = LEVELS.info,

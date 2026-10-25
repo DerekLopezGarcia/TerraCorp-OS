@@ -1,12 +1,11 @@
-// Gate estricto: ejecuta los cuatro escenarios con las comprobaciones de
-// contrato activadas (list devuelve tabla, spaceUsed en bytes, tarjeta de
-// almacenamiento viva). Falla si cualquiera de ellos reporta problemas.
+// Strict gate: run scenarios with API contract checks enabled and fail if any
+// scenario reports a problem.
 //
 //   node tools/harness/simulate-oc.js
 
 const { runScenario } = require("./runner");
 
-const scenarios = ["dashboard", "console", "files", "settings"];
+const scenarios = ["dashboard", "console", "files", "settings", "updater"];
 const failed = [];
 
 for (const scenario of scenarios) {
@@ -16,16 +15,16 @@ for (const scenario of scenarios) {
     const errors = runScenario(scenario, true);
     if (errors > 0) failed.push(scenario + " (" + errors + ")");
   } catch (error) {
-    console.error("error del arnés en " + scenario + ": " + error.message);
-    failed.push(scenario + " (excepción)");
+    console.error("Harness error in " + scenario + ": " + error.message);
+    failed.push(scenario + " (exception)");
   }
 }
 
 console.log("");
-console.log("=== RESUMEN ESTRICTO ===");
+console.log("=== STRICT SUMMARY ===");
 if (failed.length === 0) {
-  console.log("4 escenarios, sin errores");
+  console.log(scenarios.length + " scenarios, no failures");
   process.exit(0);
 }
-console.log("escenarios con problemas: " + failed.join(", "));
+console.log("scenarios with failures: " + failed.join(", "));
 process.exit(1);

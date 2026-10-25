@@ -1,6 +1,5 @@
-// Genera tools/manifest.txt: la lista de ficheros que tools/fetch.lua copia al
-// ordenador de OpenComputers. `npm run check` falla si el manifiesto se queda
-// desfasado respecto al árbol real.
+// Generate tools/manifest.txt, the file list copied by tools/fetch.lua to the
+// OpenComputers computer. `npm run check` fails if it differs from the source tree.
 //
 //   npm run manifest
 
@@ -17,8 +16,8 @@ function walk(dir, out) {
   }
 }
 
-// src/** y eeprom/**, más los .lua de primer nivel de tools/ (el arnés no
-// se copia: necesita Node y no hace falta dentro del juego).
+// Include src/**, eeprom/**, and top-level tools/*.lua. The harness is not copied:
+// it requires Node.js and is not needed in-game.
 function list() {
   const files = [];
   walk(path.join(repoRoot, "src"), files);
@@ -42,5 +41,5 @@ if (require.main === module) {
   const target = path.join(repoRoot, "tools", "manifest.txt");
   const entries = list();
   fs.writeFileSync(target, entries.join("\n") + "\n");
-  console.log(entries.length + " ficheros en tools/manifest.txt");
+  console.log(entries.length + " files in tools/manifest.txt");
 }

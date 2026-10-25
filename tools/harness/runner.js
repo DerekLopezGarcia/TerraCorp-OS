@@ -1,8 +1,7 @@
-// Núcleo del arnés: empaqueta src/ y ejecuta el OS en un estado Lua nuevo.
+// Harness core: bundle src/ and run the OS in a fresh Lua state.
 //
-// Los componentes falsos de harness.lua imitan la API real de OpenComputers
-// (`list` devuelve tabla, `spaceUsed`/`spaceTotal` en bytes). Con `strict` se
-// activan además las comprobaciones de contrato del propio arnés.
+// Fake components in harness.lua model the OpenComputers API. Strict mode also
+// enables the harness contract checks.
 
 const fs = require("fs");
 const path = require("path");
@@ -39,20 +38,18 @@ function bundleSource() {
   return parts.join("\n");
 }
 
-// Ejecuta un escenario y devuelve el número de problemas detectados.
-// Lanza si el arnés no se puede cargar o revienta.
-// `faultSet` inyecta fallos de GPU: las primeras N llamadas a `gpu.set`
-// devuelven nil, "not enough energy", como el componente real sin energía.
-// `screen` fija la resolución máxima de la pantalla simulada.
+// Run a scenario and return the number of detected issues. Throw if the
+// harness cannot load or crashes. `faultSet` rejects the first N GPU writes;
+// `screen` sets the simulated screen's maximum resolution.
 function runScenario(scenario, strict, faultSet, screen) {
   const L = lauxlib.luaL_newstate();
   lualib.luaL_openlibs(L);
 
   if (lauxlib.luaL_loadstring(L, to_luastring(bundleSource())) !== lua.LUA_OK) {
-    throw new Error("No se pudo empaquetar src/: " + to_jsstring(lua.lua_tostring(L, -1)));
+    throw new Error("Could not bundle src/: " + to_jsstring(lua.lua_tostring(L, -1)));
   }
   if (lua.lua_pcall(L, 0, 1, 0) !== lua.LUA_OK) {
-    throw new Error("Fallo al construir el paquete: " + to_jsstring(lua.lua_tostring(L, -1)));
+    throw new Error("Failed to build bundle: " + to_jsstring(lua.lua_tostring(L, -1)));
   }
   lua.lua_setglobal(L, to_luastring("BUNDLE"));
 
@@ -77,10 +74,10 @@ function runScenario(scenario, strict, faultSet, screen) {
   }
 
   if (lauxlib.luaL_loadfile(L, to_luastring(harnessPath)) !== lua.LUA_OK) {
-    throw new Error("No se pudo cargar el arnés: " + to_jsstring(lua.lua_tostring(L, -1)));
+    throw new Error("Could not load harness: " + to_jsstring(lua.lua_tostring(L, -1)));
   }
   if (lua.lua_pcall(L, 0, 0, 0) !== lua.LUA_OK) {
-    throw new Error("Fallo del arnés: " + to_jsstring(lua.lua_tostring(L, -1)));
+    throw new Error("Harness failed: " + to_jsstring(lua.lua_tostring(L, -1)));
   }
 
   lua.lua_getglobal(L, to_luastring("TC_ERRORS"));

@@ -1,149 +1,126 @@
 # TerraCorp OS
 
-Sistema operativo con escritorio para **OpenComputers**, pensado para correr dentro del modpack
-**Supersymmetry** (Minecraft 1.12.2 + Forge). Susy-Core es el coremod de ese pack; TerraCorp OS no
-lo modifica ni lo redistribuye: se instala en los ordenadores del jugador.
+A Lua desktop operating system for **OpenComputers**, designed for the
+**Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
+player's computers; it does not modify or redistribute Susy-Core.
 
-Estado: **0.1.0 "Foundry"** — arranca, monta escritorio, 5 aplicaciones, configuración persistente y
-registro. Validado con un arnés que ejecuta el OS en un intérprete Lua 5.3 real; **pendiente de
-prueba en partida** (protocolo y medidas en `docs/pruebas.md`).
+Current version: **0.1.1 Foundry**. The prototype boots, provides five apps,
+persists settings, and logs errors. Local simulations cover the OpenComputers
+API contract; in-game testing is tracked in [`docs/tests.md`](docs/tests.md).
 
-## Qué incluye
+## Features
 
-- Escritorio con barra corporativa, dock y ventanas (arrastrar, minimizar, cerrar).
-- **Panel de planta**: nodo, memoria, energía, periféricos enlazados, disco y registro.
-- **Ficheros**: navegación por el volumen, tamaños y vista previa de texto.
-- **Consola**: shell propia (`ls`, `cd`, `cat`, `log`, `open`, `theme`, `reboot`…).
-- **Ajustes**: acento, juego de caracteres, formato de hora, arranque y nivel de registro.
-- **Acerca de**: versión, nodo y créditos.
-- Framebuffer virtual con volcado por diferencias (solo redibuja lo que cambia).
-- Sin dependencia de OpenOS: carga sus propios módulos y monta su propio sistema de ficheros.
+- Desktop, dock, and movable/minimizable windows.
+- **Dashboard:** node, memory, power, devices, storage, and system log.
+- **Files:** browse the boot volume, view sizes, and preview text files.
+- **Console:** built-in shell (`ls`, `cd`, `cat`, `log`, `open`, `theme`, etc.).
+- **Settings:** accent color, character set, clock format, boot splash, and log level.
+- **About:** version details and a GitHub Releases updater.
+- Difference-based framebuffer rendering.
+- No OpenOS runtime dependency: TerraCorp loads its own modules and filesystem.
 
-## Requisitos
+## Requirements
 
-| Elemento | Mínimo | Recomendado |
+| Component | Minimum | Recommended |
 |---|---|---|
 | Minecraft / Forge | 1.12.2 | 1.12.2 |
 | Modpack | Supersymmetry | Supersymmetry |
 | OpenComputers | 1.7.x | 1.8.x |
 | CPU | Tier 2 | Tier 3 |
-| Pantalla | Tier 2 (80x25) | Tier 3 (hasta 160x50) |
-| Disco | 1 MB libre | 2 MB |
-| Memoria | 1 MB | 2 MB |
+| Screen | Tier 2 (80x25) | Tier 3 (up to 160x50) |
+| Disk | 1 MB free | 2 MB |
+| Memory | 1 MB | 2 MB |
 
-El escritorio usa **la resolución real de la pantalla**: no impone ninguna medida. Las ventanas son
-proporcionales y se recortan al escritorio, así que se adapta desde 40x16 hasta 160x50 (probado en
-`npm run test:screens`); por debajo de 80x25 las tarjetas quedan comprimidas.
+The desktop uses the screen's actual resolution and adapts from 40x16 to
+160x50. Below 80x25, dashboard cards are compressed.
 
-## Instalación
+## Installation
 
-El volumen de arranque es el contenido de `src/`. El BIOS de OpenComputers ejecuta `/init.lua` del
-volumen marcado como de arranque, así que no hace falta OpenOS para que funcione.
+The boot volume contains the contents of `src/`. OpenComputers BIOS runs
+`/init.lua` from the selected boot volume; a custom EEPROM program is not
+required.
 
-1. Arranca el ordenador con un disquete de OpenOS y descarga el árbol (necesita tarjeta de red):
+1. Boot OpenOS with an Internet Card and download the repository:
 
    ```lua
    wget https://raw.githubusercontent.com/DerekLopezGarcia/TerraCorp-OS/main/tools/fetch.lua /tmp/fetch.lua
    lua /tmp/fetch.lua
    ```
 
-   Copia `src/`, `eeprom/` y las herramientas en `/home/TerraCorp-OS` (21 ficheros, con progreso y
-   recuento final). Para otro destino: `lua /tmp/fetch.lua /home/otra/ruta`. Si el ordenador no tiene
-   salida a internet, sirve el repo en tu red (`python -m http.server 8000`) y pasa la URL como segundo
-   argumento.
-2. Ejecuta el instalador bajo OpenOS. **`install` a secas es el instalador de OpenOS**, así que se llama
-   al script por ruta:
+   This downloads the source, EEPROM template, and tools to `/home/TerraCorp-OS`.
+2. Run the installer under OpenOS:
 
    ```lua
    cd /home/TerraCorp-OS/tools
    ./install.lua /home/TerraCorp-OS
    ```
 
-   Sin dirección, detecta el volumen de destino: escribible, distinto del disco de OpenOS, de al menos
-   1 MB y **vacío o con una instalación previa de TerraCorp**. Nunca elige un disco con datos ajenos. Si
-   hay varios candidatos, pregunta cuál; con `--yes` exige que se pase la dirección a mano.
+   The installer selects a writable, empty TerraCorp volume with at least 1 MB
+   free. To select one explicitly, pass its filesystem address (shown by
+   `components`) before `--yes`.
+3. Reboot. The installer sets the boot volume; it does not need to write the
+   EEPROM. **Do not use `--eeprom` unless you intentionally want to replace the
+   BIOS.**
 
-   ```lua
-   ./install.lua /home/TerraCorp-OS 1a2b3c4d-...   -- forzar un volumen concreto
-   ./install.lua /home/TerraCorp-OS --list         -- ver qué volúmenes detecta
-   ```
+## Controls
 
-   - `<direccionDelDisco>` es la dirección del componente `filesystem` de destino (`components` la
-     muestra).
-   - Basta con fijar el volumen de arranque: el BIOS estándar arranca TerraCorp sin tocar la EEPROM.
-   - `--eeprom` graba `eeprom/init.lua` en la EEPROM. Solo hace falta si la EEPROM no tiene BIOS, y
-     **sustituye el BIOS**: si ese gestor falla, hay que poner una EEPROM nueva. El instalador avisa.
-   - `--yes` salta la confirmación.
-3. Reinicia el ordenador (`reboot` o palanca).
+- **Dock:** click Dashboard, Files, Console, Settings, or About.
+- **Keyboard:** F1-F5 open the corresponding app; Esc minimizes the focused window.
+- **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.
+- **Files:** arrows select, Enter opens, Backspace goes up, R reloads.
+- **Console:** type commands and press Enter; `help` lists commands.
+- **Settings:** click a value to cycle it.
+- **Updater:** open About, check for updates, install a published stable release,
+  then restart to apply it. Requires an Internet Card.
 
-Sin instalador: copia `src/*` a la raíz del disco, deja `/boot/kernel.lua` en su sitio y arranca desde
-ese disco. La EEPROM es opcional: el BIOS puede arrancar directamente el volumen.
+## Repository layout
 
-## Controles
-
-- **Dock**: clic en `1 Panel`, `2 Ficheros`, `3 Consola`, `4 Ajustes`, `5 Acerca`.
-- **Teclado global**: `F1`–`F5` abren la app correspondiente; `Esc` minimiza la ventana activa.
-- **Ventanas**: arrastra desde la barra de título, `[-]` minimiza, `[x]` cierra.
-- **Ficheros**: `↑`/`↓` mover, `Enter` abrir, `Retroceso` subir, `r` recargar.
-- **Consola**: `↑`/`↓` historial, `Retroceso`, `Enter`; `help` lista comandos.
-- **Ajustes**: clic en cada valor para ciclarlo.
-
-## Estructura
-
-```
-src/                    volumen de arranque (lo que se copia al disco)
-  init.lua              entrada: encuentra el volumen, enlaza GPU y llama al kernel
-  boot/kernel.lua       servicios, carga de módulos, bucle de señales
-  lib/tc/               version, util, text, log, config, theme, gfx, ui, keys
-  apps/                 dashboard, files, console, settings, about
-eeprom/init.lua         gestor de arranque para grabar en la EEPROM
-tools/fetch.lua         descargador para OpenOS (usa tools/manifest.txt)
-tools/install.lua       instalador (se ejecuta bajo OpenOS)
-tools/check.lua         comprobador de sintaxis dentro de OpenComputers
-tools/harness/          arnés de simulación y comprobador local (Node)
-docs/                   arquitectura, notas de OpenComputers y roadmap
+```text
+src/                  boot-volume contents
+  init.lua            entry point
+  boot/kernel.lua     filesystem, services, module loader, event loop
+  lib/tc/             core libraries, graphics, UI, and updater
+  apps/               dashboard, files, console, settings, about
+eeprom/init.lua       optional boot manager (not required for normal installs)
+tools/                OpenOS installer, downloader, and manifest
+tools/harness/        local Node.js simulation and tests
+docs/                 architecture, testing, roadmap, and release documentation
 ```
 
-## Desarrollo
+## Development
 
-El código no necesita compilación. Para validarlo sin abrir Minecraft:
+No build step is required. With Node.js 20+:
 
-```bash
+```sh
 npm install
-npm run check          # sintaxis + coherencia de tools/manifest.txt
-npm run manifest       # regenera tools/manifest.txt (lo usa fetch.lua)
-npm run sim            # ejecuta el OS, reproduce eventos y vuelca la pantalla
-npm run sim:oc         # gate estricto: los 4 escenarios con la API real de OC
-npm run sim:dashboard  # escenarios: dashboard, console, files, settings
-npm run test:install   # detección de volumen y copia del instalador (OpenOS simulado)
+npm run check
+npm run manifest
+npm run sim
+npm run sim:oc
+npm run test:dashboard-tick
+npm run test:updater
+npm run test:install
+npm run test:fetch
+npm run test:boot
+npm run test:faults
+npm run test:screens
 ```
 
-El arnés sirve como prueba de humo: componentes falsos, disco en memoria y GPU que rasteriza en una
-matriz. Los componentes falsos replican la API real (`list` devuelve tabla, `spaceUsed`/`spaceTotal` en
-bytes); `npm run sim:oc` añade comprobaciones de contrato y falla si el OS deja de hablarles. Aun así
-no sustituye a probarlo en el juego.
+The harness uses in-memory components and is a smoke test, not a replacement
+for in-game testing. See [`docs/tests.md`](docs/tests.md) for the F0 protocol and
+[`docs/versioning.md`](docs/versioning.md) for publishing GitHub Releases.
 
-## Decisiones de diseño
+## Design notes
 
-- **Sin OpenOS**: el OS no asume `require`, `event`, `fs` ni `shell`. Todo se carga desde su volumen.
-- **Framebuffer propio**: se dibuja en memoria y se envían a la GPU solo las celdas que cambian.
-- **16 colores**: el tema es una asignación de tokens a la paleta de Minecraft, no colores libres.
-- **Un carácter = una celda**: no hay soporte de ancho doble (CJK/emoji); ver `docs/opencomputers.md`.
+- The OS must remain useful on one offline node with 1 MB of storage.
+- Colors use the OpenComputers palette; the T3 palette is initialized at boot.
+- One Unicode code point occupies one screen cell; wide CJK characters and emoji
+  are not supported.
+- TerraCorp OS is original software inspired by MineOS (MIT), not a fork.
 
-## Plan
+## License and credits
 
-Fase actual: **F0 — prototipo congelado**. No se añaden funciones: se prueba en partida, se mide y se
-recorta. La evolución (núcleo mínimo → servicios → red → CPD → cluster ligero) está en
-[`docs/roadmap.md`](docs/roadmap.md); el modelo distribuido, los límites reales de OpenComputers y la
-topología del CPD, en [`docs/distribuido.md`](docs/distribuido.md). Lo corregido en la auditoría de
-0.1.0 y los contratos de API verificados, en [`docs/auditoria-0.1.0.md`](docs/auditoria-0.1.0.md).
-
-## Licencia y créditos
-
-MIT (ver `LICENSE`).
-
-- Inspirado en la arquitectura y la experiencia de escritorio de [MineOS](https://github.com/IgorTimofeev/MineOS)
-  (Igor Timofeev, MIT). **No es un fork**: no se ha copiado código.
-- Entorno objetivo: [Supersymmetry](https://github.com/SymmetricDevs/Supersymmetry) y su coremod
-  [Susy-Core](https://github.com/SymmetricDevs/Susy-Core) (GPLv3). No se modifican ni se redistribuyen.
-- OpenComputers es MIT y pertenece a sus autores.
+MIT; see [`LICENSE`](LICENSE). The target environment is
+[Supersymmetry](https://github.com/SymmetricDevs/Supersymmetry) and its
+[Susy-Core](https://github.com/SymmetricDevs/Susy-Core). Neither is modified or
+redistributed by this project.

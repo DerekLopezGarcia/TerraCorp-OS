@@ -1,5 +1,5 @@
--- Códigos de teclado de OpenComputers (subconjunto verificado contra
--- openos/lib/keyboard.lua). `char` solo llega para teclas imprimibles.
+-- OpenComputers key codes (subset verified against openos/lib/keyboard.lua).
+-- The raw `char` field is a numeric Unicode code point, or zero when absent.
 
 local keys = {
   esc = 0x01,

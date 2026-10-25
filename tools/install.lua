@@ -1,12 +1,11 @@
--- Instalador de TerraCorp OS. Se ejecuta bajo OpenOS, no bajo TerraCorp OS.
+-- TerraCorp OS installer. Run under OpenOS, not under TerraCorp OS.
 --
 --   install <raizDelRepo> [direccionFilesystem] [--eeprom] [--yes] [--list]
 --
--- Copia src/ a la raíz del filesystem indicado, prepara /etc y /var/log,
--- fija el volumen de arranque y, opcionalmente, graba eeprom/init.lua.
--- Sin dirección, detecta el volumen: escribible, distinto del disco de OpenOS
--- y vacío o con una instalación previa de TerraCorp. Nunca elige un disco con
--- datos ajenos.
+-- Copies src/ to the selected filesystem, creates /etc and /var/log, and sets
+-- the boot volume. EEPROM flashing is optional and normally unnecessary.
+-- Without an address, select a writable non-OpenOS volume that is empty or
+-- already contains TerraCorp. Never choose a disk with unrelated data.
 
 local component = require("component")
 local computer = require("computer")
@@ -20,9 +19,9 @@ local repoRoot = args[1]
 local address = args[2]
 
 if not repoRoot then
-  print("Uso: install <raizDelRepo> [direccionFilesystem] [--eeprom] [--yes] [--list]")
-  print("Ejemplo: install /home/TerraCorp-OS")
-  print("         install /home/TerraCorp-OS 1a2b3c4d-... --eeprom")
+  print("Usage: install <repo-root> [filesystem-address] [--eeprom] [--yes] [--list]")
+  print("Example: install /home/TerraCorp-OS")
+  print("         install /home/TerraCorp-OS 1a2b3c4d-...")
   return
 end
 
@@ -31,20 +30,18 @@ local sourceRoot = filesystem.concat(repoRoot, "src")
 local eepromSource = filesystem.concat(repoRoot, "eeprom/init.lua")
 
 if not filesystem.isDirectory(sourceRoot) then
-  io.stderr:write("No existe el árbol de origen: " .. sourceRoot .. "\n")
+  io.stderr:write("Source tree not found: " .. sourceRoot .. "\n")
   return
 end
 
 --------------------------------------------------------------------------------
--- Detección del volumen de destino
+-- Select the destination volume
 --------------------------------------------------------------------------------
 
--- El OS necesita su hueco: por debajo de 1 MB no cabe. Esto descarta el tmpfs
--- de OpenOS (0.1 MB), que aparece como un filesystem vacío y escribible.
+-- The OS needs at least 1 MB. This excludes the small writable OpenOS tmpfs.
 local MIN_BYTES = 1048576
 
--- Los handles de `filesystem` son los del componente: `read` espera un entero,
--- no acepta el formato "*a" de `io`.
+-- Filesystem component handles expect an integer read size, not io's "*a".
 local function readAll(handle)
   local chunks = {}
   while true do
@@ -80,12 +77,12 @@ end
 local function stateOf(proxy)
   local ok, exists = pcall(proxy.exists, "/boot/kernel.lua")
   if ok and exists then
-    return "instalación existente"
+    return "existing installation"
   end
   if countEntries(proxy) == 0 then
-    return "vacío"
+    return "empty"
   end
-  return "con datos"
+  return "has data"
 end
 
 local function isWritable(proxy)
@@ -94,7 +91,7 @@ local function isWritable(proxy)
 end
 
 local function describe(item)
-  local size = "sin límite"
+  local size = "unlimited"
   if item.size ~= math.huge then
     size = string.format("%.1f MB", item.size / 1048576)
   end
@@ -111,12 +108,12 @@ local function candidates()
       if proxy and proxy.type == "filesystem" and isWritable(proxy) then
         local total = proxy.spaceTotal() or 0
         local state = stateOf(proxy)
-        if state ~= "con datos" and total >= MIN_BYTES then
+        if state ~= "has data" and total >= MIN_BYTES then
           found[#found + 1] = {
             address = candidate,
             proxy = proxy,
             state = state,
-            label = (proxy.getLabel and proxy.getLabel()) or "sin etiqueta",
+            label = (proxy.getLabel and proxy.getLabel()) or "no label",
             size = total,
           }
         end
@@ -133,25 +130,25 @@ end
 
 local function pick(found)
   if #found == 1 then
-    print("Detectado: " .. describe(found[1]))
+    print("Detected: " .. describe(found[1]))
     return found[1]
   end
 
-  print("Volúmenes donde puedo instalar:")
+  print("Available install volumes:")
   for index, item in ipairs(found) do
     print(string.format("  %d) %s", index, describe(item)))
   end
 
   if options.yes then
-    io.stderr:write("Hay varios candidatos: indica la dirección a mano.\n")
+    io.stderr:write("Multiple candidates; specify a filesystem address.\n")
     return nil
   end
 
-  io.write("¿En cuál instalo? [1] ")
+  io.write("Select a volume [1]: ")
   local answer = io.read("*l") or ""
   local index = tonumber(answer) or 1
   if not found[index] then
-    io.stderr:write("Opción no válida.\n")
+    io.stderr:write("Invalid selection.\n")
     return nil
   end
 
@@ -163,7 +160,7 @@ local proxy
 if options.list then
   local found = candidates()
   if #found == 0 then
-    print("No hay volúmenes libres donde instalar.")
+    print("No eligible install volumes found.")
   end
   for _, item in ipairs(found) do
     print(describe(item))
@@ -174,15 +171,15 @@ end
 if address then
   proxy = component.proxy(address)
   if not proxy or proxy.type ~= "filesystem" then
-    io.stderr:write("La dirección no es un filesystem válido: " .. tostring(address) .. "\n")
+    io.stderr:write("Not a valid filesystem address: " .. tostring(address) .. "\n")
     return
   end
 else
   local found = candidates()
   if #found == 0 then
-    io.stderr:write("No encuentro un volumen libre donde instalar.\n")
-    io.stderr:write("Se ignoran los discos con datos y los de menos de 1 MB.\n")
-    io.stderr:write("Conecta un disquete o un disco vacío, o pasa la dirección: install <raiz> <direccion>\n")
+    io.stderr:write("No eligible install volume found.\n")
+    io.stderr:write("Disks with data and disks under 1 MB are ignored.\n")
+    io.stderr:write("Connect an empty disk or pass its address: install <root> <address>\n")
     return
   end
 
@@ -194,20 +191,20 @@ else
   proxy, address = chosen.proxy, chosen.address
 end
 
-print(string.format("Origen : %s", sourceRoot))
-print(string.format("Destino: %s (%s)", address, proxy.getLabel and (proxy.getLabel() or "sin etiqueta") or "sin etiqueta"))
+print(string.format("Source      : %s", sourceRoot))
+print(string.format("Destination: %s (%s)", address, proxy.getLabel and (proxy.getLabel() or "no label") or "no label"))
 
 local used = proxy.spaceUsed()
 local total = proxy.spaceTotal()
 if used and total then
-  print(string.format("Disco  : %.1f / %.1f MB usados · %s", used / 1048576, total / 1048576, stateOf(proxy)))
+  print(string.format("Disk   : %.1f / %.1f MB used · %s", used / 1048576, total / 1048576, stateOf(proxy)))
 end
 
 if not options.yes then
-  io.write("Se sobrescribirán los ficheros con el mismo nombre. ¿Continuar? (s/N) ")
+  io.write("Files with matching names will be overwritten. Continue? (y/N) ")
   local answer = io.read("*l") or ""
-  if answer:lower() ~= "s" and answer:lower() ~= "si" and answer:lower() ~= "sí" then
-    print("Cancelado.")
+  if answer:lower() ~= "y" and answer:lower() ~= "yes" then
+    print("Cancelled.")
     return
   end
 end
@@ -220,7 +217,7 @@ else
 end
 
 if not filesystem.mount(proxy, mountPoint) then
-  io.stderr:write("No se pudo montar el destino en " .. mountPoint .. "\n")
+  io.stderr:write("Could not mount destination at " .. mountPoint .. "\n")
   return
 end
 
@@ -239,7 +236,7 @@ local function copyTree(from, to)
       local input = filesystem.open(source, "rb")
       if not input then
         failed = failed + 1
-        io.stderr:write("No se pudo leer " .. source .. "\n")
+        io.stderr:write("Could not read " .. source .. "\n")
       else
         local data = readAll(input)
         input:close()
@@ -247,7 +244,7 @@ local function copyTree(from, to)
         local output = filesystem.open(target, "wb")
         if not output then
           failed = failed + 1
-          io.stderr:write("No se pudo escribir " .. target .. "\n")
+          io.stderr:write("Could not write " .. target .. "\n")
         else
           output:write(data)
           output:close()
@@ -266,14 +263,14 @@ filesystem.makeDirectory(filesystem.concat(mountPoint, "var/log"))
 pcall(filesystem.umount, mountPoint)
 
 if not ok then
-  io.stderr:write("Instalación fallida: " .. tostring(reason) .. "\n")
+  io.stderr:write("Installation failed: " .. tostring(reason) .. "\n")
   return
 end
 
-print(string.format("Copiados %d ficheros (%d errores).", copied, failed))
+print(string.format("Copied %d files (%d failures).", copied, failed))
 
--- `pcall` solo detecta errores Lua: `component.invoke` devuelve `nil, motivo`
--- cuando el componente rechaza la llamada. Hay que mirar también el resultado.
+-- pcall catches Lua errors only. component.invoke may return nil, reason when
+-- a component rejects the call, so inspect the return value too.
 local function succeeded(ok, value, reason)
   if not ok or value == false then
     return false, tostring(reason or value)
@@ -286,26 +283,26 @@ end
 
 local bootOk, bootReason = succeeded(pcall(computer.setBootAddress, address))
 if bootOk then
-  print("Volumen de arranque fijado: " .. address)
+  print("Boot volume selected: " .. address)
 else
-  io.stderr:write("No se pudo fijar el volumen de arranque: " .. tostring(bootReason) .. "\n")
+  io.stderr:write("Could not select boot volume: " .. tostring(bootReason) .. "\n")
 end
 
 if options.eeprom then
   local eepromAddress = component.list("eeprom")()
   if not eepromAddress then
-    io.stderr:write("No hay EEPROM en este ordenador.\n")
+    io.stderr:write("No EEPROM is present.\n")
     return
   end
 
   print("")
-  print("Aviso: grabar la EEPROM sustituye el BIOS del ordenador.")
-  print("       Si el gestor falla, hay que poner una EEPROM (Lua BIOS) nueva.")
-  print("       Normalmente NO hace falta: basta con fijar el volumen de arranque.")
+  print("Warning: flashing the EEPROM replaces the computer BIOS.")
+  print("         If the manager fails, replace the EEPROM with a Lua BIOS.")
+  print("         This is normally unnecessary; selecting the boot volume is enough.")
 
   local input = filesystem.open(eepromSource, "rb")
   if not input then
-    io.stderr:write("No se encontró " .. eepromSource .. "\n")
+    io.stderr:write("Not found: " .. eepromSource .. "\n")
     return
   end
 
@@ -335,12 +332,12 @@ if options.eeprom then
   end
 
   if flashed then
-    print("EEPROM grabada con el gestor de arranque de TerraCorp OS.")
+    print("TerraCorp OS boot manager written to EEPROM.")
   else
-    io.stderr:write("No se pudo grabar la EEPROM (" .. tostring(flashReason) .. "). Copia eeprom/init.lua a mano.\n")
+    io.stderr:write("Could not write EEPROM (" .. tostring(flashReason) .. "). Copy eeprom/init.lua manually.\n")
   end
 end
 
 print("")
-print("Instalación completada. Reinicia el ordenador para arrancar TerraCorp OS.")
+print("Installation complete. Reboot to start TerraCorp OS.")
 term.write("")

@@ -1,0 +1,49 @@
+name: Publish stable release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install test dependencies
+        run: npm ci
+
+      - name: Validate tag and source version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node -e 'const fs=require("fs"); const source=fs.readFileSync("src/lib/tc/version.lua","utf8"); const match=source.match(/version\s*=\s*"([^"]+)"/); if (!match || process.env.RELEASE_TAG !== `v${match[1]}`) { console.error(`Tag ${process.env.RELEASE_TAG} must match version.lua`); process.exit(1); }'
+
+      - name: Run release checks
+        run: |
+          npm run check
+          npm run sim
+          npm run sim:oc
+          npm run test:dashboard-tick
+          npm run test:updater
+          npm run test:install
+          npm run test:fetch
+          npm run test:boot
+          npm run test:faults
+          npm run test:screens
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --generate-notes

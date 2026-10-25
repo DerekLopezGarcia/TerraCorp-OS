@@ -1,11 +1,11 @@
--- Explorador de ficheros del volumen: navegación, tamaños y vista previa.
+-- Boot-volume file browser with navigation, file sizes, and text previews.
 
 local files = {}
 files.__index = files
 
 files.id = "files"
-files.title = "Ficheros"
-files.short = "Ficheros"
+files.title = "Files"
+files.short = "Files"
 files.order = 2
 
 local MAX_PREVIEW_BYTES = 32768
@@ -25,7 +25,7 @@ function files:reload(ctx)
   local names, reason = vfs.list(self.cwd)
   if not names then
     self.entries = {}
-    self.error = reason or "no se pudo leer el directorio"
+    self.error = reason or "Could not read directory"
     return
   end
 
@@ -38,7 +38,7 @@ function files:reload(ctx)
       name = name,
       path = path,
       isDir = isDir,
-      -- El tamaño se lee una vez por recarga, no en cada frame.
+      -- Query file size once per reload, not once per frame.
       size = isDir and nil or vfs.size(path),
     }
   end
@@ -69,7 +69,7 @@ function files:select(ctx, index)
   local vfs = ctx.kernel.vfs
   local size = entry.size
   if size == nil then
-    -- Fichero aparecido después de la última recarga: se pregunta una vez.
+    -- The file appeared after the last reload, so query its size once.
     size = vfs.size(entry.path)
     entry.size = size
   end
@@ -89,7 +89,7 @@ function files:select(ctx, index)
   local lines = ctx.util.split((content:gsub("\r", "")), "\n")
   if #lines > MAX_PREVIEW_LINES then
     lines = { table.unpack(lines, 1, MAX_PREVIEW_LINES) }
-    lines[#lines + 1] = "… (recortado)"
+    lines[#lines + 1] = "... (truncated)"
   end
 
   self.preview = { lines = lines }
@@ -136,7 +136,7 @@ function files:draw(ctx)
   local showPreview, listWidth, bodyHeight, rows = self:layout(ctx)
 
   v:put(1, 1, g.mark .. " " .. ctx.text.truncate(self.cwd, ctx.w - 20), c.accent, c.deep)
-  local counter = tostring(#self.entries) .. " elem."
+  local counter = tostring(#self.entries) .. ((#self.entries == 1) and " item" or " items")
   v:textRight(ctx.w, 1, counter, c.dim, c.deep)
 
   v:box(1, 2, listWidth, bodyHeight, { glyphs = g, fg = c.panel, bg = c.deep })
@@ -146,7 +146,7 @@ function files:draw(ctx)
   if self.error then
     v:put(3, 4, ctx.text.truncate(self.error, listWidth - 4), c.danger, c.deep)
   elseif #self.entries == 0 then
-    v:put(3, 4, "Directorio vacío", c.dim, c.deep)
+    v:put(3, 4, "Directory is empty", c.dim, c.deep)
   end
 
   for row = 1, rows do
@@ -194,22 +194,22 @@ function files:draw(ctx)
       glyphs = g,
       fg = c.panel,
       bg = c.deep,
-      title = self.previewName or "vista previa",
+      title = self.previewName or "Preview",
       titleFg = c.dim,
       titleBg = c.deep,
     })
 
     local entry = self.entries[self.index]
     if not entry then
-      v:put(previewX + 2, 4, "Sin selección", c.dim, c.deep)
+      v:put(previewX + 2, 4, "Nothing selected", c.dim, c.deep)
     elseif entry.isDir then
-      v:put(previewX + 2, 4, "Directorio", c.accent, c.deep)
-      v:put(previewX + 2, 5, "Enter para entrar", c.dim, c.deep)
+      v:put(previewX + 2, 4, "Directory", c.accent, c.deep)
+      v:put(previewX + 2, 5, "Press Enter to open", c.dim, c.deep)
     elseif self.preview and self.preview.tooLarge then
-      v:put(previewX + 2, 4, "Fichero demasiado grande", c.warn, c.deep)
-      v:put(previewX + 2, 5, "Límite: 32 KB", c.dim, c.deep)
+      v:put(previewX + 2, 4, "File is too large", c.warn, c.deep)
+      v:put(previewX + 2, 5, "Limit: 32 KB", c.dim, c.deep)
     elseif self.preview and self.preview.unreadable then
-      v:put(previewX + 2, 4, "No se pudo leer", c.danger, c.deep)
+      v:put(previewX + 2, 4, "Could not read file", c.danger, c.deep)
     elseif self.preview and self.preview.lines then
       local visible = bodyHeight - 2
       for index = 1, math.min(visible, #self.preview.lines) do
@@ -219,7 +219,7 @@ function files:draw(ctx)
     end
   end
 
-  local hint = "↑↓ mover · Enter abrir · Retroceso subir · r recargar"
+  local hint = "Up/Down move · Enter open · Backspace up · R reload"
   v:put(1, ctx.h, ctx.text.truncate(hint, ctx.w), c.dim, c.deep)
 end
 

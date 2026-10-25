@@ -1,8 +1,7 @@
--- TerraCorp OS - kernel.
+-- TerraCorp OS kernel.
 --
--- Responsabilidades: montar el volumen como sistema de ficheros, cargar los
--- módulos propios (sin `require` de OpenOS), arrancar servicios y correr el
--- bucle de señales que alimenta al escritorio.
+-- Responsibilities: mount the boot volume, load OS modules without OpenOS
+-- `require`, start services, and run the desktop event loop.
 
 local kernel = {}
 
@@ -29,7 +28,7 @@ local function splitPath(path)
   return parts
 end
 
--- Sistema de ficheros mínimo sobre el componente de disco de arranque.
+-- Minimal filesystem layer over the boot-volume component.
 local function makeVfs(volume)
   local vfs = {}
 
@@ -42,8 +41,7 @@ local function makeVfs(volume)
     local chunks = {}
     while true do
       local data, why = packCall(volume.read, handle, 4096)
-      -- Un driver que devuelva "" en vez de nil al llegar al final colgaría
-      -- el bucle: se corta también con cadena vacía.
+      -- Stop on an empty string as well as nil to avoid a driver-induced loop.
       if type(data) ~= "string" or data == "" then
         packCall(volume.close, handle)
         if why then
@@ -94,9 +92,8 @@ local function makeVfs(volume)
     return tonumber(value)
   end
 
-  -- El componente devuelve una tabla 1..n con los nombres (ver
-  -- docs/opencomputers.md). Algunos drivers antiguos devuelven un iterador:
-  -- se aceptan las dos formas.
+  -- The component returns a 1..n table of names (see docs/opencomputers.md).
+  -- Accept iterators as well for compatibility with older drivers.
   function vfs.list(path)
     local result, reason = packCall(volume.list, path)
 
@@ -108,14 +105,14 @@ local function makeVfs(volume)
         end
       end)
       if not ok then
-        return nil, "no se pudo listar " .. tostring(path)
+        return nil, "could not list " .. tostring(path)
       end
       table.sort(names)
       return names
     end
 
     if type(result) ~= "table" then
-      return nil, reason or ("no se pudo listar " .. tostring(path))
+      return nil, reason or ("could not list " .. tostring(path))
     end
 
     local names = {}
@@ -123,7 +120,7 @@ local function makeVfs(volume)
       names[#names + 1] = tostring(name)
     end
 
-    -- Tabla con claves no secuenciales: recorrerla como conjunto.
+    -- Also support a table whose keys are not sequential.
     if #names == 0 and next(result) ~= nil then
       for _, name in pairs(result) do
         names[#names + 1] = tostring(name)
@@ -156,8 +153,7 @@ local function makeVfs(volume)
     return packCall(volume.rename, from, to)
   end
 
-  -- OpenComputers expone spaceUsed/spaceTotal en bytes; el resto del OS
-  -- trabaja en kilobytes (ver docs/arquitectura.md).
+  -- OpenComputers reports spaceUsed/spaceTotal in bytes; the OS uses KB.
   function vfs.space()
     local used = packCall(volume.spaceUsed)
     local total = packCall(volume.spaceTotal)
@@ -171,7 +167,7 @@ local function makeVfs(volume)
 end
 
 --------------------------------------------------------------------------------
--- Servicios del kernel
+-- Kernel services
 --------------------------------------------------------------------------------
 
 function kernel:uptime()
@@ -183,8 +179,8 @@ function kernel:energy()
   if not ok or type(stored) ~= "number" then
     return nil
   end
-  -- Algunos nodos reportan solo `stored` o un `maximum` inválido. Se trata
-  -- como "sin lectura de energía" en vez de reventar al dividir por nil.
+  -- If the node reports no maximum, treat energy as unavailable rather than
+  -- attempting to divide by nil.
   if type(maximum) ~= "number" or maximum <= 0 then
     return nil
   end
@@ -218,7 +214,7 @@ function kernel:components()
     total = total + 1
   end
 
-  -- La tarjeta "Enlaces" muestra periféricos, no la electrónica interna.
+  -- The Devices card shows peripherals, not internal components.
   local internal = {
     computer = true,
     eeprom = true,
@@ -261,7 +257,7 @@ end
 function kernel:saveConfig()
   local ok, reason = self.config.save(self.vfs)
   if not ok then
-    self.log.warn("no se pudo guardar la configuración: " .. tostring(reason))
+    self.log.warn("Could not save settings: " .. tostring(reason))
   end
   return ok
 end
@@ -291,14 +287,14 @@ end
 function kernel:poweroff(reboot)
   local colors = self.theme.colors
   self.gfx:clear(colors.bg)
-  self.gfx:put(2, 1, reboot and "Reiniciando TerraCorp OS..." or "Apagando TerraCorp OS...", colors.dim, colors.bg)
+  self.gfx:put(2, 1, reboot and "Restarting TerraCorp OS..." or "Shutting down TerraCorp OS...", colors.dim, colors.bg)
   self.gfx:flush()
   pcall(os.sleep, 0.3)
   computer.shutdown(reboot == true)
 end
 
--- Último recurso: si el escritorio no se puede pintar, se avisa con la GPU en
--- crudo. Sin esto, un fallo de render deja una pantalla negra sin explicación.
+  -- Last resort: draw an error directly through the GPU if desktop rendering
+  -- fails, so a black screen is not the only diagnostic.
 function kernel:emergency(reason)
   local gpu = self.gfx and self.gfx.gpu
   if not gpu then
@@ -310,13 +306,13 @@ function kernel:emergency(reason)
     width, height = 80, 25
   end
 
-  local message = tostring(reason or "sin detalle")
+  local message = tostring(reason or "no details")
   pcall(gpu.setBackground, 15, true)
   pcall(gpu.setForeground, 14, true)
   pcall(gpu.fill, 1, 1, width, math.min(7, height), " ")
-  pcall(gpu.set, 2, 2, "TerraCorp OS: no se pudo pintar el escritorio")
+  pcall(gpu.set, 2, 2, "TerraCorp OS: could not draw the desktop")
   pcall(gpu.set, 2, 4, string.sub(message, 1, math.max(1, width - 4)))
-  pcall(gpu.set, 2, 5, "Detalle completo en /var/log/tc.log")
+  pcall(gpu.set, 2, 5, "Full details: /var/log/tc.log")
 end
 
 function kernel:loop()
@@ -338,7 +334,7 @@ function kernel:loop()
       if name ~= "interrupted" then
         local ok, reason = pcall(self.ui.dispatch, self.ui, table.unpack(pack, 2, pack.n))
         if not ok then
-          self.log.error("evento " .. tostring(name) .. ": " .. tostring(reason))
+          self.log.error("Event " .. tostring(name) .. ": " .. tostring(reason))
         end
       end
     end
@@ -351,48 +347,47 @@ function kernel:loop()
 
     local okRender, reason, failed = pcall(self.ui.render, self.ui, false)
 
-    -- La GPU rechaza tramos si no tiene energía suficiente. No es un error de
-    -- Lua: las celdas quedan pendientes y se reintentan en el frame siguiente.
+      -- The GPU may reject spans when power is low. Keep those cells pending
+      -- and retry them on a later frame.
     if okRender and type(failed) == "number" and failed > 0 then
       gpuFailures = gpuFailures + 1
       if gpuFailures == 1 or gpuFailures % 20 == 0 then
-        self.log.warn("gpu: " .. failed .. " tramos sin escribir (¿energía?) en " .. gpuFailures .. " frames")
+        self.log.warn("gpu: " .. failed .. " spans rejected (power?) in " .. gpuFailures .. " frames")
       end
     elseif okRender and gpuFailures > 0 then
-      self.log.info("gpu recuperada tras " .. gpuFailures .. " frames")
+      self.log.info("gpu recovered after " .. gpuFailures .. " frames")
       gpuFailures = 0
     end
 
     if not okRender then
       renderErrors = renderErrors + 1
-      -- El render marca `dirty = false` antes de pintar: si falla a medias hay
-      -- que volver a pedirlo o la pantalla se queda congelada.
+      -- Rendering clears `dirty` before drawing. Mark it again after a partial
+      -- failure or the display may freeze.
       self.ui:markDirty()
       if renderErrors == 1 then
-        -- Se avisa por pantalla: una negra sin texto no dice nada.
+        -- Show an on-screen warning; a blank screen alone is not diagnostic.
         self:emergency(reason)
       end
-      -- Sin límite esto escribe en disco por frame si se retira la pantalla;
-      -- se registra el primero y luego uno cada 30 intentos.
+      -- Rate-limit disk logging if a removed screen causes repeated failures.
       if renderErrors == 1 or renderErrors % 30 == 0 then
-        self.log.error("render (" .. renderErrors .. " fallos): " .. tostring(reason))
+        self.log.error("render (" .. renderErrors .. " failures): " .. tostring(reason))
       end
       pcall(os.sleep, math.min(1, 0.05 * renderErrors))
     elseif renderErrors > 0 then
-      self.log.info("render recuperado tras " .. renderErrors .. " fallos")
+      self.log.info("render recovered after " .. renderErrors .. " failures")
       renderErrors = 0
     end
   end
 end
 
 --------------------------------------------------------------------------------
--- Arranque
+-- Startup
 --------------------------------------------------------------------------------
 
 function kernel.start(boot)
   local volume = component.proxy(boot.address)
   if not volume then
-    error("TerraCorp OS: el volumen " .. tostring(boot.address) .. " no responde", 0)
+    error("TerraCorp OS: boot volume " .. tostring(boot.address) .. " is not responding", 0)
   end
 
   local vfs = makeVfs(volume)
@@ -458,17 +453,17 @@ function kernel.start(boot)
 
     local path = resolve(id)
     if not path then
-      error("módulo desconocido: " .. tostring(id), 0)
+      error("Unknown module: " .. tostring(id), 0)
     end
 
     local source, reason = vfs.read(path)
     if not source then
-      error("no se pudo leer " .. path .. ": " .. tostring(reason), 0)
+      error("Could not read " .. path .. ": " .. tostring(reason), 0)
     end
 
     local chunk, compileError = load(source, "=" .. path, "t", newEnv())
     if not chunk then
-      error("error de sintaxis en " .. path .. ": " .. tostring(compileError), 0)
+      error("Syntax error in " .. path .. ": " .. tostring(compileError), 0)
     end
 
     local result = chunk(id)
@@ -485,17 +480,16 @@ function kernel.start(boot)
   local gfxModule = requireModule("tc.gfx")
   local uiModule = requireModule("tc.ui")
 
-  -- /etc y /var/log deben existir antes de leer preferencias y abrir el
-  -- registro: una instalación manual (copiar src/*) no los crea.
+  -- Create /etc and /var/log before loading preferences or opening the log;
+  -- manual copies of src/ do not create them.
   vfs.ensureDir("/etc")
   vfs.ensureDir("/var/log")
 
   config.load(vfs)
   log.setLevel(config.get("logLevel"))
 
-  -- El registro se abre antes de tocar la GPU: si el arranque se cuelga al
-  -- inicializar vídeo o el splash, la primera línea ya está escrita y se sabe
-  -- que el fallo no es del volumen.
+  -- Open the log before initializing video. If boot hangs in GPU setup or the
+  -- splash, the first trace proves the boot volume was readable.
   log.setSink(function(line)
     local size = vfs.size("/var/log/tc.log") or 0
     if size > 131072 then
@@ -511,11 +505,11 @@ function kernel.start(boot)
     hostname = "TC-" .. tostring(address):sub(1, 4):upper()
   end
 
-  log.trace("arranque " .. version.product .. " " .. version.version .. " en " .. hostname)
+  log.trace("Booting " .. version.product .. " " .. version.version .. " on " .. hostname)
 
   local gpuAddress = component.list("gpu")()
   if not gpuAddress then
-    error("TerraCorp OS: se necesita una GPU para arrancar", 0)
+    error("TerraCorp OS: a GPU is required to boot", 0)
   end
 
   local screenAddress = component.list("screen")()
@@ -526,10 +520,8 @@ function kernel.start(boot)
   local theme = themeModule.build(config)
   local gfx = gfxModule.new(gpuAddress)
 
-  -- La resolución es la de la pantalla que haya: no se fuerza ninguna medida.
-  -- En una pantalla grande se aprovecha entera y en una pequeña el escritorio
-  -- se recoloca, porque la geometría de las ventanas es proporcional y el
-  -- recorte lo hace `clampWindow`.
+  -- Use the screen's current resolution. Window geometry is proportional and
+  -- clamped to fit, so both small and large screens are supported.
   local okLimits, maxWidth, maxHeight = pcall(gfx.gpu.maxResolution)
   if okLimits and maxWidth and maxHeight then
     if maxWidth ~= gfx.w or maxHeight ~= gfx.h then
@@ -564,7 +556,7 @@ function kernel.start(boot)
   local splash = config.get("splash") == true
   if splash then
     log.trace("splash")
-    drawSplash(0.25, "Montando servicios base")
+    drawSplash(0.25, "Loading core services")
   end
 
   local instance = setmetatable({
@@ -583,10 +575,9 @@ function kernel.start(boot)
     hostname = hostname,
   }, { __index = kernel })
 
-  -- Diagnóstico de arranque: si la pantalla acaba negra, el registro dice con
-  -- qué GPU, qué pantalla y qué resolución se estaba trabajando.
+  -- Record the GPU, screen, and resolution for black-screen diagnostics.
   log.trace(string.format(
-    "gpu %s · pantalla %s · %dx%d · %d KB libres",
+    "gpu %s · screen %s · %dx%d · %d KB free",
     tostring(gpuAddress):sub(1, 4),
     tostring(screenAddress or "-"):sub(1, 4),
     gfx.w,
@@ -600,7 +591,7 @@ function kernel.start(boot)
     if ok and type(module) == "table" then
       apps[#apps + 1] = module
     else
-      log.error("app no disponible: " .. id .. " (" .. tostring(module) .. ")")
+      log.error("App unavailable: " .. id .. " (" .. tostring(module) .. ")")
     end
   end
 
@@ -616,23 +607,23 @@ function kernel.start(boot)
   })
 
   if splash then
-    drawSplash(0.75, "Iniciando escritorio")
+    drawSplash(0.75, "Starting desktop")
     pcall(os.sleep, 0.4)
-    drawSplash(1, "Sesión lista")
+    drawSplash(1, "Session ready")
     pcall(os.sleep, 0.35)
   end
 
-  -- Primera composición controlada: si el escritorio no se puede pintar, se
-  -- dice en pantalla en vez de arrancar con el framebuffer en negro.
-  log.trace("primer render")
+  -- First controlled composition: show a diagnostic if drawing the desktop
+  -- fails instead of silently leaving a blank framebuffer.
+  log.trace("First render")
   local okPaint, paintReason = pcall(instance.ui.render, instance.ui, true)
   if not okPaint then
     instance:emergency(paintReason)
-    log.error("primer render: " .. tostring(paintReason))
+    log.error("First render: " .. tostring(paintReason))
   elseif instance.ui.failures then
-    log.error("primer render con avisos: " .. table.concat(instance.ui.failures, " | "))
+    log.error("First render warnings: " .. table.concat(instance.ui.failures, " | "))
   else
-    log.trace("primer render ok")
+    log.trace("First render OK")
   end
 
   instance:loop()

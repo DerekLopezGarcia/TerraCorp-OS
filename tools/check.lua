@@ -1,9 +1,9 @@
--- Comprobador de sintaxis para ejecutar dentro de OpenOS o con un Lua 5.3.
+-- Syntax checker to run under OpenOS or Lua 5.3.
 --
 --   lua check.lua <raizDelRepo>
 --
--- Recorre src/ y eeprom/, compila cada fichero con `load` y reporta errores con
--- su ruta. No ejecuta el código.
+-- Walk src/ and eeprom/, compile each file with `load`, and report its path.
+-- Do not execute the code.
 
 local root = ...
 if type(root) ~= "string" then
@@ -77,7 +77,7 @@ local function checkFile(path)
   local source = readFile(path)
   if not source then
     errors = errors + 1
-    print("NO LEÍDO  " .. path)
+    print("NOT READ  " .. path)
     return
   end
 
@@ -110,7 +110,7 @@ walk(concat(root, "src"))
 walk(concat(root, "eeprom"))
 walk(concat(root, "tools"))
 
-print(string.format("%d ficheros comprobados, %d errores.", checked, errors))
+print(string.format("%d files checked, %d errors.", checked, errors))
 
 if errors > 0 then
   os.exit(1)

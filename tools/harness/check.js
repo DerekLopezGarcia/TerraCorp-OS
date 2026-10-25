@@ -1,6 +1,5 @@
-// Comprueba que todos los ficheros Lua compilan con Lua 5.3 (fengari) y que
-// tools/manifest.txt (lo que descarga fetch.lua) coincide con el árbol real.
-// No ejecuta el código: solo valida sintaxis, como haría `load` en OpenComputers.
+// Check that all Lua files compile with Lua 5.3 (Fengari) and that
+// tools/manifest.txt matches the source tree. This checks syntax only.
 
 const fs = require("fs");
 const path = require("path");
@@ -30,8 +29,8 @@ const L = lauxlib.luaL_newstate();
 lualib.luaL_openlibs(L);
 
 let errors = 0;
-// Firmas de UTF-8 leído como CP1252 y vuelto a escribir: duplica los acentos y
-// deja el texto ilegible en el juego. Un BOM al principio rompe `load`.
+// Detect UTF-8 misread as CP1252 and written back, which corrupts text. A BOM
+// at the start of a file also breaks `load`.
 const MOJIBAKE = /Ã[\u0080-\u00BF]|Â[\u0080-\u00BF]/;
 
 for (const file of files) {
@@ -40,14 +39,14 @@ for (const file of files) {
   if (source.charCodeAt(0) === 0xfeff) {
     errors++;
     console.error("ERROR " + path.relative(repoRoot, file));
-    console.error("      empieza con BOM: `load` lo rechaza en OpenComputers");
+    console.error("      starts with a BOM: OpenComputers `load` rejects it");
   }
 
   const mojibake = source.match(MOJIBAKE);
   if (mojibake) {
     errors++;
     console.error("ERROR " + path.relative(repoRoot, file));
-    console.error("      codificación duplicada cerca de " + JSON.stringify(mojibake[0]));
+    console.error("      duplicated encoding near " + JSON.stringify(mojibake[0]));
   }
 
   const status = lauxlib.luaL_loadstring(L, to_luastring(source));
@@ -59,8 +58,8 @@ for (const file of files) {
   lua.lua_settop(L, 0);
 }
 
-// El manifiesto es lo que descarga tools/fetch.lua dentro del juego: si no
-// coincide con el árbol, la instalación se queda a medias sin avisar.
+// tools/fetch.lua downloads the manifest in-game. A mismatch can leave an
+// incomplete installation.
 const manifestPath = path.join(repoRoot, "tools", "manifest.txt");
 const expected = list();
 let manifest = null;
@@ -72,24 +71,24 @@ try {
     .filter(Boolean);
 } catch (error) {
   errors++;
-  console.error("FALTA tools/manifest.txt (ejecuta: npm run manifest)");
+  console.error("MISSING tools/manifest.txt (run: npm run manifest)");
 }
 
 if (manifest) {
   for (const file of expected) {
     if (!manifest.includes(file)) {
       errors++;
-      console.error("FUERA DEL MANIFIESTO " + file + " (ejecuta: npm run manifest)");
+      console.error("MISSING FROM MANIFEST " + file + " (run: npm run manifest)");
     }
   }
   for (const file of manifest) {
     if (!expected.includes(file)) {
       errors++;
-      console.error("EN EL MANIFIESTO PERO NO EN EL ÁRBOL " + file);
+      console.error("IN MANIFEST BUT NOT IN TREE " + file);
     }
   }
 }
 
-console.log(files.length + " ficheros comprobados, " + errors + " errores");
-console.log("manifiesto: " + (manifest ? manifest.length : "ausente") + " ficheros");
+console.log(files.length + " files checked, " + errors + " errors");
+console.log("manifest: " + (manifest ? manifest.length : "missing") + " files");
 process.exit(errors ? 1 : 0);

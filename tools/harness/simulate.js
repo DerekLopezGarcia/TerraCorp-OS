@@ -1,12 +1,11 @@
-// Ejecuta TerraCorp OS fuera de Minecraft y vuelca la pantalla resultante.
+// Run TerraCorp OS outside Minecraft and print the resulting screen.
 //
 //   node tools/harness/simulate.js [dashboard|console|files|settings|all] [--strict] [--fault=N] [--screen=WxH]
 //
-// Empaqueta src/ en memoria, la sirve como volumen de arranque a componentes
-// falsos fieles a la API real de OpenComputers y reproduce un guion de
-// eventos. Es una prueba de humo: detecta errores de ejecución, no sustituye
-// a probarlo en el juego. Con --fault=N las primeras N escrituras de la GPU
-// fallan como si no hubiera energía. --screen=WxH simula otra pantalla.
+// Bundle src/ in memory, expose it as a boot volume to API-faithful fake
+// components, and replay events. This smoke test does not replace in-game
+// testing. `--fault=N` rejects the first N GPU writes; `--screen=WxH` simulates
+// another display size.
 
 const { runScenario } = require("./runner");
 

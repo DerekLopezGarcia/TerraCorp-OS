@@ -1,14 +1,12 @@
--- Prueba tools/fetch.lua con OpenOS simulado (red, disco y shell falsos).
+-- Test tools/fetch.lua with fake OpenOS networking, storage, and shell.
 --
 --   node tools/harness/test-fetch.js
 --
--- Lo que se comprueba es lo que se ve en juego cuando algo va mal: que el
--- resultado se anuncie en una línea inequívoca ("RESULTADO: ..."), que un 404
--- se distinga de un fallo de red, y que un fichero corto se detecte mirando el
--- disco y no dando por buena la escritura.
+-- Verify the in-game failure UX: an unambiguous RESULT line, 404/network
+-- distinction, and detection of truncated files by reading them back.
 --
--- Además se exige que TODA la salida sea ASCII y de 60 caracteres o menos: si
--- el terminal pinta mal, las líneas largas con acentos son ilegibles.
+-- Require all output to be ASCII and at most 60 characters for poorly rendered
+-- OpenComputers terminals.
 
 local scenario = ...
 
@@ -29,7 +27,7 @@ end
 
 component = {
   isAvailable = function(name)
-    return scenario ~= "sin_tarjeta" and name == "internet"
+    return scenario ~= "no_card" and name == "internet"
   end,
 }
 
@@ -41,8 +39,8 @@ filesystem = {
     return true
   end,
   open = function(path, mode)
-    if scenario == "lleno" then
-      return nil, "sin espacio"
+    if scenario == "disk_full" then
+      return nil, "no space"
     end
     local buffer = {}
     return {
@@ -51,7 +49,7 @@ filesystem = {
       end,
       close = function()
         local content = table.concat(buffer)
-        if scenario == "corta" then
+        if scenario == "short_file" then
           content = content:sub(1, 2)
         end
         disk[path] = content
@@ -64,9 +62,9 @@ filesystem = {
 }
 
 local payloads = {
-  ["http://prueba/tools/manifest.txt"] = "src/init.lua\nsrc/boot/kernel.lua\n",
-  ["http://prueba/src/init.lua"] = "return 1\n",
-  ["http://prueba/src/boot/kernel.lua"] = "return 2\n",
+  ["http://example.test/tools/manifest.txt"] = "src/init.lua\nsrc/boot/kernel.lua\n",
+  ["http://example.test/src/init.lua"] = "return 1\n",
+  ["http://example.test/src/boot/kernel.lua"] = "return 2\n",
 }
 
 internet = {
@@ -75,7 +73,7 @@ internet = {
     local body = payloads[url]
     if scenario == "404" then
       status, body = 404, nil
-    elseif scenario == "falta_uno" and url:find("kernel.lua", 1, true) then
+    elseif scenario == "missing_file" and url:find("kernel.lua", 1, true) then
       status, body = 404, nil
     end
 
@@ -96,7 +94,7 @@ internet = {
 
 shell = {
   parse = function()
-    return { "/home/TerraCorp-OS", "http://prueba" }
+    return { "/home/TerraCorp-OS", "http://example.test" }
   end,
   resolve = function(path)
     return path
@@ -113,14 +111,14 @@ io = { stderr = { write = function(_, text) emit((text:gsub("\n$", ""))) end } }
 
 local chunk, loadError = load(rawget(_G, "FETCH_SRC"), "=fetch.lua")
 if not chunk then
-  say("NO COMPILA: " .. tostring(loadError))
+  say("COMPILE ERROR: " .. tostring(loadError))
   FETCH_ERRORS = 1
   return
 end
 
 local ok, failure = pcall(chunk)
 if not ok then
-  say("ERROR DE EJECUCION: " .. tostring(failure))
+  say("RUNTIME ERROR: " .. tostring(failure))
   FETCH_ERRORS = 1
   return
 end
@@ -129,7 +127,7 @@ local problems = 0
 local function check(condition, message)
   if not condition then
     problems = problems + 1
-    say("  FALLO en " .. scenario .. ": " .. message)
+    say("  FAIL " .. scenario .. ": " .. message)
   end
 end
 
@@ -139,39 +137,39 @@ local function has(fragment)
 end
 
 if scenario == "ok" then
-  check(has("RESULTADO: OK"), "no anuncia el resultado correcto")
-  check(disk["/home/TerraCorp-OS/src/init.lua"] == "return 1\n", "init.lua no se escribio entero")
-  check(disk["/home/TerraCorp-OS/src/boot/kernel.lua"] == "return 2\n", "kernel.lua no se escribio entero")
+  check(has("RESULT: OK"), "success result was not reported")
+  check(disk["/home/TerraCorp-OS/src/init.lua"] == "return 1\n", "init.lua was truncated")
+  check(disk["/home/TerraCorp-OS/src/boot/kernel.lua"] == "return 2\n", "kernel.lua was truncated")
 elseif scenario == "404" then
-  check(has("RESULTADO: ERROR"), "un 404 no se anuncia como error")
-  check(has("HTTP 404"), "no distingue el 404 de un fallo de red")
-  check(has("mayusculas"), "no sugiere revisar las mayusculas del propietario")
-  check(next(disk) == nil, "escribio algo pese a no leer el manifiesto")
-elseif scenario == "falta_uno" then
-  check(has("RESULTADO: INCOMPLETO"), "un fichero que falta no marca incompleto")
-  check(has("FALLO src/boot/kernel.lua"), "no identifica el fichero que falla")
-  check(disk["/home/TerraCorp-OS/src/init.lua"] == "return 1\n", "no copio el fichero que si existia")
-elseif scenario == "corta" then
-  check(has("RESULTADO: INCOMPLETO"), "un fichero corto se da por bueno")
-  check(has("quedaron"), "no dice cuantos bytes quedaron")
-elseif scenario == "lleno" then
-  check(has("RESULTADO: INCOMPLETO"), "un disco lleno se da por bueno")
-  check(has("sin espacio"), "no propaga el motivo del sistema de ficheros")
-elseif scenario == "sin_tarjeta" then
-  check(has("RESULTADO: ERROR"), "sin tarjeta no se anuncia como error")
-  check(has("tarjeta de red"), "no dice que falta la tarjeta de red")
+  check(has("RESULT: ERROR"), "404 was not reported as an error")
+  check(has("HTTP 404"), "404 was confused with a network failure")
+  check(has("capitalization"), "owner capitalization hint is missing")
+  check(next(disk) == nil, "files were written without a manifest")
+elseif scenario == "missing_file" then
+  check(has("RESULT: INCOMPLETE"), "missing file did not mark download incomplete")
+  check(has("FAILED src/boot/kernel.lua"), "failed file was not identified")
+  check(disk["/home/TerraCorp-OS/src/init.lua"] == "return 1\n", "valid file was not copied")
+elseif scenario == "short_file" then
+  check(has("RESULT: INCOMPLETE"), "truncated file was accepted")
+  check(has("wrote"), "truncated byte count was not reported")
+elseif scenario == "disk_full" then
+  check(has("RESULT: INCOMPLETE"), "full disk was accepted")
+  check(has("no space"), "filesystem error was not reported")
+elseif scenario == "no_card" then
+  check(has("RESULT: ERROR"), "missing Internet Card was not reported")
+  check(has("Internet Card"), "missing network hardware was not identified")
 end
 
--- La salida tiene que poder leerse aunque el terminal pinte mal.
+-- Output must remain readable even if the terminal renders text poorly.
 for _, line in ipairs(out) do
   if #line > 60 then
     problems = problems + 1
-    say("  FALLO en " .. scenario .. ": linea de " .. #line .. " caracteres")
+    say("  FAIL " .. scenario .. ": line exceeds 60 characters")
   end
   for index = 1, #line do
     if line:byte(index) > 126 then
       problems = problems + 1
-      say("  FALLO en " .. scenario .. ": caracter no ASCII en la salida")
+      say("  FAIL " .. scenario .. ": non-ASCII output")
       break
     end
   end

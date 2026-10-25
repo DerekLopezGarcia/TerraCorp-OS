@@ -1,11 +1,11 @@
--- Preferencias: acento, juego de caracteres, reloj, arranque y registro.
+-- Preferences: accent color, character set, clock, startup, and logging.
 
 local settings = {}
 settings.__index = settings
 
 settings.id = "settings"
-settings.title = "Ajustes"
-settings.short = "Ajustes"
+settings.title = "Settings"
+settings.short = "Settings"
 settings.order = 4
 
 function settings.create()
@@ -26,7 +26,7 @@ function settings:apply(ctx, message)
   ctx.ui:notify("info", message)
 end
 
--- El botón se dibuja como " etiqueta ": dos columnas más que el texto.
+-- Buttons are drawn as " label ", two columns wider than the text.
 local function buttonWidth(label)
   return #label + 2
 end
@@ -40,48 +40,48 @@ function settings:draw(ctx)
 
   self.hits = {}
 
-  v:put(1, 1, "Preferencias de la estación", c.text, c.deep)
-  v:put(1, 2, "Los cambios se aplican al momento y se guardan en " .. ctx.config.path, c.dim, c.deep)
+  v:put(1, 1, "Station preferences", c.text, c.deep)
+  v:put(1, 2, "Changes apply immediately and are saved to " .. ctx.config.path, c.dim, c.deep)
 
   local rows = {
     {
-      label = "Acento corporativo",
+      label = "Accent color",
       value = ctx.config.get("accent"),
       action = function(context)
         context.config.cycle("accent", context.config.accents)
-        self:apply(context, "Acento actualizado")
+        self:apply(context, "Accent updated")
       end,
     },
     {
-      label = "Juego de caracteres",
+      label = "Character set",
       value = ctx.config.get("charset"),
       action = function(context)
         context.config.cycle("charset", context.config.charsets)
-        self:apply(context, "Caracteres actualizados")
+        self:apply(context, "Character set updated")
       end,
     },
     {
-      label = "Reloj",
-      value = ctx.config.get("clock24") and "24 horas" or "12 horas",
+      label = "Clock",
+      value = ctx.config.get("clock24") and "24-hour" or "12-hour",
       action = function(context)
         self:toggleBoolean(context, "clock24")
-        self:apply(context, "Formato de hora actualizado")
+        self:apply(context, "Clock format updated")
       end,
     },
     {
-      label = "Arranque animado",
-      value = ctx.config.get("splash") and "activado" or "desactivado",
+      label = "Boot splash",
+      value = ctx.config.get("splash") and "enabled" or "disabled",
       action = function(context)
         self:toggleBoolean(context, "splash")
-        self:apply(context, "Arranque actualizado")
+        self:apply(context, "Boot splash updated")
       end,
     },
     {
-      label = "Nivel de registro",
+      label = "Log level",
       value = ctx.config.get("logLevel"),
       action = function(context)
         context.config.cycle("logLevel", context.config.logLevels)
-        self:apply(context, "Nivel de registro actualizado")
+        self:apply(context, "Log level updated")
       end,
     },
   }
@@ -112,20 +112,20 @@ function settings:draw(ctx)
     v:hline(1, actionsY - 1, ctx.w, g.h, c.panel, c.deep)
 
     local actions = {
-      { label = "Guardar", action = function(context)
+      { label = "Save", action = function(context)
         context.kernel:saveConfig()
-        context.ui:notify("info", "Preferencias guardadas")
+        context.ui:notify("info", "Preferences saved")
       end },
-      { label = "Restablecer", action = function(context)
+      { label = "Reset", action = function(context)
         context.config.reset()
         context.kernel:applyTheme()
         context.kernel:saveConfig()
-        context.ui:notify("warn", "Preferencias restablecidas")
+        context.ui:notify("warn", "Preferences reset")
       end },
-      { label = "Reiniciar", action = function(context)
+      { label = "Restart", action = function(context)
         context.kernel:poweroff(true)
       end },
-      { label = "Apagar", action = function(context)
+      { label = "Shut down", action = function(context)
         context.kernel:poweroff(false)
       end },
     }
@@ -149,7 +149,7 @@ function settings:draw(ctx)
     end
   end
 
-  v:put(1, ctx.h, "Clic en un valor para cambiarlo · Esc minimiza", c.dim, c.deep)
+  v:put(1, ctx.h, "Click a value to change it · Esc minimizes", c.dim, c.deep)
 end
 
 function settings:handle(ctx, name, a, b)

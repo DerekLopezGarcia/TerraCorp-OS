@@ -1,6 +1,6 @@
--- Prueba de tools/install.lua con OpenOS simulado (sin Minecraft).
--- El runner inyecta FILES (ruta -> contenido) con el árbol de origen.
--- uso: node run-install.js <repo> <escenario>
+-- Test tools/install.lua under simulated OpenOS (without Minecraft).
+-- The runner injects FILES (path -> content) with the source tree.
+-- Usage: node test-install.js <repo> <scenario>
 local repo, scenario = ...
 local FILES = FILES
 
@@ -11,7 +11,7 @@ local answers = {}
 local function write(list, value) list[#list + 1] = tostring(value) end
 
 -- ---------------------------------------------------------------------------
--- Volúmenes y montajes
+-- Volumes and mounts
 -- ---------------------------------------------------------------------------
 local volumes, mounts = {}, {}
 
@@ -117,7 +117,7 @@ end
 
 function filesystem.makeDirectory(path)
   local v, rel = resolvePath(path)
-  if not v then return nil, "sin volumen" end
+  if not v then return nil, "no volume" end
   local current = ""
   for part in rel:gmatch("[^/]+") do
     current = (current == "") and part or (current .. "/" .. part)
@@ -141,14 +141,14 @@ end
 
 function filesystem.open(path, mode)
   local v, rel = resolvePath(path)
-  if not v then return nil, "sin volumen" end
+  if not v then return nil, "no volume" end
   if mode == "rb" then
     local content = v.files[rel]
     if not content then return nil, "no such file" end
     local position = 1
     return {
-      -- Igual que el componente: `read` exige un entero y devuelve nil al
-      -- final. Con "*a" el instalador fallaría, como en el juego.
+      -- Match the component: `read` expects an integer and returns nil at
+      -- EOF. Using "*a" would fail in-game, as it does in OpenOS.
       read = function(self, count)
         if type(count) ~= "number" then
           error("bad argument #2 (integer expected, got " .. type(count) .. ")", 2)
@@ -180,11 +180,11 @@ function filesystem.umount(point)
       return true
     end
   end
-  return nil, "no montado"
+  return nil, "not mounted"
 end
 
 -- ---------------------------------------------------------------------------
--- Componentes
+-- Components
 -- ---------------------------------------------------------------------------
 local order = {}
 
@@ -240,7 +240,7 @@ function require(name)
   return ({ component = component, computer = computer, filesystem = filesystem, shell = shell, term = term })[name]
 end
 
--- Captura de salida
+-- Capture output
 local rawPrint = print
 print = function(...)
   local parts = {}
@@ -252,7 +252,7 @@ io.read = function() return table.remove(answers, 1) or "" end
 io.stderr = { write = function(self, value) write(err, value) end }
 
 -- ---------------------------------------------------------------------------
--- Escenarios
+-- Scenarios
 -- ---------------------------------------------------------------------------
 local function repoVolume()
   local files = {}
@@ -273,34 +273,34 @@ repoVolume()
 
 if scenario == "floppy" then
   ARGS, OPTIONS = { "/home/TerraCorp-OS" }, {}
-  answers = { "s" }
+  answers = { "y" }
   order = { "root-0000", "floppy-01" }
   volume("floppy-01", { label = "TC" })
-elseif scenario == "varios" then
+elseif scenario == "multiple" then
   ARGS, OPTIONS = { "/home/TerraCorp-OS" }, {}
-  answers = { "2", "s" }
+  answers = { "2", "y" }
   order = { "root-0000", "floppy-01", "hdd-02" }
   volume("floppy-01", { label = "nuevo" })
   volume("hdd-02", { label = "terracorp", files = { ["boot/kernel.lua"] = "x" }, dirs = { boot = true } })
-elseif scenario == "varios_yes" then
+elseif scenario == "multiple_yes" then
   ARGS, OPTIONS = { "/home/TerraCorp-OS" }, { yes = true }
   order = { "root-0000", "floppy-01", "hdd-02" }
   volume("floppy-01", { label = "nuevo" })
   volume("hdd-02", { label = "otro", files = { ["boot/kernel.lua"] = "x" }, dirs = { boot = true } })
-elseif scenario == "datos" then
+elseif scenario == "data_disk" then
   ARGS, OPTIONS = { "/home/TerraCorp-OS" }, {}
   order = { "root-0000", "hdd-02", "ro-03" }
   volume("hdd-02", { label = "datos", files = { ["hola.txt"] = "x" } })
   volume("ro-03", { label = "ro", readOnly = true, files = { ["a"] = "x" } })
-elseif scenario == "explicito" then
+elseif scenario == "explicit" then
   ARGS, OPTIONS = { "/home/TerraCorp-OS", "hdd-02" }, {}
-  answers = { "s" }
+  answers = { "y" }
   order = { "root-0000", "hdd-02" }
   volume("hdd-02", { label = "datos", files = { ["hola.txt"] = "x" } })
-elseif scenario == "pequeno" then
-  -- tmpfs de OpenOS (0.1 MB) junto al disco bueno: debe ignorarlo.
+elseif scenario == "small_disk" then
+  -- Place a small OpenOS tmpfs next to the valid disk; the installer must ignore it.
   ARGS, OPTIONS = { "/home/TerraCorp-OS" }, {}
-  answers = { "s" }
+  answers = { "y" }
   order = { "root-0000", "tmpfs-03", "hdd-02" }
   volume("tmpfs-03", { label = "tmpfs", size = 102400 })
   volume("hdd-02", { label = "nuevo", size = 4194304 })
@@ -309,13 +309,13 @@ elseif scenario == "list" then
   order = { "root-0000", "floppy-01" }
   volume("floppy-01", { label = "TC" })
 else
-  error("escenario desconocido: " .. tostring(scenario))
+  error("unknown scenario: " .. tostring(scenario))
 end
 
 local chunk = assert(loadfile(repo .. "/tools/install.lua"))
 local chunkOk, chunkErr = pcall(chunk)
 if not chunkOk then
-  error("el instalador falló: " .. tostring(chunkErr), 0)
+  error("installer failed: " .. tostring(chunkErr), 0)
 end
 
 -- ---------------------------------------------------------------------------
@@ -331,30 +331,30 @@ local function copiedInto(address)
 end
 
 if scenario == "floppy" then
-  assert(has(text, "Detectado: floppy-0"), "no detectó el disquete:\n" .. text .. errorText)
-  assert(copiedInto("floppy-01"), "no copió al disquete")
+  assert(has(text, "Detected: floppy-0"), "did not detect floppy:\n" .. text .. errorText)
+  assert(copiedInto("floppy-01"), "did not copy to floppy")
   assert(bootAddress == "floppy-01", "boot address = " .. tostring(bootAddress))
-  assert(volumes["floppy-01"].dirs["etc"], "no creó /etc")
-  assert(volumes["floppy-01"].dirs["var/log"], "no creó /var/log")
-elseif scenario == "varios" then
-  assert(has(text, "1) floppy"), "no listó candidatos:\n" .. text)
-  assert(copiedInto("hdd-02"), "no copió al elegido (2)")
+  assert(volumes["floppy-01"].dirs["etc"], "did not create /etc")
+  assert(volumes["floppy-01"].dirs["var/log"], "did not create /var/log")
+elseif scenario == "multiple" then
+  assert(has(text, "1) floppy"), "did not list candidates:\n" .. text)
+  assert(copiedInto("hdd-02"), "did not copy to selected volume (2)")
   assert(bootAddress == "hdd-02", "boot address = " .. tostring(bootAddress))
-elseif scenario == "varios_yes" then
-  assert(has(errorText, "varios candidatos"), "no avisó de varios candidatos:\n" .. errorText)
-  assert(bootAddress == nil, "no debería haber tocado el boot address")
-elseif scenario == "datos" then
-  assert(has(errorText, "No encuentro un volumen libre"), "no rechazó los discos con datos:\n" .. errorText)
-  assert(bootAddress == nil, "no debería haber instalado")
-elseif scenario == "explicito" then
-  assert(copiedInto("hdd-02"), "no copió a la dirección explícita")
+elseif scenario == "multiple_yes" then
+  assert(has(errorText, "Multiple candidates"), "did not warn about multiple candidates:\n" .. errorText)
+  assert(bootAddress == nil, "should not have changed the boot address")
+elseif scenario == "data_disk" then
+  assert(has(errorText, "No eligible install volume"), "did not reject volumes with data:\n" .. errorText)
+  assert(bootAddress == nil, "should not have installed")
+elseif scenario == "explicit" then
+  assert(copiedInto("hdd-02"), "did not copy to the explicit address")
   assert(bootAddress == "hdd-02", "boot address = " .. tostring(bootAddress))
 elseif scenario == "list" then
-  assert(has(text, "floppy-0"), "no listó:\n" .. text)
-  assert(volumes["floppy-01"].files["init.lua"] == nil, "no debería copiar con --list")
-elseif scenario == "pequeno" then
-  assert(not has(text, "tmpfs-03") and not has(text, "tmpfs"), "coló el tmpfs:\n" .. text .. errorText)
-  assert(copiedInto("hdd-02"), "no copió al disco bueno")
+  assert(has(text, "floppy-0"), "did not list volumes:\n" .. text)
+  assert(volumes["floppy-01"].files["init.lua"] == nil, "should not copy with --list")
+elseif scenario == "small_disk" then
+  assert(not has(text, "tmpfs-03") and not has(text, "tmpfs"), "selected tmpfs:\n" .. text .. errorText)
+  assert(copiedInto("hdd-02"), "did not copy to the valid disk")
   assert(bootAddress == "hdd-02", "boot address = " .. tostring(bootAddress))
 end
 

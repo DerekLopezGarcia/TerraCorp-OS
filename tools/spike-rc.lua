@@ -1,13 +1,13 @@
--- Banco de pruebas para el enlace Redstone Control -> OpenComputers.
+-- Test bench for the Redstone Control -> OpenComputers link.
 --
---   spike-rc probe            enumera componentes y métodos (para descubrir la API)
---   spike-rc width            mide el ancho real de una señal (requiere bucle)
---   spike-rc bench [n]        latencia ida-vuelta palabra a palabra (requiere bucle)
---   spike-rc stream [n]       ráfaga y comprobación de pérdidas (requiere bucle)
---   spike-rc selftest         valida el propio banco con un adaptador en memoria
+--   spike-rc probe            list components and methods to discover the API
+--   spike-rc width            measure signal width (requires an event loop)
+--   spike-rc bench [n]        measure word-by-word round-trip latency
+--   spike-rc stream [n]       send a burst and check loss (requires an event loop)
+--   spike-rc selftest         validate the bench with an in-memory adapter
 --
--- Antes de `width`, `bench` o `stream` hay que rellenar ADAPTER (abajo) con los
--- métodos que descubra `probe`. Sin eso, el enlace no existe: no se inventa.
+-- Before `width`, `bench`, or `stream`, fill in ADAPTER below with the methods
+-- discovered by `probe`. Do not invent an API that is not present.
 
 local component = nil
 do
@@ -41,7 +41,7 @@ end
 --------------------------------------------------------------------------------
 -- ADAPTADOR
 --
--- Sustituir por los métodos que exponga el Adapter de Redstone Control junto al
+-- Replace with methods exposed by the Redstone Control Adapter next to the
 -- bloque de RC. Ejemplo de forma (los nombres son inventados):
 --
 --   local addr = "<direccion del adapter>"
@@ -59,15 +59,15 @@ local ADAPTER = nil
 
 local function requireAdapter()
   if not ADAPTER then
-    io.stderr:write("Falta configurar ADAPTER en tools/spike-rc.lua (ver cabecera).\n")
-    io.stderr:write("Ejecuta `spike-rc probe` para descubrir los métodos disponibles.\n")
+    io.stderr:write("Configure ADAPTER in tools/spike-rc.lua (see the header).\n")
+    io.stderr:write("Run `spike-rc probe` to discover available methods.\n")
     return false
   end
   return true
 end
 
--- Normaliza a 32 bits sin signo: RC puede devolver el mismo patrón como entero
--- con signo (-1); el banco compara patrones, no representaciones.
+-- Normalize to unsigned 32-bit values: RC may return a bit pattern as a signed
+-- integer (-1). Compare bit patterns, not their representations.
 local function toWord(value)
   if type(value) ~= "number" then
     return nil
@@ -75,7 +75,7 @@ local function toWord(value)
   return math.floor(value) & 0xFFFFFFFF
 end
 
--- Espera a leer `expected` con un límite de tiempo. Devuelve el valor y si coincidió.
+-- Wait for `expected` with a timeout. Return the observed value and match state.
 local function waitFor(expected, timeout)
   local target = toWord(expected)
   local deadline = now() + (timeout or 2)
@@ -101,7 +101,7 @@ end
 
 local function probe()
   if not component then
-    print("`probe` necesita OpenOS (component).")
+    print("`probe` requires OpenOS (component).")
     return
   end
 
@@ -127,7 +127,7 @@ local function probe()
         end
       end
 
-      print("  métodos: " .. table.concat(names, ", "))
+      print("  methods: " .. table.concat(names, ", "))
       if #interesting > 0 then
         print("  candidatos: " .. table.concat(interesting, ", "))
         for _, name in ipairs(interesting) do
@@ -141,8 +141,8 @@ local function probe()
   end
 
   print("")
-  print(string.format("%d componentes. Busca el que corresponda al Adapter de RC", count))
-  print("y rellena ADAPTER con sus métodos de lectura y escritura.")
+  print(string.format("%d components. Find the Redstone Control Adapter", count))
+  print("and fill in ADAPTER with its read/write methods.")
 end
 
 local function width()
@@ -159,14 +159,14 @@ local function width()
     { "0xFFFFFFFF", 0xFFFFFFFF },
   }
 
-  print(string.format("%-12s %-12s %-14s %s", "escrito", "leído", "hex", "coincide"))
+  print(string.format("%-12s %-12s %-14s %s", "written", "read", "hex", "match"))
   for _, pattern in ipairs(patterns) do
     local label, value = pattern[1], pattern[2]
     ADAPTER.write(value)
     local readBack, matched = waitFor(value, 2)
     local hex = readBack and string.format("0x%X", toWord(readBack) or 0) or "-"
     local sign = (type(readBack) == "number" and readBack < 0) and (" (" .. readBack .. ")") or ""
-    print(string.format("%-12s %-12s %-14s %s", label, tostring(readBack) .. sign, hex, matched and "sí" or "no"))
+    print(string.format("%-12s %-12s %-14s %s", label, tostring(readBack) .. sign, hex, matched and "yes" or "no"))
   end
 end
 
@@ -197,14 +197,14 @@ local function bench(iterations)
   local measured = iterations - misses
   local average = (measured > 0) and (total / measured) or 0
 
-  print(string.format("palabras      : %d (%d sin respuesta)", iterations, misses))
-  print(string.format("ida-vuelta    : media %.3f s · mín %.3f s · máx %.3f s", average, best, worst))
+  print(string.format("words         : %d (%d timeouts)", iterations, misses))
+  print(string.format("round trip    : avg %.3f s · min %.3f s · max %.3f s", average, best, worst))
   if average > 0.001 then
-    print(string.format("equivalente   : %.1f B/s por canal (4 B por palabra)", 4 / average))
+    print(string.format("equivalent    : %.1f B/s per channel (4 B per word)", 4 / average))
   else
-    print("equivalente   : por debajo de la resolución del reloj")
+    print("equivalent    : below clock resolution")
   end
-  print("Nota: mide el bucle completo. El caudal real depende de los canales en paralelo.")
+  print("Note: this measures the full loop. Throughput depends on parallel channels.")
 end
 
 local function stream(iterations)
@@ -232,13 +232,13 @@ local function stream(iterations)
   end
 
   local elapsed = now() - start
-  print(string.format("enviadas      : %d en %.3f s", iterations, sent))
-  print(string.format("recibidas     : %d · desajustes %d", received, mismatch))
-  print(string.format("caudal        : %.1f palabras/s · %.1f B/s", iterations / math.max(elapsed, 0.001),
+  print(string.format("sent          : %d in %.3f s", iterations, sent))
+  print(string.format("received      : %d · mismatches %d", received, mismatch))
+  print(string.format("throughput    : %.1f words/s · %.1f B/s", iterations / math.max(elapsed, 0.001),
     (iterations * 4) / math.max(elapsed, 0.001)))
 end
 
--- Adaptador en memoria: valida la lógica del banco sin hardware.
+-- In-memory adapter for validating the bench logic without hardware.
 local function selftest()
   local current = 0
 

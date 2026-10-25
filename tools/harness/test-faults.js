@@ -1,12 +1,9 @@
-// Comprueba que el OS se recupera cuando la GPU rechaza escrituras.
+// Verify that the OS recovers when the GPU rejects writes.
 //
 //   node tools/harness/test-faults.js
 //
-// La GPU real devuelve nil, "not enough energy" si no tiene energía. El OS
-// debe reintentar esos tramos: la pantalla final con fallos inyectados tiene
-// que ser IDÉNTICA a la del mismo escenario sin fallos. Si el volcado por
-// diferencias da por pintadas las celdas que la GPU rechazó, quedan huecos
-// que ya no se reintentan nunca.
+// The real GPU may return nil, "not enough energy". The OS must retry rejected
+// spans so the final screen matches a run without injected faults.
 
 const path = require("path");
 const { spawnSync } = require("child_process");
@@ -19,11 +16,10 @@ function run(scenario, extra) {
   const result = spawnSync(process.execPath, args, { encoding: "utf8" });
   const output = (result.stdout || "") + (result.stderr || "");
 
-  const start = output.indexOf("=== PANTALLA FINAL ===");
-  const end = output.indexOf("=== REGISTRO PERSISTIDO ===");
+  const start = output.indexOf("=== FINAL SCREEN ===");
+  const end = output.indexOf("=== PERSISTED LOG ===");
   const raw = start >= 0 && end > start ? output.slice(start, end) : null;
-  // El reloj se lee del sistema: se enmascara para que dos ejecuciones
-  // separadas por un segundo no cuenten como diferencia de contenido.
+  // Mask the clock so separate runs do not differ only by time.
   const screen = raw === null ? null : raw.replace(/\d{2}:\d{2}:\d{2}/g, "HH:MM:SS").trimEnd();
 
   return { code: result.status, screen, output };
@@ -36,17 +32,17 @@ for (const scenario of scenarios) {
 
   if (base.code !== 0) {
     problems += 1;
-    console.log("FALLO " + scenario + ": el escenario base ya falla");
+    console.log("FAIL " + scenario + ": baseline scenario failed");
     continue;
   }
   if (fault.code !== 0) {
     problems += 1;
-    console.log("FALLO " + scenario + ": no se recupera de la GPU sin energía");
+    console.log("FAIL " + scenario + ": did not recover from GPU power failures");
     continue;
   }
   if (!base.screen || !fault.screen) {
     problems += 1;
-    console.log("FALLO " + scenario + ": no se pudo leer la pantalla final");
+    console.log("FAIL " + scenario + ": could not read final screen");
     continue;
   }
   if (base.screen !== fault.screen) {
@@ -60,14 +56,14 @@ for (const scenario of scenarios) {
         break;
       }
     }
-    console.log("FALLO " + scenario + ": la pantalla difiere tras inyectar fallos (línea " + (first + 1) + ")");
-    console.log("  sin fallos: " + (baseLines[first] || "(vacía)"));
-    console.log("  con fallos: " + (faultLines[first] || "(vacía)"));
+    console.log("FAIL " + scenario + ": screen differs after injected fault (line " + (first + 1) + ")");
+    console.log("  baseline: " + (baseLines[first] || "(empty)"));
+    console.log("  faulted : " + (faultLines[first] || "(empty)"));
     continue;
   }
-  console.log("ok " + scenario + ": misma pantalla con y sin fallos de GPU");
+  console.log("ok " + scenario + ": same screen with and without GPU faults");
 }
 
 console.log("");
-console.log(problems === 0 ? "sin errores" : problems + " problema(s)");
+console.log(problems === 0 ? "no failures" : problems + " problem(s)");
 process.exit(problems === 0 ? 0 : 1);

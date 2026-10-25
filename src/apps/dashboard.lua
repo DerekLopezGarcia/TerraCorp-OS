@@ -1,11 +1,11 @@
--- Panel de planta: estado del nodo, memoria, energía, enlaces y registro.
+-- Plant dashboard: node status, memory, power, peripherals, and log.
 
 local dashboard = {}
 dashboard.__index = dashboard
 
 dashboard.id = "dashboard"
-dashboard.title = "Panel de planta"
-dashboard.short = "Panel"
+dashboard.title = "Plant Dashboard"
+dashboard.short = "Dashboard"
 dashboard.order = 1
 
 local CARD_HEIGHT = 6
@@ -75,25 +75,24 @@ function dashboard:draw(ctx)
     topKinds[#topKinds + 1] = entry.kind .. " x" .. entry.count
   end
 
-  -- Tarjetas en orden de lectura; se colocan en columnas y, si no caben,
-  -- siguen en la fila siguiente (nunca fuera de la ventana).
+  -- Cards follow reading order and wrap to the next row without leaving the window.
   local cards = {
     {
-      title = "NODO",
+      title = "NODE",
       value = ctx.kernel.hostname,
       detail = ctx.kernel.address:sub(1, 8) .. " · " .. ctx.version.version,
       tint = c.text,
     },
     {
-      title = "ACTIVIDAD",
+      title = "UPTIME",
       value = ctx.util.humanTime(self.uptime),
-      detail = "Sesión en curso",
+      detail = "Session active",
       tint = c.text,
     },
     {
-      title = "MEMORIA",
+      title = "MEMORY",
       value = string.format("%.1f / %.1f MB", self.memoryUsed, self.memoryTotal),
-      detail = string.format("%.0f%% ocupada", memoryRatio * 100),
+      detail = string.format("%.0f%% used", memoryRatio * 100),
       ratio = memoryRatio,
       tint = c.accent,
     },
@@ -101,42 +100,42 @@ function dashboard:draw(ctx)
 
   if type(self.energyStored) == "number" and type(self.energyMaximum) == "number" and self.energyMaximum > 0 then
     cards[#cards + 1] = {
-      title = "ENERGÍA",
+      title = "POWER",
       value = string.format("%.1f / %.1f kJ", self.energyStored / 1000, self.energyMaximum / 1000),
-      detail = string.format("%.0f%% disponible", energyRatio * 100),
+      detail = string.format("%.0f%% available", energyRatio * 100),
       ratio = energyRatio,
       tint = energyColor,
     }
   else
     cards[#cards + 1] = {
-      title = "ENERGÍA",
-      value = "sin lectura",
-      detail = "El nodo no reporta energía",
+      title = "POWER",
+      value = "unavailable",
+      detail = "No power data reported",
       tint = c.warn,
     }
   end
 
   if not dense then
     cards[#cards + 1] = {
-      title = "ENLACES",
-      value = tostring(self.components.total) .. " componentes",
+      title = "DEVICES",
+      value = tostring(self.components.total) .. " components",
       detail = table.concat(topKinds, " · "),
       tint = c.text,
     }
 
     if self.storageTotal then
       cards[#cards + 1] = {
-        title = "ALMACENAMIENTO",
+        title = "STORAGE",
         value = ctx.util.humanSize(self.storageUsed) .. " / " .. ctx.util.humanSize(self.storageTotal),
-        detail = string.format("%.0f%% del volumen", storageRatio * 100),
+        detail = string.format("%.0f%% used", storageRatio * 100),
         ratio = storageRatio,
         tint = c.accent,
       }
     else
       cards[#cards + 1] = {
-        title = "ALMACENAMIENTO",
-        value = "sin volumen",
-        detail = "No se pudo leer el disco",
+        title = "STORAGE",
+        value = "unavailable",
+        detail = "Could not read boot disk",
         tint = c.warn,
       }
     end
@@ -173,7 +172,7 @@ function dashboard:draw(ctx)
       glyphs = g,
       fg = c.panel,
       bg = c.deep,
-      title = "REGISTRO",
+      title = "SYSTEM LOG",
       titleFg = c.dim,
       titleBg = c.deep,
     })
@@ -194,10 +193,17 @@ function dashboard:draw(ctx)
 end
 
 function dashboard:tick(ctx)
-  if ctx.kernel:uptime() - self.samplesAt >= 2 then
+  local now = ctx.kernel:uptime()
+  local changed = self.uptime ~= now
+  self.uptime = now
+
+  -- Refresh expensive readings every two seconds, but keep the uptime display
+  -- synchronized with the kernel's one-second UI tick.
+  if now - self.samplesAt >= 2 then
     self:refresh(ctx)
+    changed = true
   end
-  return true
+  return changed
 end
 
 function dashboard:handle(ctx, name, char)

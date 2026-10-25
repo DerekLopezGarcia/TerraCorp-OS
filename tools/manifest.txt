@@ -13,6 +13,7 @@ src/lib/tc/log.lua
 src/lib/tc/text.lua
 src/lib/tc/theme.lua
 src/lib/tc/ui.lua
+src/lib/tc/updater.lua
 src/lib/tc/util.lua
 src/lib/tc/version.lua
 tools/check.lua

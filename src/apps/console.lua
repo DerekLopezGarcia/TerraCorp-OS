@@ -1,11 +1,11 @@
--- Consola de operador: shell mínima sobre el volumen y los servicios del OS.
+-- Operator console: a small shell for the boot volume and OS services.
 
 local console = {}
 console.__index = console
 
 console.id = "console"
-console.title = "Consola"
-console.short = "Consola"
+console.title = "Console"
+console.short = "Console"
 console.order = 3
 
 function console.create(ctx)
@@ -19,8 +19,8 @@ function console.create(ctx)
   self.wrapped = nil
   self.wrappedWidth = 0
 
-  self:push("TerraCorp OS — consola de operador", "accent")
-  self:push("Escribe `help` para ver los comandos disponibles.", "dim")
+  self:push("TerraCorp OS — operator console", "accent")
+  self:push("Type `help` to list available commands.", "dim")
   self:push("", "out")
   return self
 end
@@ -97,7 +97,7 @@ function console:draw(ctx)
   v:put(1 + ctx.text.width(prompt) + ctx.text.width(shown), row, "_", c.dim, c.deep)
 
   if self.scroll > 0 then
-    local suffix = (self.scroll == 1) and " línea atrás " or " líneas atrás "
+    local suffix = (self.scroll == 1) and " line back " or " lines back "
     v:textRight(ctx.w, 1, " " .. self.scroll .. suffix, c.onAccent, c.warn)
   end
 end
@@ -119,25 +119,25 @@ function console:command(ctx, line)
   local vfs = kernel.vfs
 
   if name == "help" then
-    self:push("Comandos disponibles:", "accent")
+    self:push("Available commands:", "accent")
     for _, item in ipairs({
-      "ls [ruta]      listar directorio",
-      "cd <ruta>      cambiar de directorio",
-      "pwd            ruta actual",
-      "cat <fichero>  mostrar contenido",
-      "echo <texto>   imprimir texto",
-      "clear          limpiar la consola",
-      "uptime         tiempo de sesión",
-      "mem            memoria del nodo",
-      "comps          componentes enlazados",
-      "log [n]        últimas líneas del registro",
-      "apps           aplicaciones disponibles",
-      "open <id>      abrir una aplicación",
-      "theme <nombre> cambiar el acento",
-      "whoami         identidad del nodo",
-      "reboot         reiniciar",
-      "poweroff       apagar",
-      "exit           cerrar la consola",
+      "ls [path]      list directory",
+      "cd <path>      change directory",
+      "pwd            print working directory",
+      "cat <file>     print file contents",
+      "echo <text>    print text",
+      "clear          clear the console",
+      "uptime         show session uptime",
+      "mem            show node memory",
+      "comps          list connected components",
+      "log [n]        show recent log entries",
+      "apps           list available apps",
+      "open <id>      open an app",
+      "theme <name>   change the accent color",
+      "whoami         show node identity",
+      "reboot         restart the node",
+      "poweroff       shut down the node",
+      "exit           close the console",
     }) do
       self:push("  " .. item, "dim")
     end
@@ -152,7 +152,7 @@ function console:command(ctx, line)
       return
     end
     if #names == 0 then
-      self:push("(vacío)", "dim")
+      self:push("(empty)", "dim")
       return
     end
     for _, entry in ipairs(names) do
@@ -178,7 +178,7 @@ function console:command(ctx, line)
     if vfs.isDirectory(path) then
       self.cwd = path
     else
-      self:push("cd: no es un directorio: " .. path, "err")
+      self:push("cd: not a directory: " .. path, "err")
     end
     return
   end
@@ -191,7 +191,7 @@ function console:command(ctx, line)
   if name == "cat" then
     local path = self:resolve(ctx, rest)
     if vfs.isDirectory(path) then
-      self:push("cat: es un directorio", "err")
+      self:push("cat: is a directory", "err")
       return
     end
     local content, reason = vfs.read(path)
@@ -203,7 +203,7 @@ function console:command(ctx, line)
     for _, textLine in ipairs(ctx.util.split((content:gsub("\r", "")), "\n")) do
       count = count + 1
       if count > 200 then
-        self:push("… (recortado a 200 líneas)", "dim")
+        self:push("... (truncated to 200 lines)", "dim")
         break
       end
       self:push(textLine)
@@ -223,19 +223,19 @@ function console:command(ctx, line)
   end
 
   if name == "uptime" then
-    self:push("Sesión activa: " .. ctx.util.humanTime(kernel:uptime()), "ok")
+    self:push("Session uptime: " .. ctx.util.humanTime(kernel:uptime()), "ok")
     return
   end
 
   if name == "mem" then
     local used, total = kernel:memory()
-    self:push(string.format("Memoria: %.1f / %.1f MB", used / 1048576, total / 1048576), "out")
+    self:push(string.format("Memory: %.1f / %.1f MB", used / 1048576, total / 1048576), "out")
     return
   end
 
   if name == "comps" then
     local summary = kernel:components()
-    self:push(tostring(summary.total) .. " componentes enlazados", "accent")
+    self:push(tostring(summary.total) .. " connected components", "accent")
     for _, entry in ipairs(summary.entries) do
       self:push(string.format("  %-16s %d", entry.kind, entry.count), "out")
     end
@@ -266,7 +266,7 @@ function console:command(ctx, line)
   if name == "open" then
     local id = ctx.util.trim(rest)
     if id == "" then
-      self:push("open: falta el id de la aplicación", "err")
+      self:push("open: missing app id", "err")
       return
     end
     ctx.ui:open(id)
@@ -275,15 +275,15 @@ function console:command(ctx, line)
 
   if name == "theme" then
     if rest == "" then
-      self:push("Acento actual: " .. kernel.config.get("accent"), "out")
+      self:push("Current accent: " .. kernel.config.get("accent"), "out")
       return
     end
     if kernel.config.set("accent", rest) then
       kernel:applyTheme()
       kernel:saveConfig()
-      self:push("Acento cambiado a " .. rest, "ok")
+      self:push("Accent changed to " .. rest, "ok")
     else
-      self:push("theme: acento desconocido", "err")
+      self:push("theme: unknown accent", "err")
     end
     return
   end
@@ -294,13 +294,13 @@ function console:command(ctx, line)
   end
 
   if name == "reboot" then
-    self:push("Reiniciando el nodo…", "accent")
+    self:push("Restarting node...", "accent")
     kernel:poweroff(true)
     return
   end
 
   if name == "poweroff" then
-    self:push("Apagando el nodo…", "accent")
+    self:push("Shutting down node...", "accent")
     kernel:poweroff(false)
     return
   end
@@ -310,7 +310,7 @@ function console:command(ctx, line)
     return
   end
 
-  self:push(name .. ": comando desconocido. Prueba `help`.", "err")
+  self:push(name .. ": unknown command. Try `help`.", "err")
 end
 
 function console:submit(ctx)
@@ -331,11 +331,11 @@ function console:submit(ctx)
   local ok, reason = pcall(self.command, self, ctx, line)
   if not ok then
     self:push("error: " .. tostring(reason), "err")
-    ctx.log.error("consola: " .. tostring(reason))
+    ctx.log.error("console: " .. tostring(reason))
   end
 end
 
--- Líneas visibles que quedan por encima del final del buffer.
+-- Number of visible lines above the end of the buffer.
 function console:maxScroll(ctx)
   local rows = math.max(1, ctx.h - 2)
   return math.max(0, #self:reflow(ctx) - rows)

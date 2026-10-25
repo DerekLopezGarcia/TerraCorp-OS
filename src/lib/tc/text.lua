@@ -1,12 +1,12 @@
--- Texto y UTF-8 sin dependencias.
+-- Text and UTF-8 helpers with no external dependencies.
 --
--- OpenComputers dibuja una celda por carácter, así que necesitamos partir por
--- puntos de código (no por bytes) y asumir ancho 1. Los caracteres de doble
--- ancho (CJK, emoji) no están soportados: ver docs/opencomputers.md.
+-- OpenComputers draws one cell per code point. Count code points, not bytes,
+-- and assume width one. Wide CJK characters and emoji are unsupported; see
+-- docs/opencomputers.md.
 
 local text = {}
 
--- Longitud de la secuencia UTF-8 que empieza con el byte indicado.
+-- Length of the UTF-8 sequence starting at the given byte.
 local function sequenceLength(byte)
   if byte < 0x80 then
     return 1
@@ -20,7 +20,7 @@ local function sequenceLength(byte)
   return 1
 end
 
--- Devuelve el siguiente índice y la secuencia completa a partir de `index`.
+-- Return the next byte index and complete UTF-8 sequence from `index`.
 local function nextCharacter(value, index)
   local byte = value:byte(index)
   if not byte then
@@ -44,7 +44,7 @@ function text.width(value)
   return count
 end
 
--- Cada llamada devuelve el siguiente carácter (no un iterador de Lua).
+-- Return the next character on each call (not a Lua iterator).
 function text.charAt(value, position)
   local index, count = 1, 0
   while index <= #value do
@@ -98,7 +98,7 @@ function text.padRight(value, width)
   return value .. string.rep(" ", width - length)
 end
 
--- Tramo de `from` a `to` contando puntos de código (1-based, inclusivo).
+-- Slice from `from` to `to` by code point (1-based, inclusive).
 function text.slice(value, from, to)
   local parts = {}
   local position = 1
@@ -118,7 +118,7 @@ function text.slice(value, from, to)
   return table.concat(parts)
 end
 
--- Parte un texto en líneas de como máximo `width` caracteres.
+-- Wrap text into lines no wider than `width` characters.
 function text.wrap(value, width)
   local lines = {}
   if width < 1 then

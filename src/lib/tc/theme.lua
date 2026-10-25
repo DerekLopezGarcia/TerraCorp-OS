@@ -1,11 +1,11 @@
--- Paleta, colores semánticos y glifos.
+-- Palette, semantic colors, and glyphs.
 --
--- OpenComputers solo tiene 16 colores fijos, así que el tema es una asignación
--- de tokens ("panel", "acento", "peligro") a índices de esa paleta.
+-- OpenComputers has a 16-color palette, so themes map semantic tokens such as
+-- "panel", "accent", and "danger" to palette indexes.
 
 local theme = {}
 
--- Índices de la paleta de OpenComputers (16 colores de Minecraft).
+-- OpenComputers palette indexes (the 16 Minecraft colors).
 local PALETTE = {
   white = 0,
   orange = 1,
@@ -27,9 +27,8 @@ local PALETTE = {
 
 theme.palette = PALETTE
 
--- Paleta clásica de OpenComputers (índices de 0 a 15). Las pantallas T3
--- empiezan con sus 16 colores editables en escala de grises, por lo que el OS
--- la inicializa explícitamente antes de dibujar.
+-- Classic OpenComputers palette (indexes 0-15). Tier 3 screens start with an
+-- editable grayscale palette, so the OS initializes it before drawing.
 theme.paletteRGB = {
   [0] = 0xF0F0F0, -- white
   [1] = 0xF2B233, -- orange

@@ -1,10 +1,9 @@
--- TerraCorp OS - gestor de arranque para la EEPROM del ordenador.
+-- TerraCorp OS optional EEPROM boot manager.
 --
--- Se graba tal cual en la EEPROM (ver tools/install.lua). Su única tarea es
--- elegir un volumen con TerraCorp OS, fijarlo como volumen de arranque y ceder
--- el control a su /init.lua.
+-- Written directly to the EEPROM (see tools/install.lua). Its only job is to
+-- find a TerraCorp volume, select it as the boot volume, and run its /init.lua.
 --
--- Entorno garantizado: `component` y `computer`.
+-- Guaranteed environment: `component` and `computer`.
 
 local component, computer = component, computer
 
@@ -16,10 +15,9 @@ local function invoke(address, method, ...)
   return table.unpack(result, 2, result.n)
 end
 
--- En OpenComputers 1.7.x el entorno de la EEPROM NO trae
--- `computer.getBootAddress`/`setBootAddress`: las define el BIOS estándar al
--- arrancar (guardando el volumen en la propia EEPROM con getData/setData). Si
--- la EEPROM lleva este gestor, hay que crearlas aquí o el arranque revienta.
+-- In OpenComputers 1.7.x the EEPROM environment may lack
+-- `computer.getBootAddress`/`setBootAddress`; standard BIOS defines these at
+-- boot using EEPROM data. This manager supplies them when needed.
 local eepromAddress = component.list("eeprom")()
 
 if type(computer.getBootAddress) ~= "function" then
@@ -35,7 +33,7 @@ end
 if type(computer.setBootAddress) ~= "function" then
   computer.setBootAddress = function(address)
     if not eepromAddress then
-      return nil, "sin EEPROM"
+      return nil, "no EEPROM"
     end
     local ok, reason = invoke(eepromAddress, "setData", address)
     if ok == nil then
@@ -48,7 +46,7 @@ end
 local function read(address, path)
   local handle, reason = invoke(address, "open", path, "r")
   if not handle then
-    return nil, reason or ("no se pudo abrir " .. path)
+    return nil, reason or ("could not open " .. path)
   end
 
   local chunks = {}
@@ -90,7 +88,7 @@ if not isBootable(address) then
 end
 
 if not address then
-  error("TerraCorp OS: la EEPROM no encuentra un volumen de arranque válido", 0)
+  error("TerraCorp OS: EEPROM manager could not find a valid boot volume", 0)
 end
 
 local source, reason = read(address, "/init.lua")
@@ -100,7 +98,7 @@ end
 
 local chunk, compileError = load(source, "=init")
 if not chunk then
-  error("TerraCorp OS: /init.lua inválido: " .. tostring(compileError), 0)
+  error("TerraCorp OS: invalid /init.lua: " .. tostring(compileError), 0)
 end
 
 return chunk()

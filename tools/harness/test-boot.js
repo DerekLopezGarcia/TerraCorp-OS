@@ -1,4 +1,4 @@
-// Prueba eeprom/init.lua en el sandbox de OpenComputers 1.7.x y 1.8+.
+// Test eeprom/init.lua in the OpenComputers 1.7.x and 1.8+ sandboxes.
 //
 //   node tools/harness/test-boot.js
 
@@ -18,7 +18,7 @@ function runScenario(scenario) {
   lua.lua_setglobal(L, to_luastring("EEPROM_SOURCE"));
 
   if (lauxlib.luaL_loadfile(L, to_luastring(path.join(__dirname, "eeprom-test.lua"))) !== lua.LUA_OK) {
-    throw new Error("no se pudo cargar eeprom-test.lua: " + to_jsstring(lua.lua_tostring(L, -1)));
+    throw new Error("Could not load eeprom-test.lua: " + to_jsstring(lua.lua_tostring(L, -1)));
   }
 
   lua.lua_pushstring(L, to_luastring(scenario));
@@ -34,9 +34,9 @@ for (const scenario of scenarios) {
     runScenario(scenario);
   } catch (error) {
     failed++;
-    console.error("FALLO " + scenario + ": " + error.message);
+    console.error("FAIL " + scenario + ": " + error.message);
   }
 }
 
-console.log(scenarios.length + " escenarios de arranque, " + failed + " errores");
+console.log(scenarios.length + " boot scenarios, " + failed + " failures");
 process.exit(failed ? 1 : 0);

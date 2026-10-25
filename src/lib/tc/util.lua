@@ -1,4 +1,4 @@
--- Utilidades sin dependencias: números, cadenas, rutas y formatos.
+-- Dependency-free helpers for numbers, strings, paths, and formatting.
 
 local util = {}
 
@@ -34,7 +34,7 @@ function util.split(text, separator)
   return parts
 end
 
--- Une dos tramos de ruta y resuelve "." y "..". Siempre devuelve ruta absoluta.
+-- Join path segments and resolve "." and "..". Always return an absolute path.
 function util.join(base, name)
   local raw = base
   if name and name ~= "" then
@@ -76,7 +76,7 @@ function util.padLeft(text, width)
   return string.rep(" ", width - #text) .. text
 end
 
--- Duración en formato de planta: "3d 04h", "2h 07m", "58s".
+-- Format a duration as "3d 04h", "2h 07m", or "58s".
 function util.humanTime(seconds)
   seconds = math.max(0, math.floor(seconds or 0))
   local days = math.floor(seconds / 86400)
@@ -96,7 +96,7 @@ function util.humanTime(seconds)
   return string.format("%ds", rest)
 end
 
--- Tamaños expresados en kilobytes (así los devuelve OpenComputers).
+-- Format sizes in kilobytes, matching the kernel VFS.
 function util.humanSize(kilobytes)
   local value = tonumber(kilobytes) or 0
   if value >= 1048576 then
