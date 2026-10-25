@@ -45,25 +45,26 @@ local function request(url, limit)
     return nil, tostring(reason or "The request could not be started.")
   end
 
-  local okResponse, status = pcall(handle.response)
+  local okResponse, status, responseMessage = pcall(handle.response, handle)
   if not okResponse or type(status) ~= "number" then
-    pcall(handle.close)
-    return nil, "The server did not provide an HTTP status."
+    pcall(handle.close, handle)
+    local detail = okResponse and tostring(responseMessage or status) or tostring(status)
+    return nil, "Could not read HTTP response status: " .. detail
   end
   if status ~= 200 then
-    pcall(handle.close)
+    pcall(handle.close, handle)
     return nil, "HTTP " .. tostring(status)
   end
 
   local chunks, size = {}, 0
   while true do
-    local okRead, chunk, readError = pcall(handle.read, 8192)
+    local okRead, chunk, readError = pcall(handle.read, handle, 8192)
     if not okRead then
-      pcall(handle.close)
+      pcall(handle.close, handle)
       return nil, "Download failed: " .. tostring(chunk)
     end
     if not chunk then
-      pcall(handle.close)
+      pcall(handle.close, handle)
       if readError then
         return nil, "Download failed: " .. tostring(readError)
       end

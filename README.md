@@ -4,7 +4,7 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.1.2 Foundry**. The prototype boots, provides five apps,
+Current version: **0.1.3 Foundry**. The prototype boots, provides five apps,
 persists settings, and logs errors. Local simulations cover the OpenComputers
 API contract; in-game testing is tracked in [`docs/tests.md`](docs/tests.md).
 
@@ -118,7 +118,8 @@ for in-game testing. See [`docs/tests.md`](docs/tests.md) for the F0 protocol an
 - Colors use the OpenComputers palette; the T3 palette is initialized at boot.
 - One Unicode code point occupies one screen cell; wide CJK characters and emoji
   are not supported.
-- TerraCorp OS is original software inspired by MineOS (MIT), not a fork.
+- TerraCorp is a fictional megacorporation focused on human continuity and
+  expansion beyond the Earth-Luna system. See [`docs/teracorp-lore.md`](docs/teracorp-lore.md).
 
 ## License and credits
 

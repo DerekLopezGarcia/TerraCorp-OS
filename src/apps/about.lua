@@ -1,4 +1,4 @@
--- About: product identity, platform information, and credits.
+-- About: product identity, platform information, and corporate lore.
 
 local updater = require("tc.updater")
 
@@ -14,16 +14,17 @@ function about.create()
   return setmetatable({ updateState = "check", updateStatus = "Check GitHub Releases for a stable update." }, about)
 end
 
-local CREDITS = {
-  "TerraCorp OS is original software, not a MineOS fork.",
-  "MineOS (Igor Timofeev, MIT) inspired the architecture",
-  "and desktop experience for OpenComputers.",
+local LORE_BRIEF = {
+  "TERRACORP: THE ARCHITECTS OF DAWN",
+  "Born from the Last Project as civilization collapsed.",
+  "Mandate: secure human continuity at any cost.",
   "",
-  "Target platform: Minecraft 1.12.2 + Forge + OpenComputers,",
-  "in the Supersymmetry modpack (Susy-Core, GPLv3).",
-  "Susy-Core is used as an environment; it is not modified or redistributed.",
+  "RECLAIM THE CRADLE · Purge Earth of Residuals and Xeno-parasites.",
+  "BREAK THE YOKE · Resist the Federation's grip on the orbital frontier.",
+  "SOW THE COSMOS · Build a refuge beyond the Earth-Luna system.",
   "",
-  "This project is licensed under the MIT License. See LICENSE.",
+  "ETHICS OF PERSISTENCE: What works is ethical. Survival is moral.",
+  "The refuge may be humanity's salvation—or TerraCorp's first empire.",
 }
 
 function about:draw(ctx)
@@ -61,13 +62,13 @@ function about:draw(ctx)
     if ctx.h >= 20 then
       local dividerRow = 12
       v:hline(1, dividerRow, ctx.w, ctx.glyphs.h, c.panel, c.deep)
-      for index, line in ipairs(CREDITS) do
-        local creditRow = dividerRow + index
-        if creditRow >= buttonRow - 1 then
+      for index, line in ipairs(LORE_BRIEF) do
+        local loreRow = dividerRow + index
+        if loreRow >= buttonRow - 1 then
           break
         end
         if line ~= "" then
-          v:put(2, creditRow, ctx.text.truncate(line, ctx.w - 2), c.dim, c.deep)
+          v:put(2, loreRow, ctx.text.truncate(line, ctx.w - 2), c.dim, c.deep)
         end
       end
     end

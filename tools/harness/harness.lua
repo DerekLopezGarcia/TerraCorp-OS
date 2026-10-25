@@ -400,7 +400,7 @@ function component.invoke(address, method, ...)
     elseif url:find("/tools/manifest.txt", 1, true) then
       body = "src/init.lua\nsrc/boot/kernel.lua\nsrc/lib/tc/version.lua\n"
     elseif url:find("/src/lib/tc/version.lua", 1, true) then
-      body = 'return { product = "TerraCorp OS", company = "TerraCorp", tagline = "Plant systems", version = "'
+      body = 'return { product = "TerraCorp OS", company = "TerraCorp", tagline = "Architects of Dawn", version = "'
         .. mockedReleaseVersion .. '", codename = "Foundry", api = 1, license = "MIT" }\n'
     elseif url:find("/src/init.lua", 1, true) then
       body = "return 1\n"
@@ -410,21 +410,24 @@ function component.invoke(address, method, ...)
       return nil, "not found"
     end
     local sent = false
-    return {
-      response = function()
+    local handle = {}
+    handle.response = function(self)
+        assert(self == handle, "response did not receive its request handle")
         return 200, "OK", {}
-      end,
-      read = function()
+      end
+    handle.read = function(self)
+        assert(self == handle, "read did not receive its request handle")
         if sent then
           return nil
         end
         sent = true
         return body
-      end,
-      close = function()
+      end
+    handle.close = function(self)
+        assert(self == handle, "close did not receive its request handle")
         return true
-      end,
-    }
+      end
+    return handle
   end
   return true
 end

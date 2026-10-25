@@ -7,8 +7,7 @@ it in the neXacom memory.
 
 TerraCorp OS is a Lua desktop OS for OpenComputers in the Supersymmetry
 modpack (Minecraft 1.12.2 + Forge). It runs on player-owned computers and does
-not modify or redistribute Supersymmetry or Susy-Core. MineOS is an
-architectural reference, not a code fork.
+not modify or redistribute Supersymmetry or Susy-Core.
 
 - Runtime: Lua 5.3; no build step.
 - OpenComputers: 1.7.x API verified; 1.8.x is a target.
