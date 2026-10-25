@@ -348,6 +348,8 @@ if fakeBootUpdate then
   directories["/var/update"] = true
   written["/var/update/pending"] = "version=" .. mockedReleaseVersion
     .. "\ntag=v" .. mockedReleaseVersion .. "\n"
+  -- User data outside src/ must survive the update untouched.
+  written["/var/notes.txt"] = "Reactor inspection due Friday\n"
   -- A reset during an earlier attempt left originals in the backup tree.
   local stale = "/var/update/backup/" .. mockedReleaseVersion
   directories[stale] = true
@@ -812,6 +814,10 @@ if scenario == "boot_update" then
   if not status:find("Update complete", 1, true) or not status:find(mockedReleaseVersion, 1, true) then
     errors = errors + 1
     print("FAIL: the boot-time updater did not report success")
+  end
+  if readReal("/var/notes.txt") ~= "Reactor inspection due Friday\n" then
+    errors = errors + 1
+    print("FAIL: the boot-time updater changed user data outside src/")
   end
   if not finalScreen:find("v" .. mockedReleaseVersion, 1, true) then
     errors = errors + 1
