@@ -9,7 +9,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const simulate = path.join(__dirname, "simulate.js");
-const scenarios = ["dashboard", "console", "files", "settings"];
+const scenarios = ["dashboard", "console", "files", "settings", "notes"];
 
 function run(scenario, extra) {
   const args = [simulate, scenario, "--strict"].concat(extra);
