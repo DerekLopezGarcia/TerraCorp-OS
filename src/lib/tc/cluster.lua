@@ -366,60 +366,103 @@ function cluster:prepareInstaller()
   local wantPayload = self.config
     and type(self.config.get) == "function"
     and self.config.get("nodeFloppyPayload") == true
+  local pinned = ""
+  if self.config and type(self.config.get) == "function" then
+    pinned = tostring(self.config.get("nodeFloppyAddress") or "")
+  end
   local lastReason
   local armed, written = false, 0
   local result, why
 
-  -- Prepare every writable floppy on the bus, not just one: a master cannot
-  -- tell its own drive's floppy from a rack drive's, so writing them all
-  -- guarantees the rack floppy is bootable and the log names each address.
-  for _, candidate in ipairs(candidates) do
-    local label = shortAddress(candidate.address)
-    if not candidate.safe then
-      self:log("Skipped floppy " .. label .. ": " .. tostring(candidate.reason or "other data"))
-      lastReason = candidate.reason or "the floppy contains other data"
-    else
-      result, why = nil, nil
-      -- With nodeFloppyPayload the floppy also carries the full runtime so a
-      -- server can install offline. If the payload does not fit, fall back to
-      -- the pull-only bootstrap instead of failing the preparation.
-      if wantPayload then
-        result, why = provision.prepare(self.vfs, candidate.vfs, {
-          version = version,
-          reuse = true,
-          payload = true,
-        })
-        if not result then
-          self:log("Floppy " .. label .. ": offline payload does not fit ("
-            .. tostring(why) .. "); writing the pull bootstrap")
-        end
-      end
+  local function prepareOne(candidate)
+    -- With nodeFloppyPayload the floppy also carries the full runtime so a
+    -- server can install offline. If the payload does not fit, fall back to
+    -- the pull-only bootstrap instead of failing the preparation.
+    if wantPayload then
+      result, why = provision.prepare(self.vfs, candidate.vfs, {
+        version = version,
+        reuse = true,
+        payload = true,
+      })
       if not result then
-        result, why = provision.prepare(self.vfs, candidate.vfs, {
-          version = version,
-          reuse = true,
-        })
-      end
-      if result then
-        armed = true
-        written = written + 1
-        self:log(string.format(
-          "Floppy %s ready: %d files, %d KB (%s)",
-          label,
-          result.files,
-          math.floor(result.bytes / 1024 + 0.5),
-          result.reused and "reused" or "written"
-        ))
-        lastResult, lastCandidate = result, candidate
-      else
-        self:log("Floppy " .. label .. " failed: " .. tostring(why))
-        lastReason = why
+        self:log("Floppy " .. shortAddress(candidate.address)
+          .. ": offline payload does not fit (" .. tostring(why)
+          .. "); writing the pull bootstrap")
       end
     end
+    if not result then
+      result, why = provision.prepare(self.vfs, candidate.vfs, {
+        version = version,
+        reuse = true,
+      })
+    end
+    return result
   end
 
-  if not armed then
-    return nil, lastReason or "no usable floppy was found"
+  -- With nodeFloppyAddress set, write only that floppy: the operator carries
+  -- it to the rack drive by hand and no other floppy on the bus is touched.
+  if pinned ~= "" then
+    local chosen = nil
+    for _, candidate in ipairs(candidates) do
+      if candidate.address == pinned then
+        chosen = candidate
+        break
+      end
+    end
+    if not chosen then
+      return nil, "No floppy matches nodeFloppyAddress ("
+        .. shortAddress(pinned) .. "). Check the drive on the bus."
+    end
+    if not chosen.safe then
+      return nil, chosen.reason or "the floppy contains other data"
+    end
+    result, why = nil, nil
+    local prepared = prepareOne(chosen)
+    if not prepared then
+      return nil, why or "could not write the floppy"
+    end
+    self:log(string.format(
+      "Floppy %s ready: %d files, %d KB (%s)",
+      shortAddress(chosen.address),
+      prepared.files,
+      math.floor(prepared.bytes / 1024 + 0.5),
+      prepared.reused and "reused" or "written"
+    ))
+    candidates = { chosen }
+    lastResult, lastCandidate = prepared, chosen
+    armed, written = true, 1
+  else
+    -- Prepare every writable floppy on the bus, not just one: a master cannot
+    -- tell its own drive's floppy from a rack drive's, so writing them all
+    -- guarantees the rack floppy is bootable and the log names each address.
+    for _, candidate in ipairs(candidates) do
+      local label = shortAddress(candidate.address)
+      if not candidate.safe then
+        self:log("Skipped floppy " .. label .. ": " .. tostring(candidate.reason or "other data"))
+        lastReason = candidate.reason or "the floppy contains other data"
+      else
+        result, why = nil, nil
+        local prepared = prepareOne(candidate)
+        if prepared then
+          armed = true
+          written = written + 1
+          self:log(string.format(
+            "Floppy %s ready: %d files, %d KB (%s)",
+            label,
+            prepared.files,
+            math.floor(prepared.bytes / 1024 + 0.5),
+            prepared.reused and "reused" or "written"
+          ))
+          lastResult, lastCandidate = prepared, candidate
+        else
+          self:log("Floppy " .. label .. " failed: " .. tostring(why))
+          lastReason = why
+        end
+      end
+    end
+    if not armed then
+      return nil, lastReason or "no usable floppy was found"
+    end
   end
 
   do

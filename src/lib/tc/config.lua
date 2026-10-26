@@ -21,6 +21,7 @@ config.defaults = {
   masterId = "",
   nodeFloppyPayload = true,
   nodeAutoUpdate = true,
+  nodeFloppyAddress = "",
 }
 
 config.data = {}
