@@ -207,6 +207,16 @@ registry.save(vfs, loaded)
 local versioned = registry.load(vfs)
 equal(registry.find(versioned, "id-1").v, "0.3.1", "the version survives a save/reload")
 
+registry.upsert(versioned, { id = "id-1", jobs = 2, drain = "true" })
+registry.save(vfs, versioned)
+local full = registry.load(vfs)
+equal(registry.find(full, "id-1").jobs, 2, "the job count survives a save/reload")
+equal(registry.find(full, "id-1").drain, "true", "the drain flag survives a save/reload")
+registry.upsert(full, { id = "id-1", drain = "false" })
+registry.save(vfs, full)
+equal(registry.find(registry.load(vfs), "id-1").drain, "",
+  "an undrained node clears the flag")
+
 --------------------------------------------------------------------------------
 -- Fake filesystem components
 --------------------------------------------------------------------------------
@@ -1949,6 +1959,26 @@ equal(mJob.state, "done", "a RESULT routes to the publisher")
 check(mCluster:cancelJob(mJob.id) == nil, "a closed job cannot be canceled again")
 local mCounts = mCluster:jobsSummary()
 equal(mCounts.done, 1, "the cluster summary counts the finished job")
+
+-- drainNode routes DRAIN to a registered node's modem.
+registry.upsert(mCluster:nodesList(), {
+  id = "wk-1",
+  name = "TC-W1",
+  role = "worker",
+  modem = "modem-w",
+  state = "online",
+})
+check(mCluster:drainNode("wk-1", true) == true, "drainNode reaches the node")
+local mDrain = nil
+for _, call in ipairs(mCalls) do
+  if call.verb == "DRAIN" then
+    mDrain = call
+  end
+end
+check(mDrain ~= nil and select(2, net.decode(mDrain.frame)).drain == "true",
+  "the DRAIN frame carries the flag")
+check(mCluster:drainNode("ghost", true) == nil, "an unknown node cannot be drained")
+check(mCluster:drainNode("wk-1", false) == true, "undrain reaches the node too")
 
 end
 

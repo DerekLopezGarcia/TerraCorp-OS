@@ -876,6 +876,8 @@ function cluster:handleStatus(fields, remoteAddress)
     mem = fields.mem,
     disk = fields.disk,
     v = version,
+    jobs = fields.jobs,
+    drain = fields.drain,
     lastSeen = now,
   }
 
@@ -1062,6 +1064,32 @@ end
 
 function cluster:jobsSummary()
   return self.jobs:summary()
+end
+
+--- Tell a node to stop claiming (drain) or to accept work again. The flag is
+-- persisted on the node; the next STATUS echoes it back.
+function cluster:drainNode(nodeId, flag)
+  local node = self:findNode(nodeId)
+  if not node then
+    return nil, "the node is not registered"
+  end
+  if not node.modem or node.modem == "" then
+    return nil, "the node has no known modem address"
+  end
+
+  local ok, reason = self:openModem()
+  if not ok then
+    return nil, "the network card is unavailable: " .. tostring(reason)
+  end
+  local sent = self:send(node.modem, "DRAIN", {
+    id = node.id,
+    drain = flag and "true" or "false",
+  })
+  if not sent then
+    return nil, "could not reach " .. tostring(node.name)
+  end
+  self:log((flag and "Draining " or "Undraining ") .. tostring(node.name))
+  return true
 end
 
 function cluster:shutdown()

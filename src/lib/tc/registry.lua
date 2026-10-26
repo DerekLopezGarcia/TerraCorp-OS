@@ -11,7 +11,7 @@
 local registry = {}
 
 registry.path = "/var/nodes.tsv"
-registry.columns = { "id", "name", "role", "modem", "state", "mem", "disk", "lastSeen", "v" }
+registry.columns = { "id", "name", "role", "modem", "state", "mem", "disk", "lastSeen", "v", "jobs", "drain" }
 registry.states = { online = true, offline = true, provisioning = true }
 registry.roles = { worker = true, storage = true, node = true }
 registry.MAX_NAME = 24
@@ -85,6 +85,8 @@ function registry.upsert(nodes, record)
       disk = 0,
       lastSeen = 0,
       v = "",
+      jobs = 0,
+      drain = "",
     }
     nodes[#nodes + 1] = node
     created = true
@@ -114,6 +116,16 @@ function registry.upsert(nodes, record)
   if record.v ~= nil then
     node.v = clean(record.v)
   end
+  if record.jobs ~= nil then
+    node.jobs = number(record.jobs)
+  end
+  if record.drain ~= nil then
+    if record.drain == true or record.drain == "true" then
+      node.drain = "true"
+    else
+      node.drain = ""
+    end
+  end
 
   return node, created
 end
@@ -129,9 +141,9 @@ function registry.load(vfs)
     line = line:gsub("\r$", "")
     if line ~= "" and line:sub(1, 1) ~= "#" then
       local columns = split(line)
-      -- Files written before the version column have one field fewer; the
-      -- updater preserves the registry, so both shapes must load.
-      if #columns >= #registry.columns - 1 and columns[1] ~= "" then
+      -- Files written before the version, jobs, and drain columns have fewer
+      -- fields; the updater preserves the registry, so every shape loads.
+      if #columns >= 8 and columns[1] ~= "" then
         registry.upsert(nodes, {
           id = columns[1],
           name = columns[2],
@@ -144,6 +156,8 @@ function registry.load(vfs)
           disk = columns[7],
           lastSeen = 0,
           v = columns[9],
+          jobs = columns[10],
+          drain = columns[11],
         })
       end
     end
@@ -178,6 +192,8 @@ function registry.save(vfs, nodes)
       tostring(number(node.disk)),
       tostring(number(node.lastSeen)),
       clean(node.v),
+      tostring(number(node.jobs)),
+      clean(node.drain),
     }, "\t")
   end
 

@@ -118,20 +118,19 @@ jobs (disk journal, re-offer on restart), the first claim wins, and leases
 re-offer stalled jobs. Adding nodes to the bus never requires a central
 broker.
 
-**0.3.2a built:** `tc.jobs` with the six verbs, the `/var/jobs.tsv` journal
-(resumed on boot), worker slots with the built-in tasks (`fs.check`,
+**0.3.2a and 0.3.2b built:** `tc.jobs` with the six verbs, the `/var/jobs.tsv`
+journal (resumed on boot), worker slots with the built-in tasks (`fs.check`,
 `disk.report`, `log.tail`, `comp.count`), drain persistence, and the Nodes
-**Check** button with the queued/granted header counts.
+**Check** and **Drain**/**Undrain** actions with the header as `plant status`.
 
 Still to build:
 
-- `DRAIN` action and **plant status** polish in Nodes (0.3.2b).
 - Timeouts surfaced to the requesting app and result history browsing.
 - Keep jobs contracted: a node runs a named task, not arbitrary remote code.
 
-**Exit criteria:** a batch job runs on a worker and returns to its requester;
-draining a node stops new assignments without losing queued work; a master
-restart does not lose the queue.
+**Exit criteria (in-game run pending):** a batch job runs on a worker and
+returns to its requester; draining a node stops new assignments without losing
+queued work; a master restart does not lose the queue.
 
 ### 0.3.3 Vault
 

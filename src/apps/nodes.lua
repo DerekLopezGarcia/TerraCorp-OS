@@ -301,6 +301,25 @@ function nodes:checkJobs(ctx)
   end
 end
 
+function nodes:toggleDrain(ctx)
+  local cluster = self:cluster(ctx)
+  if not cluster then
+    return self:notify(ctx, "error", "Cluster service is unavailable.")
+  end
+  local node = self:list(ctx)[self:selectedIndex(ctx)] or nil
+  if not node or node.state ~= "online" then
+    return self:notify(ctx, "warn", "Select an online node to drain.")
+  end
+
+  local ok, reason = cluster:drainNode(node.id, node.drain ~= "true")
+  if ok then
+    self:notify(ctx, "info",
+      (node.drain ~= "true" and "Draining " or "Undraining ") .. tostring(node.name) .. "...")
+  else
+    self:notify(ctx, "warn", tostring(reason or "Could not reach the node."))
+  end
+end
+
 function nodes:armUpdate(ctx)
   local cluster = self:cluster(ctx)
   if not cluster then
@@ -449,6 +468,13 @@ function nodes:drawNode(ctx, node, selected, x, y, width, twoLine, servable)
         version = version .. " (update)"
       end
     end
+    local running = tonumber(node.jobs) or 0
+    if running > 0 then
+      version = version .. " · " .. running .. " job" .. (running > 1 and "s" or "")
+    end
+    if node.drain == "true" then
+      version = version .. " · drain"
+    end
     local detail = string.format(
       "%s · %s RAM · %s disk%s",
       tostring(node.role or "worker"),
@@ -482,6 +508,7 @@ function nodes:drawButtons(ctx, installer, node)
     { label = lead, method = lead == "Stop" and "stop" or "prepare" },
     { label = "Refresh", method = "refresh" },
     { label = "Check", method = "checkJobs" },
+    { label = "Drain", method = "toggleDrain" },
     { label = "Update", method = "armUpdate" },
     { label = "Rename", method = "startRename" },
     { label = "Role", method = "cycleRole" },
@@ -492,6 +519,9 @@ function nodes:drawButtons(ctx, installer, node)
   local x = 1
   for _, action in ipairs(actions) do
     local label = " " .. action.label .. " "
+    if action.method == "toggleDrain" and node and node.drain == "true" then
+      label = " Undrain "
+    end
     local width = ctx.text.width(label)
     if x + width - 1 > ctx.w then
       break
@@ -501,6 +531,8 @@ function nodes:drawButtons(ctx, installer, node)
     local enabled = true
     if method == "startRename" or method == "cycleRole" or method == "ping" then
       enabled = node ~= nil
+    elseif method == "toggleDrain" then
+      enabled = node ~= nil and node.state == "online"
     elseif method == "forget" then
       enabled = node ~= nil and node.state == "offline"
     end
@@ -553,6 +585,16 @@ function nodes:draw(ctx)
     local jobCounts = cluster and cluster:jobsSummary() or nil
     if jobCounts and (jobCounts.queued > 0 or jobCounts.granted > 0) then
       right = string.format("%s · %dq/%dg", right, jobCounts.queued, jobCounts.granted)
+      color = c.warn
+    end
+    local drains = 0
+    for _, node in ipairs(list) do
+      if node.state == "online" and node.drain == "true" then
+        drains = drains + 1
+      end
+    end
+    if drains > 0 then
+      right = string.format("%s · %d drain", right, drains)
       color = c.warn
     end
     if stale > 0 then
@@ -686,6 +728,9 @@ function nodes:handle(ctx, name, a, b, c)
     return true
   elseif char == "c" then
     self:checkJobs(ctx)
+    return true
+  elseif char == "d" then
+    self:toggleDrain(ctx)
     return true
   elseif char == "u" then
     self:armUpdate(ctx)

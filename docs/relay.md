@@ -91,12 +91,16 @@ wait for Vault (0.3.3) or are written to a file and referenced by name.
 
 ## Phasing
 
-1. **0.3.2a** — `tc.jobs` (publisher + worker), the six verbs, the journal,
-   the first built-in tasks, the Nodes summary. Harness tests: claim wins,
-   lease expiry re-offer, cancel, stale token, journal persistence across a
-   master restart, drain stops claiming.
-2. **0.3.2b** — `DRAIN` action and **plant status** polish; exit-criteria run
-   in-game (batch job on a worker and back, drain without losing queued work,
-   master restart keeps the queue).
+1. **0.3.2a — built.** `tc.jobs` (publisher + worker), the six verbs, the
+   journal, the first built-in tasks, the Nodes summary and **Check** action.
+   Harness tests cover claim wins, lease expiry re-offer, cancel, stale
+   tokens, journal persistence across a master restart, and drain at the
+   protocol level.
+2. **0.3.2b — built.** The **Drain**/**Undrain** action in Nodes, drain and
+   running-job counts on the node card, and the header as `plant status`
+   (up counts, queued/granted jobs, drained nodes). The registry persists
+   `jobs` and `drain` per node (older 9/10-column files still load).
+
+Exit criteria live in [`roadmap.md`](roadmap.md); they need the in-game run.
 
 Exit criteria live in [`roadmap.md`](roadmap.md).

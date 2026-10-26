@@ -83,7 +83,8 @@ filesystem, floppy, and modem components:
     and a fresh publisher resumes and re-offers the queued journal after a
     restart. The worker claims known tasks only, runs a granted `fs.check`
     to `done`, keeps the drain flag, stops claiming while draining, and
-    forgets expired claims.
+    forgets expired claims. `cluster:drainNode` sends `DRAIN`, and the
+    registry persists the `jobs` and `drain` columns (older files load).
 
 `npm run test:nodes` runs the Nodes app in the desktop harness with a fake
 floppy, rack drive, and wired modem. It presses F7, verifies the rack list, and
@@ -125,6 +126,14 @@ Manual in-game checks for 0.3.0:
 - Publish a newer release, press **Update**: the Nodes line shows the
   download progress, the nodes pull, reboot through the boot applier, and
   come back online reporting the new version on their cards.
+- Select an online worker and press **Drain** (or key `d`): the header gains
+  "· 1 drain" and the card shows "· drain". Queue a **Check**: no worker
+  claims it and the queued count stays until the retry budget fails it.
+  Press **Undrain**: the flag clears and the next job is claimed. The flag
+  survives a node reboot.
+- Queue a **Check** and watch the header: "· 1q/0g" while queued, "· 0q/1g"
+  while a worker runs it, then the log records
+  `Job <id> (fs.check) done: ok`.
 
 ## 0.2.3 desktop pictogram checks
 
