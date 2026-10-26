@@ -96,7 +96,11 @@ filesystem, floppy, and modem components:
     master registers disks from `VDISK`, stores files chunk by chunk with the
     index persisted across restarts, lists the virtual namespace, assembles
     reads into the cache, deletes after node confirmation, and reports usage
-    per disk.
+    per disk. The index is backed up to a pool disk when it changes, and a
+    fresh master with an empty index restores it from that backup.
+15. The Vault app opens from its desktop icon, shows the namespace with
+    per-file sizes and pool usage, and renders without errors at every
+    simulated resolution.
 
 `npm run test:nodes` runs the Nodes app in the desktop harness with a fake
 floppy, rack drive, and wired modem. It presses F7, verifies the rack list, and
@@ -152,13 +156,19 @@ Manual in-game checks for 0.3.0:
   version (or the 120 s wave window passes), the next wave starts, and the
   line ends with "Update <v> finished · 2/2 node(s) updated". The rack never
   reboots all at once.
-- Vault (0.3.4a has no UI yet; verify via the master's `lua` REPL): power on a
-  node with spare disks, then on the master run
-  `cluster:vaultUsage()` — the spare disks appear. Then
-  `cluster:vaultWrite("/docs/test.txt", "hello")`, wait a few seconds,
-  `cluster:vaultList("/docs")` and `cluster:vaultBody("/docs/test.txt")`
-  return the file and its content. `cluster:vaultRemove("/docs/test.txt")`
-  empties the namespace. The system disk of each server never joins the pool.
+- Vault: open the **Vault** app (desktop icon, F8): it lists the namespace
+  with sizes and shows pool usage top-right. Copy a small file to
+  `/var/vault-in/`, press **P**, Enter on it → the header usage grows and the
+  master log records `Stored /<name> (N B)`. Back in the pool (P), Enter on
+  the file fetches it and shows the preview; **S** saves a copy to
+  `/var/vault-out/`. **D** deletes it. From the Terminal:
+  `vault` (usage per disk), `vls`, `vput <file>`, `vget <path>`,
+  `vrm <path>`. Nodes shows "Pool X/Y KB · N file(s) · M disk(s)" when idle.
+- Vault index backup: store a file, wait ~2 minutes (the master writes
+  `/vault/.backup/index.tsv` to the first pool disk), then wipe the master's
+  `/var/vault/index.tsv` and reboot the master — after a node reports its
+  disks, the log records "Vault index restored from the pool backup" and the
+  file is browsable again.
 
 ## 0.2.3 desktop pictogram checks
 

@@ -59,12 +59,15 @@ total size; the master assembles the body across ticks.
 
 ## Phasing
 
-1. **0.3.4a — this build.** Protocol, node disk gateway, master pool, index
-   and API. Harness tests cover the full write/read/delete flows against fake
-   disks, pool discovery, and index persistence.
-2. **0.3.4b — next.** Files/Terminal integration: browse `vault:` in Files,
-   copy in and out, and surface usage in the Nodes/storage views. Index backup
-   on a pool disk.
+1. **0.3.4a — shipped in v0.3.4.** Protocol, node disk gateway, master pool,
+   index and API. Harness tests cover the full write/read/delete flows
+   against fake disks, pool discovery, and index persistence.
+2. **0.3.4b — shipped in v0.3.5.** The **Vault** app (browse the namespace,
+   read into the cache, store from `/var/vault-in`, save out to
+   `/var/vault-out`, delete), the `vault`/`vls`/`vput`/`vget`/`vrm` Terminal
+   commands, pool usage in the Nodes idle line, and the index backup: the
+   master writes its index to a pool disk whenever it changes and a fresh
+   master with an empty index restores it from that backup.
 
 ## Redundancy: the RAID block, not software mirroring
 

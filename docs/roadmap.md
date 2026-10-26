@@ -164,8 +164,14 @@ the disk with the most free space, the index in `/var/vault/index.tsv`
 protection via part files and rename, virtual listings from the index, and
 the `vaultWrite`/`vaultRead`/`vaultRemove`/`vaultList`/`vaultUsage` API.
 
-**0.3.4b — next:** Files/Terminal integration (browse `vault:`, copy in and
-out), usage surfacing in Nodes, and an index backup on a pool disk.
+**0.3.4b built (v0.3.5):** the **Vault** app (browse, read into the cache,
+store from `/var/vault-in`, save out to `/var/vault-out`, delete), the
+`vault`/`vls`/`vput`/`vget`/`vrm` Terminal commands, pool usage in Nodes, and
+the index backup restored from a pool disk on a fresh master.
+
+Still to build:
+
+- Surface per-disk health once the pack's RAID block is verified in-game.
 
 **Exit criteria:** a 64 KB file is stored and read back through the pool; the
 namespace is browsable from the master; the pool reports usage per disk.

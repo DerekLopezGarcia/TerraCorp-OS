@@ -11,10 +11,13 @@ vault.__index = vault
 
 vault.INDEX = "/var/vault/index.tsv"
 vault.DISKS = "/var/vault/disks.tsv"
+vault.BACKUP_PATH = "/.backup/index.tsv"
 vault.MAX_FILE = 64 * 1024
 vault.CHUNK = 512
 vault.MAX_PATH = 96
 vault.CACHE_LIMIT = 256 * 1024
+vault.BACKUP_INTERVAL = 120
+vault.RESTORE_INTERVAL = 60
 
 local ESCAPES = { ["\\"] = "\\\\", ["\t"] = "\\t", ["\n"] = "\\n", ["\r"] = "\\r" }
 local UNESCAPES = { ["\\"] = "\\", ["t"] = "\t", ["n"] = "\n", ["r"] = "\r" }
@@ -55,6 +58,10 @@ function vault.new(env)
   self.rx = nil
   self.pending = {}
   self.seq = 0
+  self.indexDirty = false
+  self.restored = false
+  self.backupAt = nil
+  self.restoreAt = nil
   return self
 end
 
@@ -192,6 +199,17 @@ end
 function vault:finishWrite(ok, reason)
   local write = self.tx
   self.tx = nil
+  if write.hidden then
+    if ok then
+      self.indexDirty = false
+      if self.log then
+        self.log("Vault index backed up to " .. write.node:sub(1, 8))
+      end
+    elseif self.log then
+      self.log("Vault index backup failed: " .. tostring(reason))
+    end
+    return ok
+  end
   if ok then
     local entry = self:findEntry(write.path)
     if entry then
@@ -201,6 +219,7 @@ function vault:finishWrite(ok, reason)
         path = write.path, node = write.node, disk = write.disk, size = write.size,
       }
     end
+    self.indexDirty = true
     self:save()
     if self.log then
       self.log("Stored " .. write.path .. " (" .. write.size .. " B)")
@@ -246,6 +265,7 @@ function vault:handleControl(verb, fields)
           end
         end
         self.cache[pending.path] = nil
+        self.indexDirty = true
         self:save()
         if self.log then
           self.log("Deleted " .. pending.path)
@@ -282,12 +302,53 @@ function vault:handleData(fields)
   read.body = read.body .. tostring(fields.data or "")
   if read.size and #read.body >= read.size then
     self.rx = nil
-    self:cachePut(read.path, read.body)
-    if self.log then
-      self.log("Fetched " .. read.path .. " (" .. #read.body .. " B)")
+    if read.hidden then
+      self:restoreIndex(read.body)
+    else
+      self:cachePut(read.path, read.body)
+      if self.log then
+        self.log("Fetched " .. read.path .. " (" .. #read.body .. " B)")
+      end
     end
   end
   return true
+end
+
+--- Parse a backup body into the index; used when a fresh master recovers it
+-- from a pool disk.
+function vault:restoreIndex(text)
+  if self.restored or #self.index > 0 or type(text) ~= "string" or text == "" then
+    return false
+  end
+  local count = 0
+  for line in text:gmatch("[^\r\n]+") do
+    local path, node, disk, size = line:match("^(.-)\t(.-)\t(.-)\t(%d+)$")
+    if path and self.validPath(unescapeField(path)) then
+      self.index[#self.index + 1] = {
+        path = unescapeField(path), node = node, disk = disk, size = tonumber(size),
+      }
+      count = count + 1
+    end
+  end
+  if count > 0 then
+    self.restored = true
+    self:save()
+    if self.log then
+      self.log("Vault index restored from the pool backup (" .. count .. " file(s))")
+    end
+  end
+  return count > 0
+end
+
+--- Serialize the index for the pool backup.
+function vault:indexText()
+  local lines = {}
+  for _, entry in ipairs(self.index) do
+    lines[#lines + 1] = table.concat({
+      escapeField(entry.path), entry.node, entry.disk, tostring(entry.size),
+    }, "\t")
+  end
+  return table.concat(lines, "\n") .. (#lines > 0 and "\n" or "")
 end
 
 --------------------------------------------------------------------------------
@@ -440,6 +501,37 @@ function vault:list(path)
   return { files = files, dirs = dirs }
 end
 
+--- The same namespace with per-file sizes for the UI.
+function vault:detail(path)
+  path = tostring(path or "/")
+  if path ~= "" and path:sub(-1) ~= "/" then
+    path = path .. "/"
+  end
+  local files, dirs, seen = {}, {}, {}
+  for _, entry in ipairs(self.index) do
+    if path == "/" or entry.path:sub(1, #path) == path then
+      local rest = entry.path:sub(#path + 1)
+      local slash = rest:find("/", 1, true)
+      if slash then
+        local name = rest:sub(1, slash - 1)
+        if not seen[name] then
+          seen[name] = true
+          dirs[#dirs + 1] = name
+        end
+      else
+        files[#files + 1] = { name = rest, size = entry.size }
+      end
+    end
+  end
+  table.sort(files, function(a, b)
+    return a.name:lower() < b.name:lower()
+  end)
+  table.sort(dirs, function(a, b)
+    return a:lower() < b:lower()
+  end)
+  return { files = files, dirs = dirs }
+end
+
 --- Per-disk and pool usage in KB.
 function vault:usage()
   local disks, total, used = {}, 0, 0
@@ -488,12 +580,60 @@ function vault:tick()
     })
     read.awaiting = true
   end
+
+  -- Housekeeping runs only when no user transfer is in flight.
+  if self.tx or self.rx or #self.disks == 0 then
+    return self.tx ~= nil or self.rx ~= nil
+  end
+  local now = self:now()
+  local disk = self.disks[1]
+
+  if self.indexDirty and self.now() - (self.backupAt or -math.huge) >= vault.BACKUP_INTERVAL
+    and #self.index > 0 then
+    self.backupAt = now
+    self.seq = self.seq + 1
+    local body = self:indexText()
+    self.tx = {
+      id = "w" .. self.seq,
+      hidden = true,
+      path = vault.BACKUP_PATH,
+      node = disk.node,
+      modem = disk.modem,
+      disk = disk.disk,
+      size = #body,
+      body = body,
+      sent = 0,
+      acked = 0,
+    }
+    self.send(disk.modem, "VOPEN", {
+      id = self.tx.id, disk = disk.disk, path = vault.BACKUP_PATH, size = #body,
+    })
+  elseif not self.restored and #self.index == 0
+    and self.now() - (self.restoreAt or -math.huge) >= vault.RESTORE_INTERVAL then
+    self.restoreAt = now
+    self.seq = self.seq + 1
+    self.rx = {
+      id = "r" .. self.seq,
+      hidden = true,
+      path = vault.BACKUP_PATH,
+      node = disk.node,
+      modem = disk.modem,
+      disk = disk.disk,
+      size = nil,
+      body = "",
+      awaiting = false,
+    }
+  end
   return self.tx ~= nil or self.rx ~= nil
 end
 
 --- Start the pool: load the persisted disks and index.
 function vault:start()
-  return self:load()
+  local loaded = self:load()
+  if #self.index > 0 then
+    self.restored = true
+  end
+  return loaded
 end
 
 return vault

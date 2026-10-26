@@ -782,7 +782,7 @@ local function iconColumns()
   return math.max(1, fit)
 end
 
-local ICON_APPS = 7
+local ICON_APPS = 8
 
 local function iconRowsFor(tile)
   local desktopTop = 3
@@ -814,8 +814,11 @@ end
 
 -- Match `ui:defaultGeometry` for the first window (offset 0). Pointer gestures
 -- may miss if layout changes; this should not create false-positive coverage.
-local function windowRect()
-  local desktopTop = 3
+-- The framebuffer only fills while the event loop runs after the scenario
+-- script, so the touches below use the computed geometry instead of reading
+-- the screen mid-run.
+
+local function windowRect()  local desktopTop = 3
   local desktopBottom = taskbarY - 1
   local usable = desktopBottom - desktopTop + 1
   local minWidth = math.min(34, maxWidth - 2)
@@ -1003,6 +1006,16 @@ elseif scenario == "nodes" then
   idle(1)
   typeText("p")
   idle(2)
+elseif scenario == "vault" then
+  -- F8 opens the Vault pool browser over an empty cluster namespace.
+  ev("key_down", "screen-1", nil, 0x42, "tester") -- F8 opens Vault
+  idle(1)
+  typeText("p") -- switch to the local inbox and back
+  idle(1)
+  typeText("p")
+  idle(1)
+  typeText("r") -- refresh
+  idle(1)
 elseif scenario == "boot_update" then
   idle(2)
 elseif scenario == "updater" or scenario == "updater_legacy" or scenario == "updater_recover" then
@@ -1258,7 +1271,7 @@ if STRICT then
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
     if not preferences:find(
-      'iconOrder = "files,dashboard,console,settings,notes,update,nodes"',
+      'iconOrder = "files,dashboard,console,settings,notes,update,nodes,vault"',
       1,
       true
     ) then
@@ -1266,7 +1279,7 @@ if STRICT then
       print("FAIL: the desktop icon order was not saved")
     end
     if not preferences:find(
-      'iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6,nodes@7"',
+      'iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6,nodes@7,vault@8"',
       1,
       true
     ) then
@@ -1302,7 +1315,7 @@ if STRICT then
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
     if not preferences:find(
-      'iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,nodes@7,files@32"',
+      'iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,files@32"',
       1,
       true
     ) then
@@ -1349,6 +1362,16 @@ if STRICT then
     if not nodesFloppy.exists("/net.lua") then
       errors = errors + 1
       print("FAIL: the pull bootstrap is missing tc.net")
+    end
+  end
+  if scenario == "vault" then
+    if not screen:find("Vault pool", 1, true) then
+      errors = errors + 1
+      print("FAIL: F8 did not open the Vault app")
+    end
+    if not screen:find("Enter read", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Vault app did not show its action hints")
     end
   end
   if (scenario == "updater" or scenario == "updater_legacy") then

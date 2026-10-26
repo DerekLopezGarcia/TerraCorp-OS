@@ -419,7 +419,19 @@ function nodes:drawInstaller(ctx, installer, row)
   end
 
   if not installer or not installer.active then
-    v:put(1, row, "Installer idle · Prepare to start", c.dim, c.deep)
+    local label = "Installer idle · Prepare to start"
+    local cluster = self:cluster(ctx)
+    local usage = cluster and cluster:vaultUsage() or nil
+    if usage and usage.total > 0 then
+      label = string.format(
+        "Installer idle · Pool %d/%d KB · %d file(s) · %d disk(s)",
+        usage.used,
+        usage.total,
+        usage.files,
+        #usage.disks
+      )
+    end
+    v:put(1, row, ctx.text.truncate(label, ctx.w), c.dim, c.deep)
     return
   end
 

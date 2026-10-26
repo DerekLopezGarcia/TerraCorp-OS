@@ -2400,6 +2400,74 @@ vaultCluster:handle("modem_message", "modem-m", "modem-s", net.PORT, 0,
   }))
 equal(vaultCluster:vaultBody("/docs/readme.txt"), "hello vault", "the read assembles the body")
 
+-- The index changes are backed up to a pool disk as a hidden file.
+vaultCluster:tick()
+local backupOpen = nil
+for _, call in ipairs(mCalls) do
+  local verb, fields = net.decode(call.frame)
+  if verb == "VOPEN" and fields.path == "/.backup/index.tsv" then
+    backupOpen = fields
+  end
+end
+check(backupOpen ~= nil, "the index backup opens a hidden write")
+vaultCluster:tick()
+local backupData = nil
+for _, call in ipairs(mCalls) do
+  local verb, fields = net.decode(call.frame)
+  if verb == "VDATA" and fields.id == backupOpen.id then
+    backupData = fields
+  end
+end
+check(backupData ~= nil, "the index backup sends the index text")
+vaultCluster:handle("modem_message", "modem-m", "modem-s", net.PORT, 0,
+  net.encode("VDACK", { id = backupOpen.id, off = #backupData.data }))
+vaultCluster:handle("modem_message", "modem-m", "modem-s", net.PORT, 0,
+  net.encode("VDONE", { id = backupOpen.id, size = backupOpen.size }))
+vaultCluster:tick()
+local extraBackup = 0
+for _, call in ipairs(mCalls) do
+  local verb, fields = net.decode(call.frame)
+  if verb == "VOPEN" and fields.path == "/.backup/index.tsv" then
+    extraBackup = extraBackup + 1
+  end
+end
+equal(extraBackup, 1, "a clean index does not back up again")
+
+-- A fresh master with no index restores it from the pool backup. Its disk
+-- table persists, but the index file is gone (that is the recovery case).
+local freshVfs = vfsModule.new(newVolume())
+freshVfs.write(vaultModule.DISKS, vaultCluster.vfs.read(vaultModule.DISKS))
+local fresh = vaultModule.new({
+  id = "m-computer",
+  vfs = freshVfs,
+  log = nil,
+  now = function()
+    return vClock
+  end,
+  send = function(address, verb, fields)
+    mCalls[#mCalls + 1] = { to = address, verb = verb, fields = fields }
+    return true
+  end,
+})
+fresh:start()
+fresh:tick()
+fresh:tick()
+local restoreRequest = nil
+for _, call in ipairs(mCalls) do
+  if call.verb == "VREAD" and call.fields and call.fields.path == "/.backup/index.tsv" then
+    restoreRequest = call.fields
+  end
+end
+check(restoreRequest ~= nil, "a fresh master tries to restore the index")
+fresh:handleData({
+  id = restoreRequest.id,
+  off = 0,
+  size = #backupData.data,
+  data = backupData.data,
+})
+check(#fresh.index > 0, "the restored index names the stored file")
+equal(fresh:list("/docs").files[1], "readme.txt", "the restored namespace lists the file")
+
 -- Deleting drops the index entry after the node confirms.
 vaultCluster:vaultRemove("/docs/readme.txt")
 local delId = nil

@@ -139,6 +139,11 @@ function console:command(ctx, line)
       "mem            show node memory",
       "comps          list connected components",
       "log [n]        show recent log entries",
+      "vault          vault pool usage",
+      "vls [path]     list the vault namespace",
+      "vput <file>    store a local file in the vault",
+      "vget <vpath>   fetch a vault file into /var/vault-out",
+      "vrm <vpath>    delete a vault file",
       "dragtest       measure window-drag event rate",
       "apps           list available apps",
       "open <id>      open an app",
@@ -216,6 +221,137 @@ function console:command(ctx, line)
         break
       end
       self:push(textLine)
+    end
+    return
+  end
+
+  if name == "vault" then
+    local cluster = kernel.cluster
+    if not cluster then
+      self:push("vault: the cluster service is unavailable", "err")
+      return
+    end
+    local usage = cluster:vaultUsage()
+    self:push(string.format(
+      "Vault pool: %d / %d KB · %d file(s) · %d disk(s)",
+      usage.used,
+      usage.total,
+      usage.files,
+      #usage.disks
+    ), "accent")
+    for _, disk in ipairs(usage.disks) do
+      self:push(string.format(
+        "  %-9s %-9s %5d / %5d KB",
+        disk.node:sub(1, 8),
+        disk.disk:sub(1, 8),
+        disk.used,
+        disk.total
+      ), "out")
+    end
+    return
+  end
+
+  if name == "vls" then
+    local cluster = kernel.cluster
+    if not cluster then
+      self:push("vls: the cluster service is unavailable", "err")
+      return
+    end
+    local vpath = rest ~= "" and rest or "/"
+    if vpath:sub(1, 1) ~= "/" then
+      vpath = "/" .. vpath
+    end
+    local detail = cluster:vaultDetail(vpath)
+    if not detail then
+      self:push("vls: the namespace is unavailable", "err")
+      return
+    end
+    for _, dir in ipairs(detail.dirs) do
+      self:push("  " .. dir .. "/", "accent")
+    end
+    for _, file in ipairs(detail.files) do
+      self:push(ctx.text.padRight("  " .. file.name, 26) .. tostring(file.size) .. " B", "out")
+    end
+    if #detail.dirs == 0 and #detail.files == 0 then
+      self:push("(empty)", "dim")
+    end
+    return
+  end
+
+  if name == "vput" then
+    local cluster = kernel.cluster
+    if not cluster then
+      self:push("vput: the cluster service is unavailable", "err")
+      return
+    end
+    if rest == "" then
+      self:push("usage: vput <local file>", "err")
+      return
+    end
+    local path = self:resolve(ctx, rest)
+    local body, reason = vfs.read(path)
+    if type(body) ~= "string" then
+      self:push("vput: " .. tostring(reason or "could not read " .. path), "err")
+      return
+    end
+    local name_ = path:match("([^/]+)$") or "file"
+    local ok, writeReason = cluster:vaultWrite("/" .. name_, body)
+    if ok then
+      self:push("Storing /" .. name_ .. " (" .. #body .. " B) ...", "ok")
+    else
+      self:push("vput: " .. tostring(writeReason), "err")
+    end
+    return
+  end
+
+  if name == "vget" then
+    local cluster = kernel.cluster
+    if not cluster then
+      self:push("vget: the cluster service is unavailable", "err")
+      return
+    end
+    if rest == "" then
+      self:push("usage: vget <vault path>", "err")
+      return
+    end
+    local vpath = rest:sub(1, 1) == "/" and rest or "/" .. rest
+    local body = cluster:vaultBody(vpath)
+    if not body then
+      local ok, readReason = cluster:vaultRead(vpath)
+      if not ok then
+        self:push("vget: " .. tostring(readReason), "err")
+        return
+      end
+      self:push("Fetching " .. vpath .. " ... run vget again in a few seconds.", "dim")
+      return
+    end
+    vfs.ensureDir("/var/vault-out")
+    local name_ = vpath:match("([^/]+)$") or "file"
+    local ok, reason = vfs.write("/var/vault-out/" .. name_, body)
+    if ok then
+      self:push("Saved /var/vault-out/" .. name_ .. " (" .. #body .. " B)", "ok")
+    else
+      self:push("vget: " .. tostring(reason), "err")
+    end
+    return
+  end
+
+  if name == "vrm" then
+    local cluster = kernel.cluster
+    if not cluster then
+      self:push("vrm: the cluster service is unavailable", "err")
+      return
+    end
+    if rest == "" then
+      self:push("usage: vrm <vault path>", "err")
+      return
+    end
+    local vpath = rest:sub(1, 1) == "/" and rest or "/" .. rest
+    local ok, reason = cluster:vaultRemove(vpath)
+    if ok then
+      self:push("Deleting " .. vpath .. " ...", "dim")
+    else
+      self:push("vrm: " .. tostring(reason), "err")
     end
     return
   end

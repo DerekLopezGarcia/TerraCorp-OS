@@ -6,6 +6,7 @@ src/apps/nodes.lua
 src/apps/notes.lua
 src/apps/settings.lua
 src/apps/update.lua
+src/apps/vault.lua
 src/boot/apply.lua
 src/boot/kernel.lua
 src/boot/netboot.lua

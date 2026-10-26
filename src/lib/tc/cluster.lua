@@ -1205,6 +1205,10 @@ function cluster:vaultList(path)
   return self.vault:list(path)
 end
 
+function cluster:vaultDetail(path)
+  return self.vault:detail(path)
+end
+
 function cluster:vaultUsage()
   return self.vault:usage()
 end
