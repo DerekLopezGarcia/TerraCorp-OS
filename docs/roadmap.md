@@ -236,6 +236,8 @@ same-dimension links, and Redstone Control as a signal-level fallback
 - Add a reduced lunar kiosk for status and emergency controls.
 - Plant power coordination is designed in `docs/power.md`; the hologram
   status wall in `docs/holo.md`.
+- Automated GT crafting with input/output buffers is designed in
+  `docs/crafting.md` (field requirement from logistics).
 
 **Exit criteria:** transfer 1 KB with a valid CRC between dimensions, command
 round-trip under 2 seconds, and emergency control remains available if the
