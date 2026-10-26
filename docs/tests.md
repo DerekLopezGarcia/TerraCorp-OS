@@ -85,6 +85,10 @@ filesystem, floppy, and modem components:
     to `done`, keeps the drain flag, stops claiming while draining, and
     forgets expired claims. `cluster:drainNode` sends `DRAIN`, and the
     registry persists the `jobs` and `drain` columns (older files load).
+13. Node updates run in waves: the first wave offers `PULL` to half of the
+    remaining nodes only, a wave advances on target versions, offline nodes,
+    or the wave window, the next wave follows, and the update completes with
+    a per-node count.
 
 `npm run test:nodes` runs the Nodes app in the desktop harness with a fake
 floppy, rack drive, and wired modem. It presses F7, verifies the rack list, and
@@ -134,6 +138,12 @@ Manual in-game checks for 0.3.0:
 - Queue a **Check** and watch the header: "· 1q/0g" while queued, "· 0q/1g"
   while a worker runs it, then the log records
   `Job <id> (fs.check) done: ok`.
+- With two or more nodes online, press **Update**: the line shows
+  "Update <v> · wave 1 · 0/2 updated · 1 queued" and only the first half
+  receives `PULL` — the rest stays online. As each node reports the new
+  version (or the 120 s wave window passes), the next wave starts, and the
+  line ends with "Update <v> finished · 2/2 node(s) updated". The rack never
+  reboots all at once.
 
 ## 0.2.3 desktop pictogram checks
 

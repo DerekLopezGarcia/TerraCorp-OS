@@ -19,6 +19,8 @@ cluster.INSTALL_WINDOW = 600
 cluster.OFFLINE_AFTER = 30
 cluster.OFFLINE_GRACE = 5
 cluster.UPDATE_WINDOW = 600
+cluster.UPDATE_BATCH_FRACTION = 2
+cluster.UPDATE_BATCH_WINDOW = 120
 cluster.CHUNK = 512
 cluster.SAVE_INTERVAL = 10
 cluster.LOG_LIMIT = 40
@@ -613,7 +615,9 @@ function cluster:serveTree()
   return nil, self.version and self.version.version or nil
 end
 
---- Send the PULL frames once the target tree is resolved.
+--- Send the PULL frames once the target tree is resolved. Nodes are updated
+-- in waves: each wave is half of the remaining nodes, so part of the rack
+-- always stays online while the rest reboots into the new version.
 function cluster:finishUpdateArm()
   local update = self.update
   if not update then
@@ -621,22 +625,93 @@ function cluster:finishUpdateArm()
   end
   update.phase = "ready"
   update.expiresAt = self:now() + cluster.UPDATE_WINDOW
-  local sent = 0
+  update.queue = {}
+  update.wave = {}
+  update.waves = 0
+  update.done = 0
+  update.skipped = 0
   for _, node in ipairs(self.nodes) do
     if node.modem and node.modem ~= "" then
-      local pulled = self:send(node.modem, "PULL", {
-        id = node.id,
-        v = update.target,
-        master = self.modem and self.modem.address or "",
-        masterId = self.kernel.address or self.computer.address(),
-      })
-      if pulled then
-        sent = sent + 1
-      end
+      update.queue[#update.queue + 1] = { id = node.id, modem = node.modem }
+    else
+      update.skipped = update.skipped + 1
     end
   end
-  update.sent = sent
-  self:log("Update to " .. update.target .. " offered to " .. sent .. " node(s)")
+  update.total = #update.queue
+  if update.skipped > 0 then
+    self:log(update.skipped .. " node(s) without a modem are skipped")
+  end
+  self:sendUpdateWave()
+end
+
+--- Offer PULL to the next wave of nodes.
+function cluster:sendUpdateWave()
+  local update = self.update
+  if not update or #update.queue == 0 then
+    return
+  end
+  local size = math.max(1, math.ceil(#update.queue / cluster.UPDATE_BATCH_FRACTION))
+  local sent = 0
+  for _ = 1, size do
+    local entry = table.remove(update.queue, 1)
+    if not entry then
+      break
+    end
+    local pulled = self:send(entry.modem, "PULL", {
+      id = entry.id,
+      v = update.target,
+      master = self.modem and self.modem.address or "",
+      masterId = self.kernel.address or self.computer.address(),
+    })
+    if pulled then
+      sent = sent + 1
+    end
+    update.wave[#update.wave + 1] = {
+      id = entry.id,
+      modem = entry.modem,
+      deadline = self:now() + cluster.UPDATE_BATCH_WINDOW,
+    }
+  end
+  update.waves = update.waves + 1
+  update.sent = (update.sent or 0) + sent
+  update.expiresAt = self:now() + cluster.UPDATE_WINDOW
+  self:log("Update wave " .. update.waves .. ": " .. sent .. " node(s) offered "
+    .. update.target .. " (" .. #update.queue .. " left)")
+end
+
+--- Advance the running update wave: nodes that report the target version or
+-- fall offline leave the wave; when it empties, the next wave starts.
+function cluster:sweepUpdate()
+  local update = self.update
+  if not update or update.phase ~= "ready" then
+    return
+  end
+  local now = self:now()
+  local remaining = {}
+  for _, entry in ipairs(update.wave) do
+    local node = registry.find(self.nodes, entry.id)
+    if node and node.v == update.target then
+      update.done = update.done + 1
+    elseif node and node.state == "offline" then
+      self:log(tostring(node.name) .. " went offline during the update wave")
+    elseif now >= entry.deadline then
+      self:log(shortAddress(entry.id) .. " did not report the new version in time")
+    else
+      remaining[#remaining + 1] = entry
+    end
+  end
+  update.wave = remaining
+
+  if #update.wave == 0 then
+    if #update.queue > 0 then
+      self:sendUpdateWave()
+    elseif not update.complete then
+      update.complete = true
+      update.active = false
+      self:log("Update finished: " .. update.done .. "/" .. update.total
+        .. " node(s) at " .. update.target)
+    end
+  end
 end
 
 --- Advance the update state machine by one step. The GitHub check and the
@@ -748,6 +823,13 @@ function cluster:updateState()
     files = update.files,
     total = update.paths and #update.paths or nil,
     sent = update.sent,
+    waves = update.waves,
+    waveSize = update.wave and #update.wave or 0,
+    queued = update.queue and #update.queue or 0,
+    updated = update.done or 0,
+    waveTotal = update.total,
+    complete = update.complete,
+    skipped = update.skipped,
   }
 end
 
@@ -1003,6 +1085,8 @@ function cluster:tick()
       changed = true
     end
   end
+
+  self:sweepUpdate()
 
   for _, node in ipairs(self.nodes) do
     local idle = now - (node.lastSeen or 0)

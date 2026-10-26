@@ -132,7 +132,22 @@ Still to build:
 returns to its requester; draining a node stops new assignments without losing
 queued work; a master restart does not lose the queue.
 
-### 0.3.3 Vault
+### 0.3.3 Waves — built, in-game checks pending
+
+- Batched node updates: **Update** offers `PULL` to half of the remaining
+  nodes at a time, so part of the rack always stays online while the rest
+  reboots into the new version.
+- A wave advances when its nodes report the target version, go offline, or
+  hit the 120 s wave window; the next wave starts immediately.
+- The Nodes line shows live progress: `Update <v> · wave N · X/Y updated ·
+  Z queued`, and `Update <v> finished · X/Y node(s) updated` at the end.
+- Nodes without a known modem address are skipped and reported.
+
+**Exit criteria:** with at least two nodes, **Update** reboots one while the
+other stays online, and the desktop shows wave progress without operator
+intervention.
+
+### 0.3.4 Vault
 
 - Add a remote filesystem service: chunked reads and writes, checksums, and
   atomic rename over `tc.net`. The node-update pull already uses chunked

@@ -395,12 +395,25 @@ function nodes:drawInstaller(ctx, installer, row)
 
   if update and update.active and update.phase == "ready" and update.remaining > 0
     and (not installer or not installer.active) then
-    local label = string.format(
-      "Update %s offered to %d node(s) · %s",
-      tostring(update.target),
-      update.sent or 0,
-      clock(update.remaining)
-    )
+    local label
+    if update.complete then
+      label = string.format(
+        "Update %s finished · %d/%d node(s) updated%s",
+        tostring(update.target),
+        update.updated or 0,
+        update.waveTotal or 0,
+        (update.skipped or 0) > 0 and " · " .. update.skipped .. " skipped" or ""
+      )
+    else
+      label = string.format(
+        "Update %s · wave %d · %d/%d updated · %d queued",
+        tostring(update.target),
+        update.waves or 0,
+        update.updated or 0,
+        update.waveTotal or 0,
+        update.queued or 0
+      )
+    end
     v:put(1, row, ctx.text.truncate(label, ctx.w), c.warn, c.deep)
     return
   end

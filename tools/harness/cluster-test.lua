@@ -876,6 +876,61 @@ cluster:handle("modem_message", "modem-master", "node-modem-1", net.PORT, 0,
 equal(registry.find(cluster:nodesList(), "node-1").v, "0.3.1", "STATUS records the node version")
 check((master.read(registry.path) or ""):find("0.3.1", 1, true) ~= nil, "the node version persists")
 
+-- Node updates run in waves: half of the remaining nodes per wave, so part
+-- of the rack stays online while the rest reboots.
+registry.upsert(cluster:nodesList(), {
+  id = "node-2",
+  name = "TC-N2",
+  role = "worker",
+  modem = "node-modem-2",
+  state = "online",
+})
+local waveOk, waveReason = cluster:armUpdate()
+check(waveOk == true, "the wave update arms: " .. tostring(waveReason))
+local waveMark = #clusterCalls
+cluster:tick()
+local pulls = { node1 = 0, node2 = 0 }
+for index = waveMark + 1, #clusterCalls do
+  local call = clusterCalls[index]
+  if call.method == "send" then
+    local verb, fields = net.decode(call.args[3])
+    if verb == "PULL" then
+      if fields.id == "node-1" then
+        pulls.node1 = pulls.node1 + 1
+      elseif fields.id == "node-2" then
+        pulls.node2 = pulls.node2 + 1
+      end
+    end
+  end
+end
+equal(pulls.node1, 1, "the first wave offers PULL to node-1")
+equal(pulls.node2, 0, "node-2 waits for the next wave")
+
+-- Once the wave times out, the next wave starts for the remaining node.
+clock = clock + cluster.UPDATE_BATCH_WINDOW + 1
+cluster:tick()
+local nextPull = 0
+for index = waveMark + 1, #clusterCalls do
+  local call = clusterCalls[index]
+  if call.method == "send" then
+    local verb, fields = net.decode(call.args[3])
+    if verb == "PULL" and fields.id == "node-2" then
+      nextPull = nextPull + 1
+    end
+  end
+end
+equal(nextPull, 1, "the second wave offers PULL to node-2")
+check(cluster:updateState().complete ~= true, "the update is not complete mid-waves")
+
+-- A node reporting the target version finishes its wave immediately.
+clock = clock + cluster.UPDATE_BATCH_WINDOW + 1
+cluster:handle("modem_message", "modem-master", "node-modem-2", net.PORT, 0,
+  net.encode("STATUS", { id = "node-2", state = "online", mem = 512, disk = 2048, v = "0.3.0" }))
+cluster:tick()
+local state = cluster:updateState()
+check(state.complete == true, "the update completes when every wave is done")
+equal(state.updated, 1, "the wave completion counts reported nodes")
+
 clock = clock + clusterModule.INSTALL_WINDOW + 10
 cluster:tick()
 check(cluster:installerState().active == false, "the installer window expires")
