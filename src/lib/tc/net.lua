@@ -38,6 +38,16 @@ local VERBS = {
   RESULT = { "id", "token", "state" },
   CANCEL = { "id", "pub" },
   DRAIN = { "id" },
+  VDISK = { "id" },
+  VOPEN = { "id", "disk", "path", "size" },
+  VDATA = { "id", "off" },
+  VDACK = { "id", "off" },
+  VDONE = { "id" },
+  VERR = { "id" },
+  VREAD = { "id", "disk", "path", "off" },
+  VLST = { "id", "disk", "path" },
+  VDIRS = { "id", "path" },
+  VDEL = { "id", "disk", "path" },
 }
 
 local ESCAPES = {

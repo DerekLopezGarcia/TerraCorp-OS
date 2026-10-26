@@ -21,6 +21,11 @@ node.MODEM_RETRY = 10
 node.JOB_SLOTS = 1
 node.CLAIM_TTL = 30
 
+-- Vault disk gateway. Spare disks (everything except the boot volume and
+-- read-only media) join the cluster pool; transfers are 512 B chunks.
+node.VDISK_INTERVAL = 60
+node.VAULT_MAX = 64 * 1024
+
 -- The boot-time integrity check. A node stays silent until every path is
 -- present, so the master only lists servers that boot a complete system.
 node.CHECK_PATHS = {
@@ -81,6 +86,9 @@ function node.new(env)
   self.claims = {}
   self.runningJob = nil
   self.drain = self.config.get("drain") == "true"
+
+  self.vaultWrite = nil
+  self.lastVdisk = -math.huge
 
   return self
 end
@@ -532,6 +540,237 @@ function node:setDrain(fields)
   self:draw()
 end
 
+--------------------------------------------------------------------------------
+-- Vault disk gateway: the node reads and writes its own spare disks
+--------------------------------------------------------------------------------
+
+--- Enumerate the spare disks: local filesystem components that are not the
+-- boot volume and not read-only media.
+function node:vaultDisks()
+  local disks = {}
+  if not self.component or type(self.component.list) ~= "function" then
+    return disks
+  end
+  local ok, iterator = pcall(self.component.list, "filesystem")
+  if not ok or type(iterator) ~= "function" then
+    return disks
+  end
+  while true do
+    local address = iterator()
+    if not address then
+      break
+    end
+    if address ~= self.kernel.volumeAddress then
+      local readonly, roValue = pcall(self.component.invoke, address, "isReadOnly")
+      local total, totalValue = pcall(self.component.invoke, address, "spaceTotal")
+      if not (readonly and roValue) and total and type(totalValue) == "number" then
+        disks[#disks + 1] = {
+          address = address,
+          total = math.floor(totalValue / 1024),
+        }
+      end
+    end
+  end
+  return disks
+end
+
+function node:vdiskFields()
+  local items = {}
+  for _, disk in ipairs(self:vaultDisks()) do
+    items[#items + 1] = disk.address .. ":" .. disk.total
+  end
+  return table.concat(items, ",")
+end
+
+function node:sendVdisk()
+  self.lastVdisk = self:now()
+  return self:sendToMaster("VDISK", { id = self.id, disks = self:vdiskFields() })
+end
+
+--- Invoke a method on one of the node's own disk components.
+function node:invokeDisk(disk, method, ...)
+  if not self.component or type(self.component.invoke) ~= "function" then
+    return nil
+  end
+  local ok, value = pcall(self.component.invoke, disk, method, ...)
+  if not ok then
+    return nil
+  end
+  return value
+end
+
+function node:vaultFail(fields, reason)
+  if self.log then
+    self.log.warn("node: vault transfer failed: " .. tostring(reason))
+  end
+  self:sendToMaster("VERR", { id = tostring(fields.id or "") })
+end
+
+--- VOPEN: start one file write into vault/<path>.part on the target disk.
+function node:vaultOpen(fields)
+  if self.vaultWrite then
+    return self:vaultFail(fields, "another write is running")
+  end
+  local size = tonumber(fields.size) or -1
+  if size < 0 or size > node.VAULT_MAX then
+    return self:vaultFail(fields, "the file size is out of range")
+  end
+  local path = tostring(fields.path or "")
+  if path:find("..", 1, true) or path:find("\t", 1, true) or path:sub(1, 1) ~= "/" then
+    return self:vaultFail(fields, "the path is invalid")
+  end
+  local disk = tostring(fields.disk or "")
+
+  -- Make sure the parent directories exist on that disk.
+  local parts = {}
+  for part in path:gmatch("[^/]+") do
+    parts[#parts + 1] = part
+  end
+  local prefix = "vault"
+  self:invokeDisk(disk, "makeDirectory", prefix)
+  for index = 1, #parts - 1 do
+    prefix = prefix .. "/" .. parts[index]
+    if not self:invokeDisk(disk, "exists", prefix) then
+      self:invokeDisk(disk, "makeDirectory", prefix)
+    end
+  end
+
+  local target = "vault/" .. table.concat(parts, "/")
+  local handle = self:invokeDisk(disk, "open", target .. ".part", "wb")
+  if handle == nil then
+    return self:vaultFail(fields, "could not open the part file")
+  end
+  self.vaultWrite = {
+    id = tostring(fields.id or ""),
+    disk = disk,
+    target = target,
+    size = size,
+    handle = handle,
+    received = 0,
+  }
+end
+
+function node:vaultClose(ok, reason)
+  local write = self.vaultWrite
+  if not write then
+    return
+  end
+  self.vaultWrite = nil
+  pcall(self.component.invoke, write.disk, "close", write.handle)
+  if ok then
+    self:sendToMaster("VDONE", { id = write.id, size = write.size })
+    if self.log then
+      self.log.info("node: stored " .. write.target .. " (" .. write.size .. " B)")
+    end
+  else
+    self:invokeDisk(write.disk, "remove", write.target .. ".part")
+    self:sendToMaster("VERR", { id = write.id })
+    if self.log then
+      self.log.warn("node: vault write failed: " .. tostring(reason))
+    end
+  end
+end
+
+--- VDATA: append an in-order chunk to the running write.
+function node:vaultData(fields)
+  local write = self.vaultWrite
+  if not write or write.id ~= tostring(fields.id or "") then
+    return
+  end
+  local off = tonumber(fields.off) or -1
+  local data = tostring(fields.data or "")
+  if off ~= write.received or write.received + #data > write.size then
+    return self:vaultClose(false, "the chunks arrived out of order")
+  end
+  local done, reason = pcall(self.component.invoke, write.disk, "write", write.handle, data)
+  if not done or reason == false then
+    return self:vaultClose(false, tostring(reason or "the disk refused the write"))
+  end
+  write.received = write.received + #data
+  self:sendToMaster("VDACK", { id = write.id, off = write.received })
+  if write.received >= write.size then
+    pcall(self.component.invoke, write.disk, "close", write.handle)
+    local stored = self:invokeDisk(write.disk, "size", write.target .. ".part")
+    if stored ~= write.size then
+      return self:vaultClose(false, "the stored size does not match")
+    end
+    local moved = self:invokeDisk(write.disk, "rename", write.target .. ".part", write.target)
+    self.vaultWrite = nil
+    if not moved then
+      self:sendToMaster("VERR", { id = write.id })
+      if self.log then
+        self.log.warn("node: vault rename failed for " .. write.target)
+      end
+      return
+    end
+    self:sendToMaster("VDONE", { id = write.id, size = write.size })
+    if self.log then
+      self.log.info("node: stored " .. write.target .. " (" .. write.size .. " B)")
+    end
+  end
+end
+
+--- VREAD: one 512 B slice of a stored file.
+function node:vaultRead(fields)
+  local id = tostring(fields.id or "")
+  local disk = tostring(fields.disk or "")
+  local path = tostring(fields.path or "")
+  local off = tonumber(fields.off) or 0
+  local target = "vault" .. path
+  local total = self:invokeDisk(disk, "size", target)
+  if total == nil then
+    return self:vaultFail(fields, "the file is missing")
+  end
+  local handle = self:invokeDisk(disk, "open", target, "rb")
+  if handle == nil then
+    return self:vaultFail(fields, "could not open the file")
+  end
+  local seeked = self:invokeDisk(disk, "seek", handle, "set", off)
+  if seeked == nil and off > 0 then
+    self:invokeDisk(disk, "read", handle, off)
+  end
+  local data = self:invokeDisk(disk, "read", handle, 512) or ""
+  pcall(self.component.invoke, disk, "close", handle)
+  self:sendToMaster("VDATA", { id = id, off = off, size = total, data = data })
+end
+
+--- VLST: a directory listing of one pool disk (0.3.4b uses it for repair UI).
+function node:vaultList(fields)
+  local id = tostring(fields.id or "")
+  local disk = tostring(fields.disk or "")
+  local path = "vault" .. tostring(fields.path or "/")
+  local entries = self:invokeDisk(disk, "list", path)
+  if entries == nil then
+    return self:vaultFail(fields, "the directory is missing")
+  end
+  local files, dirs = {}, {}
+  for _, name in ipairs(entries) do
+    if tostring(name):sub(-1) == "/" then
+      dirs[#dirs + 1] = tostring(name):sub(1, -2)
+    else
+      files[#files + 1] = tostring(name)
+    end
+  end
+  self:sendToMaster("VDIRS", {
+    id = id,
+    path = tostring(fields.path or "/"),
+    files = table.concat(files, ","),
+    dirs = table.concat(dirs, ","),
+  })
+end
+
+--- VDEL: remove a stored file from the pool disk.
+function node:vaultDelete(fields)
+  local id = tostring(fields.id or "")
+  local target = "vault" .. tostring(fields.path or "")
+  local removed = self:invokeDisk(tostring(fields.disk or ""), "remove", target)
+  if removed then
+    self:sendToMaster("VDONE", { id = id })
+  else
+    self:vaultFail(fields, "the file is missing")
+  end
+end
+
 function node:handleModem(localAddress, remoteAddress, port, distance, message)
   local _ = localAddress, distance
   if not self.modem or tonumber(port) ~= self.modem.port then
@@ -561,6 +800,16 @@ function node:handleModem(localAddress, remoteAddress, port, distance, message)
     self:dropJob(tostring(fields.id or ""))
   elseif verb == "DRAIN" and fields.id == self.id then
     self:setDrain(fields)
+  elseif verb == "VOPEN" then
+    self:vaultOpen(fields)
+  elseif verb == "VDATA" then
+    self:vaultData(fields)
+  elseif verb == "VREAD" then
+    self:vaultRead(fields)
+  elseif verb == "VLST" then
+    self:vaultList(fields)
+  elseif verb == "VDEL" then
+    self:vaultDelete(fields)
   end
   return true
 end
@@ -724,6 +973,10 @@ function node:tick()
     if now >= claim.expires then
       self.claims[jobId] = nil
     end
+  end
+
+  if now - self.lastVdisk >= node.VDISK_INTERVAL then
+    self:sendVdisk()
   end
 end
 

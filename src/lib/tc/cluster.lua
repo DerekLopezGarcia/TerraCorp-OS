@@ -11,6 +11,7 @@ local provision = require("tc.provision")
 local registry = require("tc.registry")
 local updater = require("tc.updater")
 local jobsModule = require("tc.jobs")
+local vaultModule = require("tc.vault")
 
 local cluster = {}
 cluster.__index = cluster
@@ -77,6 +78,18 @@ function cluster.new(env)
     end,
     broadcast = function(verb, fields)
       return self:broadcast(verb, fields)
+    end,
+  })
+
+  self.vault = vaultModule.new({
+    id = self.kernel.address or self.computer.address(),
+    vfs = self.vfs,
+    log = self.logger,
+    now = function()
+      return self:now()
+    end,
+    send = function(address, verb, fields)
+      return self:send(address, verb, fields)
     end,
   })
 
@@ -153,6 +166,15 @@ function cluster:start()
       "Resumed the job queue (%d queued, %d granted)",
       counts.queued,
       counts.granted
+    ))
+  end
+
+  if self.vault:start() then
+    local usage = self.vault:usage()
+    self:log(string.format(
+      "Vault pool restored: %d file(s), %d disk(s)",
+      usage.files,
+      #usage.disks
     ))
   end
 
@@ -1046,6 +1068,12 @@ function cluster:handle(name, localAddress, remoteAddress, port, distance, messa
     self.jobs:handleClaim(fields, remoteAddress)
   elseif verb == "RESULT" then
     self.jobs:handleResult(fields)
+  elseif verb == "VDISK" then
+    self.vault:handleDisk(fields, remoteAddress)
+  elseif verb == "VDACK" or verb == "VDONE" or verb == "VERR" then
+    self.vault:handleControl(verb, fields)
+  elseif verb == "VDATA" then
+    self.vault:handleData(fields)
   elseif verb == "JOB" or verb == "CANCEL" or verb == "DRAIN" then
     -- Relay verbs the master publishes but never consumes.
   elseif verb == "PING" then
@@ -1118,6 +1146,7 @@ function cluster:tick()
   end
 
   self.jobs:tick()
+  self.vault:tick()
   return changed
 end
 
@@ -1148,6 +1177,36 @@ end
 
 function cluster:jobsSummary()
   return self.jobs:summary()
+end
+
+--- Vault pool API. Transfers run one chunk per tick; results land in the
+-- vault cache and the master log.
+function cluster:vaultWrite(path, body)
+  local ok, reason = self.vfs.ensureDir("/var/vault")
+  if not ok and reason then
+    return nil, tostring(reason)
+  end
+  return self.vault:write(path, body)
+end
+
+function cluster:vaultRead(path)
+  return self.vault:read(path)
+end
+
+function cluster:vaultBody(path)
+  return self.vault:body(path)
+end
+
+function cluster:vaultRemove(path)
+  return self.vault:remove(path)
+end
+
+function cluster:vaultList(path)
+  return self.vault:list(path)
+end
+
+function cluster:vaultUsage()
+  return self.vault:usage()
 end
 
 --- Tell a node to stop claiming (drain) or to accept work again. The flag is

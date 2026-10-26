@@ -2015,6 +2015,421 @@ check(mCluster:cancelJob(mJob.id) == nil, "a closed job cannot be canceled again
 local mCounts = mCluster:jobsSummary()
 equal(mCounts.done, 1, "the cluster summary counts the finished job")
 
+--------------------------------------------------------------------------------
+-- Vault: pooled storage without mirror or RAID
+--------------------------------------------------------------------------------
+
+local vaultModule = require("tc.vault")
+
+-- Framing of the Vault verbs.
+local vaultFrames = {
+  { "VDISK", { id = "wk-1", disks = "disk-a:1024,disk-b:2048" } },
+  { "VOPEN", { id = "w1", disk = "disk-a", path = "/docs/a.txt", size = 11 } },
+  { "VDATA", { id = "w1", off = 0, data = "hello vault" } },
+  { "VDACK", { id = "w1", off = 11 } },
+  { "VDONE", { id = "w1", size = 11 } },
+  { "VERR",  { id = "w1" } },
+  { "VREAD", { id = "r1", disk = "disk-a", path = "/docs/a.txt", off = 512 } },
+  { "VLST",  { id = "s1", disk = "disk-a", path = "/docs" } },
+  { "VDIRS", { id = "s1", path = "/docs", files = "a.txt", dirs = "" } },
+  { "VDEL",  { id = "d1", disk = "disk-a", path = "/docs/a.txt" } },
+}
+for _, item in ipairs(vaultFrames) do
+  local encoded, encodeReason = net.encode(item[1], item[2])
+  check(encoded ~= nil, item[1] .. " encodes: " .. tostring(encodeReason))
+  local decodedVerb, decodedFields = net.decode(encoded)
+  equal(decodedVerb, item[1], item[1] .. " round-trips")
+  equal(decodedFields.id, item[2].id, item[1] .. " keeps the transfer id")
+end
+
+-- A fake disk component with the OpenComputers filesystem contract: handles
+-- are opaque values passed to read/write/seek/close.
+local function newDiskComp(total)
+  local files, dirs, handles = {}, {}, {}
+  local nextHandle = 0
+  return {
+    files = files,
+    dirs = dirs,
+    isReadOnly = function()
+      return false
+    end,
+    spaceTotal = function()
+      return total
+    end,
+    spaceUsed = function()
+      local size = 0
+      for _, data in pairs(files) do
+        size = size + #data
+      end
+      return size
+    end,
+    exists = function(path)
+      return files[path] ~= nil or dirs[path] == true
+    end,
+    get = function(path)
+      return files[path]
+    end,
+    size = function(path)
+      return files[path] and #files[path] or 0
+    end,
+    makeDirectory = function(path)
+      dirs[path] = true
+      return true
+    end,
+    rename = function(from, to)
+      if files[from] == nil then
+        return false
+      end
+      files[to] = files[from]
+      files[from] = nil
+      return true
+    end,
+    remove = function(path)
+      if files[path] then
+        files[path] = nil
+        return true
+      elseif dirs[path] then
+        dirs[path] = nil
+        return true
+      end
+      return false
+    end,
+    list = function(path)
+      local out = {}
+      for name in pairs(files) do
+        if path == "/" or (name:sub(1, #path) == path and name:sub(#path + 1, #path + 1) == "/"
+          and not name:find("/", #path + 1, true)) then
+          out[#out + 1] = name:sub(#path + 2)
+        end
+      end
+      for name in pairs(dirs) do
+        if path == "/" or (name:sub(1, #path) == path and name:sub(#path + 1, #path + 1) == "/"
+          and not name:find("/", #path + 1, true)) then
+          out[#out + 1] = name:sub(#path + 2) .. "/"
+        end
+      end
+      return out
+    end,
+    open = function(path, mode)
+      if mode == "rb" and files[path] == nil then
+        return nil
+      end
+      nextHandle = nextHandle + 1
+      handles[nextHandle] = { path = path, mode = mode, pos = 0, buffer = "" }
+      return nextHandle
+    end,
+    write = function(handle, data)
+      local state = handles[handle]
+      if not state then
+        return false
+      end
+      state.buffer = state.buffer .. data
+      if state.mode == "wb" then
+        files[state.path] = state.buffer
+      end
+      return true
+    end,
+    read = function(handle, count)
+      local state = handles[handle]
+      local data = files[state.path]
+      if not data then
+        return nil
+      end
+      local chunk = data:sub(state.pos + 1, state.pos + count)
+      state.pos = state.pos + #chunk
+      if chunk == "" then
+        return nil
+      end
+      return chunk
+    end,
+    seek = function(handle, whence, offset)
+      local state = handles[handle]
+      if whence == "set" then
+        state.pos = offset or 0
+      end
+      return state.pos
+    end,
+    close = function(handle)
+      local state = handles[handle]
+      if state and state.mode == "wb" then
+        files[state.path] = state.buffer
+      end
+      handles[handle] = nil
+      return true
+    end,
+  }
+end
+
+-- Node side: spare-disk discovery excludes the boot volume and read-only
+-- media; a full write lands the file under vault/<path> on the fake disk.
+local vClock = 300
+local vCalls = {}
+local bootDisk = newDiskComp(1024 * 1024)
+local spareDisk = newDiskComp(2 * 1024 * 1024)
+local readonlyDisk = { isReadOnly = function() return true end, spaceTotal = function() return 4096 end }
+local vConfigData = { hostname = "TC-S1", nodeRole = "storage", master = "modem-m", masterId = "m-1", drain = "" }
+local vComponent = {
+  list = function(kind)
+    if kind == "modem" then
+      local index = 0
+      return function()
+        index = index + 1
+        if index == 1 then
+          return "modem-s", kind
+        end
+      end
+    end
+    local items = { bootDisk, spareDisk, readonlyDisk }
+    local index = 0
+    return function()
+      index = index + 1
+      if items[index] then
+        return "fs-" .. index, "filesystem"
+      end
+    end
+  end,
+  invoke = function(address, method, ...)
+    if address == "modem-s" then
+      if method == "isWired" then
+        return true
+      elseif method == "open" or method == "close" then
+        return true
+      elseif method == "send" or method == "broadcast" then
+        vCalls[#vCalls + 1] = { to = (select(1, ...)), frame = (select(3, ...)) }
+        return true
+      end
+    end
+    if address == "fs-1" then
+      return bootDisk[method](...)
+    elseif address == "fs-2" then
+      return spareDisk[method](...)
+    elseif address == "fs-3" then
+      return readonlyDisk[method] and readonlyDisk[method](...)
+    end
+    return nil, "unknown component"
+  end,
+}
+local vNode = nodeModule.new({
+  kernel = {
+    address = "vault-node-1",
+    volumeAddress = "fs-1",
+    uptime = function()
+      return vClock
+    end,
+    storage = function()
+      return 0, 2 * 1024 * 1024
+    end,
+    saveConfig = function()
+      return true
+    end,
+  },
+  config = {
+    get = function(key)
+      return vConfigData[key]
+    end,
+    set = function(key, value)
+      vConfigData[key] = value
+    end,
+    save = function()
+      return true
+    end,
+  },
+  vfs = vfsModule.new(newVolume()),
+  log = nil,
+  version = { version = "0.3.4" },
+  theme = { colors = { bg = 0, text = 0, dim = 0, accent = 0, ok = 0, warn = 0 } },
+  gfxModule = nil,
+  component = vComponent,
+  computer = {
+    address = function()
+      return "vault-node-1"
+    end,
+    uptime = function()
+      return vClock
+    end,
+    totalMemory = function()
+      return 2 * 1024 * 1024
+    end,
+  },
+  os = {},
+})
+vNode.healthy = true
+vNode:openModem()
+
+local disks = vNode:vaultDisks()
+equal(#disks, 1, "only the spare disk joins the pool")
+equal(disks[1] and disks[1].address, "fs-2", "the boot volume and read-only media are skipped")
+
+vClock = vClock + 1000
+vNode:tick()
+local vdiskCall = nil
+for _, call in ipairs(vCalls) do
+  if net.decode(call.frame) == "VDISK" then
+    vdiskCall = call
+  end
+end
+check(vdiskCall ~= nil, "the node reports its spare disks")
+check(vdiskCall and select(2, net.decode(vdiskCall.frame)).disks == "fs-2:2048",
+  "the VDISK frame names the spare disk with its size in KB")
+
+-- Full write flow: VOPEN opens a part file, VDATA chunks are appended in
+-- order, and the final VDATA renames it into place.
+vNode:handleModem("modem-s", "modem-m", net.PORT, 0,
+  net.encode("VOPEN", { id = "w1", disk = "fs-2", path = "/docs/a.txt", size = 11 }))
+check(vNode.vaultWrite ~= nil, "the node opens a write slot")
+check(spareDisk.exists("vault/docs") == true, "the parent directory is created")
+vNode:handleModem("modem-s", "modem-m", net.PORT, 0,
+  net.encode("VDATA", { id = "w1", off = 0, data = "hello " }))
+check(spareDisk.get("vault/docs/a.txt.part") == "hello ", "the first chunk is stored")
+vNode:handleModem("modem-s", "modem-m", net.PORT, 0,
+  net.encode("VDATA", { id = "w1", off = 6, data = "vault" }))
+check(vNode.vaultWrite == nil, "the write slot closes after the last chunk")
+check(spareDisk.get("vault/docs/a.txt") == "hello vault", "the part file is renamed into place")
+check(spareDisk.exists("vault/docs/a.txt.part") == false, "no part file is left behind")
+local doneCall = nil
+for _, call in ipairs(vCalls) do
+  if net.decode(call.frame) == "VDONE" then
+    doneCall = call
+  end
+end
+check(doneCall ~= nil, "the write finishes with VDONE")
+
+-- An out-of-order chunk aborts the write and cleans the part file.
+vNode:handleModem("modem-s", "modem-m", net.PORT, 0,
+  net.encode("VOPEN", { id = "w2", disk = "fs-2", path = "/docs/b.txt", size = 6 }))
+vNode:handleModem("modem-s", "modem-m", net.PORT, 0,
+  net.encode("VDATA", { id = "w2", off = 0, data = "abc" }))
+vNode:handleModem("modem-s", "modem-m", net.PORT, 0,
+  net.encode("VDATA", { id = "w2", off = 2, data = "def" }))
+check(vNode.vaultWrite == nil, "an out-of-order chunk aborts the write")
+check(spareDisk.exists("vault/docs/b.txt.part") == false, "the aborted part file is removed")
+
+-- VREAD returns one slice with the total size; VDEL removes the file.
+vNode:handleModem("modem-s", "modem-m", net.PORT, 0,
+  net.encode("VREAD", { id = "r1", disk = "fs-2", path = "/docs/a.txt", off = 6 }))
+local readCall = nil
+for _, call in ipairs(vCalls) do
+  local verb, fields = net.decode(call.frame)
+  if verb == "VDATA" and fields.id == "r1" then
+    readCall = fields
+  end
+end
+check(readCall ~= nil, "the slice request answers with VDATA")
+equal(readCall and readCall.data, "vault", "the slice carries the requested bytes")
+equal(readCall and tonumber(readCall.size), 11, "the slice names the total size")
+
+vNode:handleModem("modem-s", "modem-m", net.PORT, 0,
+  net.encode("VDEL", { id = "d1", disk = "fs-2", path = "/docs/a.txt" }))
+check(spareDisk.exists("vault/docs/a.txt") == false, "VDEL removes the stored file")
+
+-- Master side: pool discovery, chunked write with index, virtual listing,
+-- read assembly from the cache, delete, and usage.
+local vaultCluster = clusterModule.new({
+  kernel = {
+    address = "m-computer",
+    volumeAddress = "fs-m",
+    uptime = function()
+      return vClock
+    end,
+    mount = function()
+      return nil
+    end,
+  },
+  vfs = vfsModule.new(newVolume()),
+  config = {},
+  log = nil,
+  version = { version = "0.3.4" },
+  component = mComponent,
+  computer = { address = function() return "m-computer" end },
+})
+check(vaultCluster:start() == true, "the vault cluster starts")
+vaultCluster:handle("modem_message", "modem-m", "modem-s", net.PORT, 0,
+  net.encode("VDISK", { id = "wk-9", disks = "disk-a:1024,disk-b:2048" }))
+local usage = vaultCluster:vaultUsage()
+equal(usage.total, 3, "the pool reports both disks in KB")
+equal(#usage.disks, 2, "the pool tracks both spare disks")
+
+local stored, storeReason = vaultCluster:vaultWrite("/docs/readme.txt", "hello vault")
+check(stored == true, "vaultWrite starts: " .. tostring(storeReason))
+vaultCluster:tick()
+local vopenSent = false
+for _, call in ipairs(mCalls) do
+  if net.decode(call.frame) == "VOPEN" then
+    vopenSent = true
+  end
+end
+check(vopenSent, "the write opens a transfer on the storage node")
+
+-- The fake storage node answers VDATA with VDACK, then VDONE.
+local function vaultReply(id, off, data, finish)
+  vaultCluster:handle("modem_message", "modem-m", "modem-s", net.PORT, 0,
+    net.encode(finish and "VDONE" or "VDACK", { id = id, off = off, size = finish and #data or nil }))
+end
+vaultCluster:tick()
+local dataFrame = nil
+for _, call in ipairs(mCalls) do
+  local verb, fields = net.decode(call.frame)
+  if verb == "VDATA" then
+    dataFrame = fields
+  end
+end
+check(dataFrame ~= nil and dataFrame.data == "hello vault", "the body travels in one chunk")
+vaultReply(dataFrame.id, tonumber(dataFrame.off) + #dataFrame.data, nil, false)
+vaultCluster:handle("modem_message", "modem-m", "modem-s", net.PORT, 0,
+  net.encode("VDONE", { id = dataFrame.id, size = 11 }))
+local listing = vaultCluster:vaultList("/docs")
+check(listing and listing.files[1] == "readme.txt", "the index lists the stored file")
+check(vaultCluster.vfs.read(vaultModule.INDEX):find("readme%.txt", 1, false) ~= nil,
+  "the index persists to /var/vault/index.tsv")
+
+-- Reading re-fetches from the node and caches the body.
+local fetched = vaultCluster:vaultRead("/docs/readme.txt")
+check(fetched == true, "vaultRead starts")
+vaultCluster:tick()
+local readRequest = nil
+for _, call in ipairs(mCalls) do
+  local verb, fields = net.decode(call.frame)
+  if verb == "VREAD" then
+    readRequest = fields
+  end
+end
+check(readRequest ~= nil, "the read requests the first slice")
+vaultCluster:handle("modem_message", "modem-m", "modem-s", net.PORT, 0,
+  net.encode("VDATA", {
+    id = readRequest.id, off = 0, size = 11, data = "hello vault",
+  }))
+equal(vaultCluster:vaultBody("/docs/readme.txt"), "hello vault", "the read assembles the body")
+
+-- Deleting drops the index entry after the node confirms.
+vaultCluster:vaultRemove("/docs/readme.txt")
+local delId = nil
+for _, call in ipairs(mCalls) do
+  local verb, fields = net.decode(call.frame)
+  if verb == "VDEL" then
+    delId = fields.id
+  end
+end
+vaultCluster:handle("modem_message", "modem-m", "modem-s", net.PORT, 0,
+  net.encode("VDONE", { id = delId }))
+check(vaultCluster:vaultList("/docs").files[1] == nil, "the deleted file leaves the namespace")
+equal(vaultCluster:vaultUsage().files, 0, "the pool usage drops to zero files")
+
+-- A restart of the master keeps the pool and the namespace.
+local restored = vaultModule.new({
+  id = "m-computer",
+  vfs = vaultCluster.vfs,
+  log = nil,
+  now = function()
+    return vClock
+  end,
+  send = function()
+    return true
+  end,
+})
+restored:start()
+check(#restored.disks == 2, "the disk table persists across a restart")
+check(restored:list("/").files[1] == nil, "the namespace matches the index after the delete")
+
 -- drainNode routes DRAIN to a registered node's modem.
 registry.upsert(mCluster:nodesList(), {
   id = "wk-1",

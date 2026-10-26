@@ -147,18 +147,26 @@ queued work; a master restart does not lose the queue.
 other stays online, and the desktop shows wave progress without operator
 intervention.
 
-### 0.3.4 Vault
+### 0.3.4 Vault — built (0.3.4a), in-game checks pending
 
-- Add a remote filesystem service: chunked reads and writes, checksums, and
-  atomic rename over `tc.net`. The node-update pull already uses chunked
-  `LIST`/`FETCH`/`DATA` frames; Vault generalizes that transport.
-- Add the `storage` role and mount remote volumes in Files.
-- Mirror to a second node; a single node failure must not corrupt data.
-- Do not attempt distributed RAID; use the storage node's own RAID where
-  available.
+Decision in [`vault.md`](vault.md): **no RAID and no mirror for now**. Every
+server's system disk stays local for the OS and programs; all other disks on
+every server join one shared storage pool presented as a single namespace —
+more storage, not redundant storage. Redundancy is F5 work.
 
-**Exit criteria:** read and write a 64 KB file with a valid checksum; a node
-failure leaves the mirror readable; the UI reports storage usage per node.
+**0.3.4a built:** the `VDISK`/`VOPEN`/`VDATA`/`VDACK`/`VDONE`/`VERR`/`VREAD`/
+`VLST`/`VDIRS`/`VDEL` verbs, the node disk gateway (spare disks only — the
+boot volume and read-only media stay out), the master pool with placement to
+the disk with the most free space, the index in `/var/vault/index.tsv`
+(restored on boot), chunked transfers one frame per tick, partial-write
+protection via part files and rename, virtual listings from the index, and
+the `vaultWrite`/`vaultRead`/`vaultRemove`/`vaultList`/`vaultUsage` API.
+
+**0.3.4b — next:** Files/Terminal integration (browse `vault:`, copy in and
+out), usage surfacing in Nodes, and an index backup on a pool disk.
+
+**Exit criteria:** a 64 KB file is stored and read back through the pool; the
+namespace is browsable from the master; the pool reports usage per disk.
 
 ## F3 — Sessions and displays (0.4)
 
@@ -221,7 +229,8 @@ primary link fails. See [`long-distance.md`](long-distance.md).
   a watchdog.
 - Shut down in order: workers, terminals, storage, then core.
 - Document the permanent chunk-loader requirement.
-- Add health checks, alerts, and rebalancing for the 0.3.2 mirrors.
+- Add health checks, alerts, and rebalancing for the Vault pool; add the
+  mirror/redundancy layer on top of the pooled storage if still wanted.
 - Attribute operator names in the UI/log without user accounts.
 - Display a data-center map and node/disk/relay/UPS alerts.
 

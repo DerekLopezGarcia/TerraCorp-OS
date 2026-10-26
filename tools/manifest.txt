@@ -27,6 +27,7 @@ src/lib/tc/theme.lua
 src/lib/tc/ui.lua
 src/lib/tc/updater.lua
 src/lib/tc/util.lua
+src/lib/tc/vault.lua
 src/lib/tc/version.lua
 src/lib/tc/vfs.lua
 tools/check.lua

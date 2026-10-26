@@ -89,6 +89,14 @@ filesystem, floppy, and modem components:
     remaining nodes only, a wave advances on target versions, offline nodes,
     or the wave window, the next wave follows, and the update completes with
     a per-node count.
+14. The Vault pool passes framing for its ten verbs; the node gateway joins
+    only spare disks to the pool, stores a written file under `vault/<path>`
+    with part-file rename, aborts out-of-order writes cleaning the part file,
+    answers `VREAD` slices with the total size, and removes on `VDEL`. The
+    master registers disks from `VDISK`, stores files chunk by chunk with the
+    index persisted across restarts, lists the virtual namespace, assembles
+    reads into the cache, deletes after node confirmation, and reports usage
+    per disk.
 
 `npm run test:nodes` runs the Nodes app in the desktop harness with a fake
 floppy, rack drive, and wired modem. It presses F7, verifies the rack list, and
@@ -144,6 +152,13 @@ Manual in-game checks for 0.3.0:
   version (or the 120 s wave window passes), the next wave starts, and the
   line ends with "Update <v> finished · 2/2 node(s) updated". The rack never
   reboots all at once.
+- Vault (0.3.4a has no UI yet; verify via the master's `lua` REPL): power on a
+  node with spare disks, then on the master run
+  `cluster:vaultUsage()` — the spare disks appear. Then
+  `cluster:vaultWrite("/docs/test.txt", "hello")`, wait a few seconds,
+  `cluster:vaultList("/docs")` and `cluster:vaultBody("/docs/test.txt")`
+  return the file and its content. `cluster:vaultRemove("/docs/test.txt")`
+  empties the namespace. The system disk of each server never joins the pool.
 
 ## 0.2.3 desktop pictogram checks
 
