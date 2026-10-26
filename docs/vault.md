@@ -66,4 +66,19 @@ total size; the master assembles the body across ticks.
    copy in and out, and surface usage in the Nodes/storage views. Index backup
    on a pool disk.
 
-Redundancy (mirror, checksums end to end, placement rebalancing) is F5 work.
+## Redundancy: the RAID block, not software mirroring
+
+TerraCorp does not implement mirroring. The pack ships a **RAID block** that
+composes disks into a redundant volume exposing a `filesystem` component; a
+RAID volume is just one more spare disk as far as this OS is concerned:
+
+- The node gateway already reports any local non-boot `filesystem` component,
+  so a RAID block's volume joins the pool automatically with its full
+  capacity, and Vault stores files on it like any other disk.
+- Redundancy, rebuilds, and failure behavior stay the RAID block's problem;
+  the F5 mirror work is dropped. The only TerraCorp-side item left is
+  surfacing per-disk health/usage in the data-center views.
+- **Pending in-game verification:** the RAID block's component kind, whether
+  its volume reports `spaceTotal`/`spaceUsed` in bytes like other disks, and
+  how it behaves when a member disk fails. Until verified, do not assume its
+  API; see [`opencomputers.md`](opencomputers.md).

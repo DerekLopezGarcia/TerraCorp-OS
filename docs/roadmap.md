@@ -149,10 +149,12 @@ intervention.
 
 ### 0.3.4 Vault — built (0.3.4a), in-game checks pending
 
-Decision in [`vault.md`](vault.md): **no RAID and no mirror for now**. Every
-server's system disk stays local for the OS and programs; all other disks on
-every server join one shared storage pool presented as a single namespace —
-more storage, not redundant storage. Redundancy is F5 work.
+Decision in [`vault.md`](vault.md): **no RAID and no mirror inside TerraCorp**.
+Every server's system disk stays local for the OS and programs; all other
+disks on every server join one shared storage pool presented as a single
+namespace — more storage, not redundant storage. When redundancy is wanted,
+the pack's **RAID block** provides it at the hardware layer and its volume
+joins the pool like any other disk (pending in-game verification).
 
 **0.3.4a built:** the `VDISK`/`VOPEN`/`VDATA`/`VDACK`/`VDONE`/`VERR`/`VREAD`/
 `VLST`/`VDIRS`/`VDEL` verbs, the node disk gateway (spare disks only — the
@@ -229,8 +231,10 @@ primary link fails. See [`long-distance.md`](long-distance.md).
   a watchdog.
 - Shut down in order: workers, terminals, storage, then core.
 - Document the permanent chunk-loader requirement.
-- Add health checks, alerts, and rebalancing for the Vault pool; add the
-  mirror/redundancy layer on top of the pooled storage if still wanted.
+- Add health checks, alerts, and rebalancing for the Vault pool. Redundancy
+  comes from the pack's RAID block (see [`vault.md`](vault.md)): no software
+  mirroring. Verify the RAID block's filesystem component in-game; F5 keeps
+  only the monitoring and rebalancing work.
 - Attribute operator names in the UI/log without user accounts.
 - Display a data-center map and node/disk/relay/UPS alerts.
 
