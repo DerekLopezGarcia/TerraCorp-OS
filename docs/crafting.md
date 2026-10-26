@@ -1,113 +1,132 @@
-# Craft orchestration: stock-limited feeding (Yordi111 requirement)
+# Craft orchestration: buffer-driven recipes (Yordi111 requirement)
 
-Automate feeding of crafting machines — **any machine or machines on the
-segment** (today: vanilla-style logic + redstone contraptions; later possibly
-GregTech). The control law is simple and machine-agnostic:
+Automate crafting across any machines connected by logic + redstone between
+two buffers. The operator's flow, verbatim from field operations:
 
-> Read the stock of the **output buffer**; feed ingredients into the
-> **input buffer** only while output stock is below its limit.
+> Put base ingredients in a buffer that feeds the crafting circuit on the
+> other side. The program reads **ingredients and result as items** from the
+> buffers: select the input ingredients **by type and quantity**, then the
+> result appears on the other side, with a **stock limit**.
 
-TerraCorp's role: the stock-limited feeder. The machines keep their own logic;
-we read, decide, gate, and alarm. Target: 0.5.x `tc/craft` on a worker node in
-the crafting hall. Design; "verify" items need in-game probes.
+So the recipe is **not declared — it is read from the buffers**. TerraCorp's
+job: inspect both buffers as inventories (item types + counts), let the
+operator pick which types to allow and how much to feed, and gate the feed
+while the result's stock is below its limit. Target: 0.5.x `tc/craft` plus a
+selection UI. Design; "verify" items need in-game probes.
 
 ## Architecture
 
 ```text
-                     redstone gate (enable feed)
-  [buffer IN] ────────────────┐
-   hoppers/pipes ──> [machine(s) — own internal logic] ──> [buffer OUT]
-                                                              │
-                                        stock sensing: comparator or adapter
-                                                              │
-                                    ┌─────────────────────────┘
-                              tc/craft node (worker role)
-                                   │ Relay: jobs, telemetry, alarms
+[buffer IN] ──(existing pipes/hoppers + logic circuit)──> [buffer OUT]
+   │          machines keep their own redstone logic               │
+   │ inventory read: item types + counts                           │ same
+   └──────────────── tc/craft node ────────────────────────────────┘
+        gate line (redstone) controls the feed from IN into the circuit
+                          │ Relay: jobs, telemetry, alarms
 ```
 
-Two control modes, configurable per line in `/etc/craft.tsv`:
+- **buffer IN**: operator dumps whatever base ingredients. The program reads
+  its contents as an inventory (types + counts per slot/side) — it must
+  discover the recipe inputs from what is actually there.
+- **buffer OUT**: the crafted result accumulates here; the program reads the
+  result type and its count to enforce the stock limit.
+- **Gate**: one redstone line (Redstone Card) enables/disables the feed from
+  IN into the circuit. The circuit and machines are untouched.
 
-- **Gate mode** (today's build): feeding is passive (hoppers/pipes already
-  installed); TerraCorp holds a redstone **enable line** (Redstone Card
-  output): high while `out-stock < limit`, low otherwise. The machines never
-  change; the OS just closes the tap.
-- **Push mode** (optional later): an OC **transposer** moves ingredient
-  stacks from the input buffer into the machine when a batch is due. More
-  control, more moving parts — only if gate mode proves insufficient.
+## Program contract
 
-## Control law
+### 1. Recipe selection (operator, via UI)
 
-Per production line (one line = one in-buffer, N machines, one out-buffer):
+A small TerraCorp app (or Terminal commands) on the hall node:
+
+1. `read IN` — list every item type currently in the input buffer with its
+   count (live re-read; the buffer is the recipe source of truth).
+2. Operator selects which types are **ingredients for this run** and, per
+   type, the **max quantity** to feed (the batch definition lives in the
+   buffer, not in a config file).
+3. Operator selects the **result type** (picked from the OUT buffer once the
+   first batch appears, or named by the operator) and the **stock limit**.
+
+The selection is persisted (`/etc/craft.tsv`, one line per run) so it
+survives reboots; changing selection = re-open the UI.
+
+### 2. The control loop
 
 ```
-every tick-budget pass (≤ 1 Hz):
-  s_out = read out-buffer stock        (comparator table or adapter count)
-  s_in  = read in-buffer stock         (same sensors, optional)
-  if s_out < low:  gate on
-  if s_out > high: gate off            (hysteresis: low < high)
+every pass (≤ 1 Hz):
+  out_count = count(OUT, result_type)
+  if out_count < limit and fed_so_far < selected_quantity:
+      gate on
+  else:
+      gate off
+  feed accounting: delta(IN counts) per pass = what the circuit consumed
+  alarm checks (below)
 ```
 
-- Hysteresis prevents tap flapping on noisy comparator readings.
-- `s_in` is not needed to *decide*, but gives the `STARVED` alarm: gate on +
-  in-buffer low for > T means logistics must restock (Yordi's side).
-- Multiple lines on one node are independent loops over one card (one
-  redstone line per side; a card exposes 6 sides — bundled wire removes the
-  limit, verify availability).
+- `fed_so_far` is derived from **input buffer deltas** (fresh readings every
+  pass), never from an internal counter — a reboot reconciles automatically
+  from the next delta.
+- When `out_count` crosses the limit, the gate closes and the selection
+  stays armed for the next run (or auto-resets, configurable).
 
-## Stock sensing (the uncertain part)
+## The sensing requirement (harder than plain gating)
 
-| Sensor | What to verify |
-|---|---|
-| Comparator on a chest/barrel | Strength→count mapping is nonlinear for containers with many slots; build the exact table per buffer type |
-| Comparator on a drawer | Is it per-slot, per-drawer fraction, or total capacity? May differ per drawer type |
-| **Adapter + drawer** | Does `component.list()` expose an inventory component for Storage Drawers? Exact counts would make the comparator table unnecessary |
-| Redstone Card | Single-wire vs bundled reading; how many buffers per card |
+Type + quantity selection **requires inventory reads** — a comparator cannot
+tell item types apart. This is the load-bearing dependency:
 
-Prefer the adapter path when it works; redstone comparators are the
-always-works fallback, at 0–15 resolution (a 15-step stock scale is plenty
-for "limit the input" — exact counts are a bonus, not a requirement).
+| Sensor | Role | To verify |
+|---|---|---|
+| **Adapter on buffer (chest/barrel/drawer)** | `inventory` component: `getStackInSlot`-style reads with item type + count (full NBT per OC's inventory_controller precedent) | Does the Adapter expose the exact buffer types in use? Especially **Storage Drawers** — not on OC's vanilla integration list |
+| Comparator | Fast coarse stock (0–15) for the gate when OUT is a simple container | strength→count table per buffer type |
+| Transposer (optional later) | Push-mode feeding if the passive feed + gate cannot respect per-type quantities | insertion into the circuit's entry point |
+
+**Degradation rule**: if a buffer cannot be item-read (adapter path fails),
+that line runs in **coarse mode** — gate on total comparator stock only, with
+a persistent warning "ingredient types unverified". The program must never
+pretend to know types it did not read.
 
 ## Failure semantics
 
-- **Out full** past timeout with gate already off → the *machine* is jammed,
-  not the feeder: `JAMMED` alarm (Relay + RC `STATE` + dashboard).
-- **Gate on + in-buffer low** → `STARVED` alarm; gate stays on (do not
-  compound one shortage with a stopped line).
-- **Stock reading stale** (no change for N passes while gate on) → `STALLED`
-  alarm; nothing is auto-fed to "fix" it.
-- All decisions re-derive from fresh readings every pass; after a reboot the
-  first pass reconciles (gate state = f(current stock)). No in-flight
-  counters anywhere.
+- `STARVED`: gate on + a selected ingredient type at zero while the run is
+  incomplete → logistics must restock (Yordi's side). Gate stays on.
+- `LIMIT REACHED` is not an alarm — it is the normal end state.
+- `MISMATCH`: OUT shows a different type than selected → `JAMMED`-class
+  alarm (circuit producing the wrong thing); gate closes.
+- `STALE`: no delta in IN for N passes while gate on and run incomplete →
+  alarm; nothing auto-fed to "fix" it.
+- Item reads are the only state source; every pass re-derives. After a
+  reboot, the first pass reconciles (gate = f(current counts)).
 
 ## Integration
 
-- **Relay**: `stock` built-in task (read and report named buffers) and a
-  `craft limit` order (`set low/high` live) from any terminal.
-- **Telemetry** (`telemetry.md`): buffer levels are the first probes; the
-  dashboard and the hologram wall (`holo.md`) render them as bars.
-- **Names** (`names.md`): `craft1.in`, `craft1.out` — config survives card
-  and buffer swaps.
-- Standalone rule: the loop must run with the master offline; only alarms
-  and remote orders need the link.
+- **Relay**: `stock` built-in task (named buffers, types + counts) and
+  `craft limit` orders (set limit / reset run) from any terminal.
+- **Telemetry / UI**: buffer levels feed the dashboard and hologram wall
+  (`holo.md`) as bars; the Craft app on the master renders the same data for
+  selection when the operator is at the desk instead of the hall.
+- **Names** (`names.md`): `craft1.in`, `craft1.out`.
+- Standalone rule: selection and the loop run with the master offline;
+  Relay only carries reports and remote orders.
 
 ## Verification checklist (crafting hall session)
 
-1. Comparator tables for the actual buffer types in use (chest, barrel,
-   drawer): record strength→count curves.
-2. Drawer + Adapter component probe: kinds, read methods, exact counts.
-3. Redstone Card: does gate mode work with the existing hopper feed (gate
-   low truly stops insertion)? Bundled wire support?
-4. One card, several lines: sides available after machines' own redstone.
-5. Loop cost: sensor reads + gate writes per pass at 1 Hz — confirm the
-   worker node's budget holds alongside Relay duty.
+1. **Adapter inventory reads on the real buffers**: kinds, methods, and
+   whether full item NBT (type + count) comes through — especially drawers.
+2. Comparator tables (coarse mode) per buffer type.
+3. Gate semantics: does gate-low truly stop the existing feed?
+4. Read cadence: cost of a full inventory read at 1 Hz on a worker node
+   alongside Relay duty.
+5. Delta accounting: consume items manually and confirm the loop's
+   `fed_so_far` tracks the deltas correctly.
 
 ## Recommendation
 
-Ship in two slices:
+Three slices, each independently useful:
 
-1. **Stock reader** (task `stock` + dashboard tile): useful immediately,
-   de-risks sensing before any control code.
-2. **Gate loop**: one line end-to-end; scale by config lines, not code.
+1. **Stock reader**: `stock` Relay task + dashboard tile (types + counts of
+   named buffers). Useful on day one even with zero automation.
+2. **Selection UI + gate loop**: one line, one run, end to end.
+3. **Scale by config**: more lines = more TSV rows, not more code.
 
 Cross-links: `distributed.md` (worker role), `telemetry.md`, `names.md`,
-`relay.md`, `long-distance.md` (alarm path).
+`relay.md`, `long-distance.md` (alarm path), `holo.md` (wall bars).
