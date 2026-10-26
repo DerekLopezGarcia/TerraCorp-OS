@@ -216,6 +216,11 @@ free RAM.
 
 ## F4.5 — Long-distance links and tablets (optional; does not block F5)
 
+Researched in `docs/redlink.md`: linked cards for cross-dimension packets,
+wireless modem for long-range same-dimension links, and Redstone Control as a
+signal-level fallback. Each transport needs the in-game probe checklist in
+that document before any code.
+
 - Verify Redstone Control bandwidth/tick behavior, the OpenComputers Adapter
   API, interdimensional wireless availability, and tablet limits before coding.
 - Add Redstone Control as a `tc.net` transport: 32-bit frames, ACKs for commands,
