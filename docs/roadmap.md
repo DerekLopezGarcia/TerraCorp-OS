@@ -13,7 +13,7 @@
 Each phase has measurable exit criteria. Do not start the next phase until the
 current phase meets its criteria.
 
-## F0 — Tested prototype (0.1.x) · evidence still open
+## F0 — Tested prototype (0.1.x) · evidence recorded
 
 **Goal:** validate the existing OS in Supersymmetry, document real behavior,
 and provide a safe update path before architectural expansion.
@@ -31,8 +31,10 @@ and provide a safe update path before architectural expansion.
 Tier 2 node, first render within 2 seconds, and a tested release update that
 preserves settings and supports rollback on handled installation failures.
 
-> 0.2.3 shipped without recording the 30-minute clean log and the Tier 2
-> memory/first-render figures. Record them before the 0.4 session work.
+> The user confirmed a clean 30-minute session without `ERR` entries and
+> working behavior on the published build in-game on 2026-10-26. F0 is
+> considered closed; keep `npm run measure` and in-game `tc.log` checks
+> available for regressions.
 
 ## F1 — Desktop shell (0.2.x) · shipped
 

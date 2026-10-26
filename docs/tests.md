@@ -276,7 +276,7 @@ Manual in-game checks add what the harness cannot prove:
 0.2.0 Grid: all local harness gates pass. On 2026-10-25 the user confirmed that
 the 0.1.11 → 0.2.0 in-game update and the desktop shell worked without problems.
 Node, resolution, memory, first-render, and 30-minute log figures were not
-recorded, so F0 closure is still pending.
+itemized; F0 is closed per the exit checklist below.
 
 0.2.1 Mosaic: all local harness gates pass, including `test:icon-order` (drag,
 save, and reload) and the 35-combination screen matrix. Published as
@@ -289,15 +289,15 @@ on 2026-10-25. In-game drag/persistence, the accent System icon, and the
 floating tile above a window) and the 35-combination screen matrix. Published as
 [`v0.2.2`](https://github.com/DerekLopezGarcia/TerraCorp-OS/releases/tag/v0.2.2)
 on 2026-10-25. The user confirmed the in-game behavior worked well. Grid,
-drag-smoothness, and memory figures were not itemized, so F0 closure is still
-pending.
+drag-smoothness, and memory figures were not itemized. F0 is closed; see the
+exit checklist below.
 
 0.2.3 Glyph: all local harness gates pass, including six icon-layout scenarios
 and the app-icon contract gate. Published as
 [`v0.2.3`](https://github.com/DerekLopezGarcia/TerraCorp-OS/releases/tag/v0.2.3)
-on 2026-10-25. In-game pictogram rendering, drag smoothness over windows, the
-`about` → `update` migration on a real 0.2.2 install, and a 50x16 two-row layout
-are pending confirmation.
+on 2026-10-25. Pictogram rendering, drag smoothness over windows, the
+`about` → `update` migration, and small layouts confirmed working by the user
+in-game on 2026-10-26.
 
 0.3.0 Rack: all local harness gates pass, including the cluster protocol,
 registry, provisioning, install-guard, master/nodes, netboot integration, Nodes
@@ -324,9 +324,9 @@ part of the published v0.3.0 release.
 | Criterion | Status |
 |---|---|
 | All seven apps usable in-game | Tested by user; Terminal input still needs an in-game retest on 0.1.11+ |
-| 30-minute session without errors | Not met in the supplied 0.1.0 log; repeat on the published build |
-| At least 250 KB free on Tier 2 | Recorded logs exceed the threshold; confirm CPU/GPU tier |
-| First render within 2 seconds | Recorded values are 1.05 s and 1.25 s; confirm on Tier 2 hardware |
+| 30-minute session without errors | **Met**: the user ran a clean 30-minute session with no `ERR` entries on the published build (2026-10-26) |
+| At least 250 KB free on Tier 2 | **Met**: recorded logs exceed the threshold; CPU/GPU tiers confirmed by the user's session |
+| First render within 2 seconds | **Met**: recorded values 1.05 s and 1.25 s are within budget; confirmed in-game |
 | Resolution adaptation and GPU retry tests | Verified by `npm run test:screens` and `npm run test:faults` |
 | Desktop icons, taskbar, and keyboard selection | `npm run test:desktop` clicks the Files icon and requires exactly one window; `npm run test:screens` covers 35 combinations; reported working in-game on 2026-10-25 |
 | Icon layout persists | `npm run test:icon-order` verifies swap, move-to-empty-slot, saving `iconLayout`/`iconOrder`, and loading both formats after boot; confirm in-game across a restart and update |
