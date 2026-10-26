@@ -253,7 +253,7 @@ function jobs:handleResult(fields)
   job.updated = self:now()
   self:save()
   if self.log then
-    self.log(string.format(
+    self.log.info(string.format(
       "Job %s (%s) %s%s",
       job.id,
       job.task,

@@ -191,7 +191,7 @@ function vault:handleDisk(fields, remoteAddress)
   self.disks = keep
   self:save()
   if self.log and #reported > 0 then
-    self.log("Vault pool: " .. #reported .. " disk(s) from " .. nodeId:sub(1, 8)
+    self.log.info("Vault pool: " .. #reported .. " disk(s) from " .. nodeId:sub(1, 8)
       .. " (" .. table.concat(reported, ",") .. ")")
   end
 end
@@ -203,10 +203,10 @@ function vault:finishWrite(ok, reason)
     if ok then
       self.indexDirty = false
       if self.log then
-        self.log("Vault index backed up to " .. write.node:sub(1, 8))
+        self.log.info("Vault index backed up to " .. write.node:sub(1, 8))
       end
     elseif self.log then
-      self.log("Vault index backup failed: " .. tostring(reason))
+      self.log.info("Vault index backup failed: " .. tostring(reason))
     end
     return ok
   end
@@ -222,10 +222,10 @@ function vault:finishWrite(ok, reason)
     self.indexDirty = true
     self:save()
     if self.log then
-      self.log("Stored " .. write.path .. " (" .. write.size .. " B)")
+      self.log.info("Stored " .. write.path .. " (" .. write.size .. " B)")
     end
   elseif self.log then
-    self.log("Vault write failed for " .. write.path .. ": " .. tostring(reason))
+    self.log.info("Vault write failed for " .. write.path .. ": " .. tostring(reason))
   end
   return ok
 end
@@ -234,7 +234,7 @@ function vault:abortRead(reason)
   local read = self.rx
   self.rx = nil
   if self.log and read then
-    self.log("Vault read failed for " .. read.path .. ": " .. tostring(reason))
+    self.log.info("Vault read failed for " .. read.path .. ": " .. tostring(reason))
   end
 end
 
@@ -268,11 +268,11 @@ function vault:handleControl(verb, fields)
         self.indexDirty = true
         self:save()
         if self.log then
-          self.log("Deleted " .. pending.path)
+          self.log.info("Deleted " .. pending.path)
         end
       end
     elseif self.log then
-      self.log("Vault delete failed for " .. pending.path)
+      self.log.info("Vault delete failed for " .. pending.path)
     end
     return true
   end
@@ -307,7 +307,7 @@ function vault:handleData(fields)
     else
       self:cachePut(read.path, read.body)
       if self.log then
-        self.log("Fetched " .. read.path .. " (" .. #read.body .. " B)")
+        self.log.info("Fetched " .. read.path .. " (" .. #read.body .. " B)")
       end
     end
   end
@@ -334,7 +334,7 @@ function vault:restoreIndex(text)
     self.restored = true
     self:save()
     if self.log then
-      self.log("Vault index restored from the pool backup (" .. count .. " file(s))")
+      self.log.info("Vault index restored from the pool backup (" .. count .. " file(s))")
     end
   end
   return count > 0
@@ -411,7 +411,7 @@ function vault:write(path, body)
     id = self.tx.id, disk = disk.disk, path = path, size = #body,
   })
   if self.log then
-    self.log("Storing " .. path .. " (" .. #body .. " B) on " .. disk.disk:sub(1, 8))
+    self.log.info("Storing " .. path .. " (" .. #body .. " B) on " .. disk.disk:sub(1, 8))
   end
   return true
 end
