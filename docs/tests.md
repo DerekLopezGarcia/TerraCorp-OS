@@ -385,6 +385,18 @@ updater, and GPU-fault suites. Published as
 on 2026-10-26. The in-game rack build, floppy netboot, two-node online state, and
 post-update registry persistence are pending confirmation.
 
+0.3.x cluster verified in-game on 2026-10-26 (Supersymmetry): first node
+provisioned end to end — hybrid bootstrap floppy (payload on floppy), node
+installed onto the disk with the most free space, passed the boot check, and
+came online as TC-N1 (worker, 4M RAM/disk, v0.3.10). Relay verified in-game:
+Check queued (`1q/0g` → `0q/1g` → `done: ok`), Drain/Undrain gates claiming,
+and the drain flag persisted across a node reboot. Releases 0.3.6–0.3.10 fixed
+the found issues: offline payload fallback when the pull fails, every-floppy
+preparation with address logging, pinned `nodeFloppyAddress`, disk selection
+by most free space, and KB units in the space error. Still pending: second
+node, update waves with two nodes, Vault in-game, RAID block probe, and the
+clean 30-minute log.
+
 Post-release work under development: an interrupted install could leave the
 EEPROM pointed at a half-written disk (the boot address is now set after a
 complete copy), re-preparing an already prepared floppy rewrote it (same
