@@ -60,6 +60,15 @@ Verified scan-code subset:
   resolution, but its exact behavior in 1.7.x is **pending in-game
   verification**. The kernel's tick-rate estimate (`kernel:tps()`) degrades to
   "no data" when `realTime` is missing or non-numeric.
+- GPU VRAM buffers (1.7.5 dev builds / 1.8, **pending in-game verification**;
+  full plan in `docs/render.md`): `gpu.allocateBuffer([w, h]) -> index`,
+  `gpu.buffers()`, `gpu.setActiveBuffer(index)` / `getActiveBuffer()`,
+  `gpu.freeBuffer(index)` / `freeAllBuffers()`, and
+  `gpu.bitblt([dst[, col[, row[, w[, h[, src[, fromCol[, fromRow]]]]]]]])` with
+  `dst = 0` meaning the bound screen and `src` defaulting to the active buffer.
+  All draw calls (`set`, `fill`, `copy`, background/foreground) target the
+  active buffer. TerraCorp never assumes these exist: every use is behind a
+  `pcall` capability probe with the span path as fallback.
 - `filesystem.list(path)` returns a table; OpenOS wraps it as an iterator, but
   the TerraCorp VFS works with the table.
 - Component filesystem handles are opaque values passed to `read`, `write`, and

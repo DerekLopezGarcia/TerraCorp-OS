@@ -187,6 +187,9 @@ node with more RAM.
 - Add `desktop` and `kiosk:<app>` session profiles.
 - Keep local session behavior unchanged.
 - Finish the service/app-contract split deferred from 0.2.x.
+- Follow up with the VRAM double-buffer renderer ("Flip") in 0.4.1 per
+  `docs/render.md`: capability-probed buffers, a single bitblt per mostly-dirty
+  frame, span diffing still the default path.
 
 **Exit criteria:** two headless sessions and one local session under 200 KB
 total, at most 64 KB per session, boot within 1.5 seconds, and a multi-session
