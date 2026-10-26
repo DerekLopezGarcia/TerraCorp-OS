@@ -190,6 +190,8 @@ node with more RAM.
 - Follow up with the VRAM double-buffer renderer ("Flip") in 0.4.1 per
   `docs/render.md`: capability-probed buffers, a single bitblt per mostly-dirty
   frame, span diffing still the default path.
+- The concrete module and milestone plan for 0.4.0 lives in
+  `docs/sessions.md`.
 
 **Exit criteria:** two headless sessions and one local session under 200 KB
 total, at most 64 KB per session, boot within 1.5 seconds, and a multi-session
@@ -216,10 +218,11 @@ free RAM.
 
 ## F4.5 — Long-distance links and tablets (optional; does not block F5)
 
-Researched in `docs/redlink.md`: linked cards for cross-dimension packets,
-wireless modem for long-range same-dimension links, and Redstone Control as a
-signal-level fallback. Each transport needs the in-game probe checklist in
-that document before any code.
+Researched in `docs/long-distance.md` (transport comparison, RC framing,
+tablet client, spike script, and per-transport verification checklists):
+linked cards for cross-dimension packets, wireless modem for long-range
+same-dimension links, and Redstone Control as a signal-level fallback
+(~80 B/s/channel). Each transport needs its in-game probe before any code.
 
 - Verify Redstone Control bandwidth/tick behavior, the OpenComputers Adapter
   API, interdimensional wireless availability, and tablet limits before coding.

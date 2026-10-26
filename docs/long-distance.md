@@ -73,6 +73,40 @@ Adapter:
 Also confirm interdimensional wireless is enabled in Supersymmetry and measure
 tablet memory and reconnect behavior.
 
+## Transport verification checklists
+
+Run these probes before writing transport code (consolidated from the 0.3
+research session; the OC API references below are community-documented and
+**pending in-game verification**).
+
+**Linked Card** (preferred for packets):
+
+- [ ] Component kind name (`component.list()` next to a paired card).
+- [ ] Pairing mechanism (crafting? explicit open on both ends?).
+- [ ] Packet size limit (`maxPacketSize()` on the card).
+- [ ] Latency/tick cost vs wired modem (100 frames round-trip).
+- [ ] One packet per send or broadcast to all ends of the pair? Do both ends
+      need the port open?
+- [ ] Behavior when the remote dimension chunk is unloaded (queued, lost,
+      delayed?).
+
+**Wireless network card** (long range, same dimension):
+
+- [ ] `setStrength(n)` available on the pack's card tier (T2 = wireless).
+- [ ] Whether the Supersymmetry OC build patched cross-dimension wireless —
+      if so, the Linked Card may not be required.
+- [ ] Energy cost per message as a function of strength.
+
+**Redstone Control** (signal-level fallback):
+
+- [ ] Does the mod expose ports as OC components (`component.list()` next to
+      a port)? Its 1.12.2 README lists "programmable circuits" as planned, so
+      Adapter integration is unconfirmed.
+- [ ] Can an OC Redstone Card set/read the port signal (analog value range,
+      change events)?
+- [ ] Does the analog value survive the interdimensional path intact?
+- [ ] Cross-dimension latency and chunk-load requirements.
+
 **Exit criteria:** transfer 1 KB with a valid CRC between dimensions and execute
 a command round-trip in under 2 seconds. Risks include a narrower-than-expected
 signal, an Adapter API that differs from assumptions, unavailable RC in the
