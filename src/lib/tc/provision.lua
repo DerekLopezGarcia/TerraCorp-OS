@@ -410,7 +410,7 @@ function provision.install(target, payload, opts)
     return nil, string.format(
       "the target disk needs %d KB free but only %d KB are available",
       math.floor((total + provision.margin) / 1024 + 0.5),
-      math.floor(size - used)
+      math.floor((size - used) / 1024)
     )
   end
 

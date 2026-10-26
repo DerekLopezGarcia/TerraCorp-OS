@@ -285,10 +285,13 @@ end
 
 netfetch.fetchWhole = fetchWhole
 
---- Find the first writable non-boot filesystem and verify it is safe to use.
--- Mirrors the classic installer: an empty disk is safe, a disk carrying the
--- install marker can be retried, anything else is refused.
+--- Find the writable non-boot filesystem with the most free space and verify
+-- it is safe to use. Component order is arbitrary on the bus, so picking the
+-- first disk could choose a nearly full one; placement mirrors Vault: the
+-- disk with the most free bytes wins. A disk with data that lacks the install
+-- marker is refused instead of skipping to a second disk.
 function netfetch.findTarget(env, bootAddress, vfsModule, provisionModule)
+  local best = nil
   for address in env.component.list("filesystem") do
     if address ~= bootAddress then
       local readOnly = invoke(env, address, "isReadOnly")
@@ -296,19 +299,25 @@ function netfetch.findTarget(env, bootAddress, vfsModule, provisionModule)
         local volume = env.component.proxy(address)
         if volume then
           local disk = vfsModule.new(volume)
-          if not disk then
-            return nil, "the target disk is not readable"
+          if disk then
+            local safe = provisionModule.checkInstallTarget(disk)
+            if safe then
+              local okTotal, total = pcall(volume.spaceTotal)
+              local okUsed, used = pcall(volume.spaceUsed)
+              local free = (tonumber(total) or 0) - (tonumber(used) or 0)
+              if not best or free > best.free then
+                best = { address = address, disk = disk, free = free }
+              end
+            end
           end
-          local safe, reason = provisionModule.checkInstallTarget(disk)
-          if not safe then
-            return nil, reason
-          end
-          return address, disk
         end
       end
     end
   end
-  return nil, "no writable hard disk was found"
+  if not best then
+    return nil, "no writable hard disk was found"
+  end
+  return best.address, best.disk
 end
 
 --- Offline install from the floppy's own /payload.
