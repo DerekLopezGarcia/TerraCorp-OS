@@ -16,6 +16,11 @@ node.HELLO_INTERVAL = 5
 node.HELLO_WINDOW = 60
 node.MODEM_RETRY = 10
 
+-- Relay worker limits. One concurrent slot on a Tier 2 CPU; a claim that is
+-- never granted expires and the worker forgets it.
+node.JOB_SLOTS = 1
+node.CLAIM_TTL = 30
+
 -- The boot-time integrity check. A node stays silent until every path is
 -- present, so the master only lists servers that boot a complete system.
 node.CHECK_PATHS = {
@@ -72,6 +77,10 @@ function node.new(env)
   self.gfx = nil
   self.screenAddress = nil
   self.screenErrors = 0
+
+  self.claims = {}
+  self.runningJob = nil
+  self.drain = self.config.get("drain") == "true"
 
   return self
 end
@@ -214,6 +223,7 @@ function node:helloFields()
 end
 
 function node:statusFields()
+  local jobs = self.runningJob and 1 or 0
   return {
     id = self.id,
     name = self.name,
@@ -222,7 +232,8 @@ function node:statusFields()
     mem = self:memoryKB(),
     disk = self:diskKB(),
     uptime = math.floor(self:now()),
-    jobs = 0,
+    jobs = jobs,
+    drain = self:isDraining() and "true" or "false",
     v = self.version and self.version.version or "",
   }
 end
@@ -339,6 +350,188 @@ function node:adoptMaster(fields, remoteAddress)
   return changed
 end
 
+--------------------------------------------------------------------------------
+-- Relay worker: claim, run, and answer named tasks
+--------------------------------------------------------------------------------
+
+--- Built-in task registry. A job runs a named task with contract-bound
+-- arguments; remote code is never accepted. Each entry is
+-- `run(self, args) -> ok, out`.
+node.TASKS = {}
+
+node.TASKS["fs.check"] = function(self, args)
+  local _ = args
+  local ok, failed = self:verify()
+  if ok then
+    return true, "ok"
+  end
+  return false, "failed: " .. table.concat(failed, ", ")
+end
+
+node.TASKS["disk.report"] = function(self, args)
+  local _ = args
+  local ok, used, total = pcall(self.kernel.storage, self.kernel)
+  if not ok then
+    return false, "storage is unavailable"
+  end
+  return true, string.format(
+    "used=%dKB total=%dKB",
+    kilobytes((tonumber(used) or 0) / 1024),
+    kilobytes((tonumber(total) or 0) / 1024)
+  )
+end
+
+node.TASKS["log.tail"] = function(self, args)
+  local count = tonumber(args) or 10
+  if count < 1 then
+    count = 1
+  elseif count > 30 then
+    count = 30
+  end
+  local text = self.vfs.read("/var/log/tc.log")
+  if type(text) ~= "string" or text == "" then
+    return true, "empty"
+  end
+  local lines = {}
+  for line in text:gmatch("[^\r\n]+") do
+    lines[#lines + 1] = line
+  end
+  local first = math.max(1, #lines - count + 1)
+  local out = {}
+  for index = first, #lines do
+    out[#out + 1] = lines[index]
+  end
+  return true, table.concat(out, " | ")
+end
+
+node.TASKS["comp.count"] = function(self, args)
+  local kinds = {}
+  local total = 0
+  if self.component and type(self.component.list) == "function" then
+    local ok, iterator = pcall(self.component.list)
+    if ok and type(iterator) == "function" then
+      while true do
+        local address, kind = iterator()
+        if not address then
+          break
+        end
+        kind = tostring(kind or "unknown")
+        kinds[kind] = (kinds[kind] or 0) + 1
+        total = total + 1
+      end
+    end
+  end
+  local parts = { "total=" .. total }
+  for kind, count in pairs(kinds) do
+    parts[#parts + 1] = kind .. "=" .. count
+  end
+  table.sort(parts)
+  return true, table.concat(parts, " ")
+end
+
+function node:isDraining()
+  return self.drain == true or self.drain == "true"
+end
+
+--- Offer to run an offered job: claim only when the task is known, a slot is
+-- free, and the node is not draining.
+function node:offerJob(fields)
+  if self:isDraining() then
+    return
+  end
+  local jobId = tostring(fields.id or "")
+  if jobId == "" or not node.TASKS[tostring(fields.task or "")] then
+    return
+  end
+  if self.runningJob or self.claims[jobId] then
+    return
+  end
+  local claims = 0
+  for _ in pairs(self.claims) do
+    claims = claims + 1
+  end
+  if claims >= node.JOB_SLOTS then
+    return
+  end
+
+  self.claims[jobId] = {
+    task = tostring(fields.task),
+    args = tostring(fields.args or ""),
+    expires = self:now() + node.CLAIM_TTL,
+  }
+  self:sendToMaster("CLAIM", { id = jobId, worker = self.id, jobs = claims })
+  if self.log then
+    self.log.debug("node: claimed job " .. jobId .. " (" .. tostring(fields.task) .. ")")
+  end
+end
+
+--- A granted claim runs immediately with pcall and answers the granting
+-- address (falling back to the master route).
+function node:startGranted(fields, remoteAddress)
+  local jobId = tostring(fields.id or "")
+  local claim = self.claims[jobId]
+  if not claim or self.runningJob then
+    return
+  end
+  self.claims[jobId] = nil
+  self.runningJob = jobId
+
+  local task = node.TASKS[claim.task]
+  -- Tasks return (ok, out); pcall adds its own success flag in front.
+  local callOk, taskOk, out = pcall(task, self, claim.args)
+  local state, result
+  if not callOk then
+    state = "failed"
+    result = tostring(taskOk or "the task crashed")
+    if self.log then
+      self.log.error("node: task " .. claim.task .. " crashed: " .. result)
+    end
+  else
+    state = taskOk and "done" or "failed"
+    result = tostring(out or "")
+    if not taskOk and self.log then
+      self.log.error("node: task " .. claim.task .. " failed: " .. result)
+    end
+  end
+
+  local fields_out = {
+    id = jobId,
+    token = tostring(fields.token or ""),
+    state = state,
+    out = result:sub(1, 700),
+  }
+  if remoteAddress and remoteAddress ~= "" then
+    self:openModem()
+    if self.modem then
+      self.modem:send(remoteAddress, "RESULT", fields_out)
+    end
+  else
+    self:sendToMaster("RESULT", fields_out)
+  end
+  self.runningJob = nil
+  if self.log then
+    self.log.info("node: job " .. jobId .. " (" .. claim.task .. ") " .. state)
+  end
+  self:draw()
+end
+
+function node:dropJob(jobId)
+  self.claims[jobId] = nil
+end
+
+--- Persist the drain flag; a draining node stops claiming new work.
+function node:setDrain(fields)
+  local value = fields.drain == true or fields.drain == "true"
+  self.drain = value
+  self.config.set("drain", value and "true" or "false")
+  self:persist()
+  if self.log then
+    self.log.info(value and "node: draining" or "node: accepting work again")
+  end
+  self:sendStatus()
+  self:draw()
+end
+
 function node:handleModem(localAddress, remoteAddress, port, distance, message)
   local _ = localAddress, distance
   if not self.modem or tonumber(port) ~= self.modem.port then
@@ -360,6 +553,14 @@ function node:handleModem(localAddress, remoteAddress, port, distance, message)
   elseif verb == "PING" and fields.id == self.id then
     self:adoptMaster(fields, remoteAddress)
     self:sendPong(remoteAddress)
+  elseif verb == "JOB" then
+    self:offerJob(fields)
+  elseif verb == "GRANT" then
+    self:startGranted(fields, remoteAddress)
+  elseif verb == "CANCEL" then
+    self:dropJob(tostring(fields.id or ""))
+  elseif verb == "DRAIN" and fields.id == self.id then
+    self:setDrain(fields)
   end
   return true
 end
@@ -517,6 +718,12 @@ function node:tick()
       self:sendHello()
     end
     self:draw()
+  end
+
+  for jobId, claim in pairs(self.claims) do
+    if now >= claim.expires then
+      self.claims[jobId] = nil
+    end
   end
 end
 

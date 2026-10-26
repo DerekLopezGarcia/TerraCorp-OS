@@ -118,13 +118,15 @@ jobs (disk journal, re-offer on restart), the first claim wins, and leases
 re-offer stalled jobs. Adding nodes to the bus never requires a central
 broker.
 
-- Add `tc.jobs` and the `JOB`/`CLAIM`/`GRANT`/`RESULT`/`CANCEL`/`DRAIN` verbs
-  with at-least-once delivery and idempotent results.
-- Add worker slots, a built-in task registry (`fs.check`, `disk.report`,
-  `bench.ping`), and the `/var/jobs.tsv` journal on the publisher.
-- Add timeouts, retries, cancellation, and result return to the requesting app.
-- Add `plant status` (Nodes summary with jobs and drained flags) and `node
-  drain`.
+**0.3.2a built:** `tc.jobs` with the six verbs, the `/var/jobs.tsv` journal
+(resumed on boot), worker slots with the built-in tasks (`fs.check`,
+`disk.report`, `log.tail`, `comp.count`), drain persistence, and the Nodes
+**Check** button with the queued/granted header counts.
+
+Still to build:
+
+- `DRAIN` action and **plant status** polish in Nodes (0.3.2b).
+- Timeouts surfaced to the requesting app and result history browsing.
 - Keep jobs contracted: a node runs a named task, not arbitrary remote code.
 
 **Exit criteria:** a batch job runs on a worker and returns to its requester;

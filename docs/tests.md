@@ -77,6 +77,13 @@ filesystem, floppy, and modem components:
     the `source=master` marker for the boot-time applier, and `STATUS`
     records the node version in the registry (legacy 8-column files still
     load).
+12. The Relay queue passes framing for all six verbs; the publisher grants
+    the first claim, drops stale-token results, re-offers expired leases
+    within the retry budget, fails past-TTL jobs, cancels with a broadcast,
+    and a fresh publisher resumes and re-offers the queued journal after a
+    restart. The worker claims known tasks only, runs a granted `fs.check`
+    to `done`, keeps the drain flag, stops claiming while draining, and
+    forgets expired claims.
 
 `npm run test:nodes` runs the Nodes app in the desktop harness with a fake
 floppy, rack drive, and wired modem. It presses F7, verifies the rack list, and

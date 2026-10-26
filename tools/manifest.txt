@@ -14,6 +14,7 @@ src/init.lua
 src/lib/tc/cluster.lua
 src/lib/tc/config.lua
 src/lib/tc/gfx.lua
+src/lib/tc/jobs.lua
 src/lib/tc/keys.lua
 src/lib/tc/log.lua
 src/lib/tc/net.lua

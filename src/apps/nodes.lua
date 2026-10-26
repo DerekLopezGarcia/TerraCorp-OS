@@ -287,6 +287,20 @@ function nodes:refresh(ctx)
   end
 end
 
+function nodes:checkJobs(ctx)
+  local cluster = self:cluster(ctx)
+  if not cluster then
+    return self:notify(ctx, "error", "Cluster service is unavailable.")
+  end
+
+  local job, reason = cluster:publishJob("fs.check", "")
+  if job then
+    self:notify(ctx, "info", "Integrity check queued as " .. tostring(job.id) .. ".")
+  else
+    self:notify(ctx, "warn", tostring(reason or "Could not queue the check."))
+  end
+end
+
 function nodes:armUpdate(ctx)
   local cluster = self:cluster(ctx)
   if not cluster then
@@ -467,6 +481,7 @@ function nodes:drawButtons(ctx, installer, node)
   local actions = {
     { label = lead, method = lead == "Stop" and "stop" or "prepare" },
     { label = "Refresh", method = "refresh" },
+    { label = "Check", method = "checkJobs" },
     { label = "Update", method = "armUpdate" },
     { label = "Rename", method = "startRename" },
     { label = "Role", method = "cycleRole" },
@@ -534,6 +549,11 @@ function nodes:draw(ctx)
     local color = c.dim
     if summary.total > 0 then
       color = summary.online == summary.total and c.ok or c.warn
+    end
+    local jobCounts = cluster and cluster:jobsSummary() or nil
+    if jobCounts and (jobCounts.queued > 0 or jobCounts.granted > 0) then
+      right = string.format("%s · %dq/%dg", right, jobCounts.queued, jobCounts.granted)
+      color = c.warn
     end
     if stale > 0 then
       right = string.format("%s · %d to update", right, stale)
@@ -663,6 +683,9 @@ function nodes:handle(ctx, name, a, b, c)
     return true
   elseif char == "f" then
     self:refresh(ctx)
+    return true
+  elseif char == "c" then
+    self:checkJobs(ctx)
     return true
   elseif char == "u" then
     self:armUpdate(ctx)

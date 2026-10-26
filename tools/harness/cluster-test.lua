@@ -1547,4 +1547,409 @@ check(nfAck, "netfetch acknowledges the install")
 
 end
 
+--------------------------------------------------------------------------------
+-- Relay: job queue without a coordinator
+--------------------------------------------------------------------------------
+
+do
+local jobs = require("tc.jobs")
+
+-- Framing of the six Relay verbs.
+local relayFrames = {
+  { "JOB",    { id = "j-1", pub = "pub-1", task = "fs.check", args = "", ttl = 300, att = 1 } },
+  { "CLAIM",  { id = "j-1", worker = "node-1", jobs = 0 } },
+  { "GRANT",  { id = "j-1", token = "j-1:1:1", lease = 45 } },
+  { "RESULT", { id = "j-1", token = "j-1:1:1", state = "done", out = "ok" } },
+  { "CANCEL", { id = "j-1", pub = "pub-1" } },
+  { "DRAIN",  { id = "node-1", drain = "true" } },
+}
+for _, item in ipairs(relayFrames) do
+  local encoded, encodeReason = net.encode(item[1], item[2])
+  check(encoded ~= nil, item[1] .. " encodes: " .. tostring(encodeReason))
+  local decodedVerb, decodedFields = net.decode(encoded)
+  equal(decodedVerb, item[1], item[1] .. " round-trips")
+  equal(decodedFields.id, item[2].id, item[1] .. " keeps the job id")
+end
+
+local jqClock = 1000
+local pubOut = {}
+local journalVfs = vfsModule.new(newVolume())
+
+local function makePublisher()
+  return jobs.newPublisher({
+    id = "pub-computer",
+    vfs = journalVfs,
+    log = nil,
+    now = function()
+      return jqClock
+    end,
+    send = function(address, verb, fields)
+      pubOut[#pubOut + 1] = { to = address, verb = verb, fields = fields }
+      return true
+    end,
+    broadcast = function(verb, fields)
+      pubOut[#pubOut + 1] = { to = "*", verb = verb, fields = fields }
+      return true
+    end,
+  })
+end
+
+local function lastOut(verb)
+  for index = #pubOut, 1, -1 do
+    if pubOut[index].verb == verb then
+      return pubOut[index]
+    end
+  end
+  return nil
+end
+
+local function countOut(verb)
+  local count = 0
+  for _, item in ipairs(pubOut) do
+    if item.verb == verb then
+      count = count + 1
+    end
+  end
+  return count
+end
+
+local pub = makePublisher()
+
+-- Publishing queues the job, broadcasts JOB, and appends the journal.
+local job, publishReason = pub:publish("fs.check", "")
+check(job ~= nil, "publish queues the job: " .. tostring(publishReason))
+check(job.state == "queued" and job.attempts == 1, "a new job is queued at attempt 1")
+local offer = lastOut("JOB")
+check(offer ~= nil and offer.fields.task == "fs.check" and offer.fields.att == 1,
+  "publish broadcasts JOB at attempt 1")
+check((journalVfs.read("/var/jobs.tsv") or ""):find(job.id, 1, true) ~= nil,
+  "publish appends the job to the journal")
+
+check(pub:publish("", "") == nil, "an empty task name is refused")
+check(pub:publish("bad task!", "") == nil, "an invalid task name is refused")
+
+-- The first live claim wins; later claims are ignored.
+pub:handleClaim({ id = job.id, worker = "node-1" }, "modem-1")
+equal(job.state, "granted", "the first claim grants the job")
+local grant = lastOut("GRANT")
+check(grant ~= nil and grant.to == "modem-1" and grant.fields.token == job.token,
+  "the grant goes to the claimant with the lease token")
+pub:handleClaim({ id = job.id, worker = "node-2" }, "modem-2")
+equal(countOut("GRANT"), 1, "a second claim on a granted job is ignored")
+
+-- A result with the live token closes the job; a stale token is dropped.
+pub:handleResult({ id = job.id, token = job.token, state = "done", out = "ok" })
+equal(job.state, "done", "a live-token result completes the job")
+equal(job.result, "ok", "the result output is recorded")
+
+local job2 = pub:publish("disk.report", "")
+pub:handleClaim({ id = job2.id, worker = "node-1" }, "modem-1")
+pub:handleResult({ id = job2.id, token = "j-1:1:1", state = "done", out = "stale" })
+equal(job2.state, "granted", "a stale token result is ignored")
+
+-- Lease expiry re-offers with a new attempt; the retry budget fails the job.
+jqClock = jqClock + jobs.LEASE + 1
+pub:tick()
+equal(job2.attempts, 2, "an expired lease is re-offered as attempt 2")
+equal(job2.state, "queued", "the re-offer clears the grant")
+equal(countOut("JOB"), 3, "the re-offer broadcasts JOB again")
+pub:handleClaim({ id = job2.id, worker = "node-3" }, "modem-3")
+local grant2 = lastOut("GRANT")
+check(grant2 ~= nil and grant2.fields.token == job2.token,
+  "the second attempt grants a fresh token")
+jqClock = jqClock + jobs.LEASE + 1
+pub:tick()
+equal(job2.attempts, 3, "the second expiry re-offers attempt 3")
+pub:handleClaim({ id = job2.id, worker = "node-4" }, "modem-4")
+jqClock = jqClock + jobs.LEASE + 1
+pub:tick()
+equal(job2.state, "failed", "a job past the retry budget fails")
+equal(job2.result, "no claimant", "the failed job records the reason")
+
+-- A queued job with no claimant also re-offers and eventually fails.
+local job3 = pub:publish("log.tail", "5")
+jqClock = jqClock + jobs.LEASE + 1
+pub:tick()
+equal(job3.attempts, 2, "an unclaimed job is re-offered")
+jqClock = jqClock + jobs.LEASE + 1
+pub:tick()
+jqClock = jqClock + jobs.LEASE + 1
+pub:tick()
+equal(job3.state, "failed", "an unclaimed job fails after the retry budget")
+equal(job3.result, "no claimant", "the no-claimant reason is recorded")
+
+-- A job older than its TTL fails outright.
+local job4 = pub:publish("comp.count", "")
+jqClock = jqClock + jobs.TTL + 1
+pub:tick()
+equal(job4.state, "failed", "a job past its TTL fails")
+equal(job4.result, "expired", "the TTL reason is recorded")
+
+-- Cancel marks the job and tells claimants to drop it.
+local job5 = pub:publish("fs.check", "")
+local canceled = pub:cancel(job5.id)
+check(canceled ~= nil, "cancel returns the canceled job")
+equal(job5.state, "canceled", "cancel marks the job")
+check(lastOut("CANCEL") ~= nil, "cancel broadcasts CANCEL")
+check(pub:cancel(job5.id) == nil, "a closed job cannot be canceled again")
+
+-- A fresh publisher over the same journal resumes unfinished work and keeps
+-- minting unique ids. The clock moves to a fresh slot so the resumed job is
+-- not past its TTL.
+jqClock = 5000
+local job6 = pub:publish("fs.check", "")
+local pub2 = makePublisher()
+check(pub2:start() == true, "a fresh publisher loads the journal")
+local summary = pub2:summary()
+check(summary.queued == 1, "the unfinished job is queued after a restart: "
+  .. tostring(summary.queued))
+jqClock = jqClock + jobs.REOFFER + 1
+pub2:tick()
+local resumed = lastOut("JOB")
+check(resumed ~= nil and resumed.fields.id == job6.id and tonumber(resumed.fields.att) == 2,
+  "a resumed publisher re-offers the queued job")
+local job7 = pub2:publish("fs.check", "")
+check(job7.id ~= job6.id, "a resumed publisher mints fresh ids")
+
+--------------------------------------------------------------------------------
+-- Worker side: claim, run, and answer named tasks
+--------------------------------------------------------------------------------
+
+local workerClock = 10
+local workerCalls = {}
+local workerConfigData = {
+  hostname = "TC-W1",
+  nodeRole = "worker",
+  master = "modem-master",
+  masterId = "master-computer",
+  drain = "",
+}
+local workerConfig = {
+  get = function(key)
+    return workerConfigData[key]
+  end,
+  set = function(key, value)
+    workerConfigData[key] = value
+  end,
+  save = function()
+    return true
+  end,
+}
+local workerVfs = vfsModule.new(newVolume())
+for _, path in ipairs(nodeModule.CHECK_PATHS) do
+  workerVfs.write(path, "-- ok\n")
+end
+local workerComponent = {
+  list = function(kind)
+    local items = ({ modem = { "modem-w1" } })[kind] or {}
+    local index = 0
+    return function()
+      index = index + 1
+      if items[index] then
+        return items[index], kind
+      end
+    end
+  end,
+  invoke = function(address, method, ...)
+    if address == "modem-w1" then
+      if method == "isWired" then
+        return true
+      elseif method == "open" or method == "close" then
+        return true
+      elseif method == "send" or method == "broadcast" then
+        workerCalls[#workerCalls + 1] = {
+          to = select(1, ...),
+          verb = net.decode((select(3, ...))),
+          frame = (select(3, ...)),
+        }
+        return true
+      end
+    end
+    return nil, "unknown component"
+  end,
+}
+local workerComputer = {
+  address = function()
+    return "worker-computer-1"
+  end,
+  uptime = function()
+    return workerClock
+  end,
+  totalMemory = function()
+    return 2 * 1024 * 1024
+  end,
+}
+local worker = nodeModule.new({
+  kernel = {
+    address = "worker-computer-1",
+    volumeAddress = "hdd-w",
+    uptime = function()
+      return workerClock
+    end,
+    storage = function()
+      return 0, 2 * 1024 * 1024
+    end,
+    saveConfig = function()
+      return true
+    end,
+  },
+  config = workerConfig,
+  vfs = workerVfs,
+  log = nil,
+  version = { version = "0.3.1" },
+  theme = { colors = { bg = 0, text = 0, dim = 0, accent = 0, ok = 0, warn = 0 } },
+  gfxModule = nil,
+  component = workerComponent,
+  computer = workerComputer,
+  os = {},
+})
+worker.healthy = true
+worker:openModem()
+check(worker.modem ~= nil, "the worker node opens its modem")
+
+local function workerSends(verb)
+  local found = nil
+  for _, call in ipairs(workerCalls) do
+    if type(call.verb) == "string" and call.verb == verb then
+      found = call
+    end
+  end
+  return found
+end
+
+-- A known task with a free slot is claimed.
+worker:handleModem("modem-w1", "modem-master", net.PORT, 0,
+  net.encode("JOB", { id = "jobA", pub = "pub-1", task = "fs.check", args = "", att = 1 }))
+local claimCall = workerSends("CLAIM")
+check(claimCall ~= nil, "a known task is claimed")
+check(claimCall and net.decode(claimCall.frame) and
+  select(2, net.decode(claimCall.frame)).worker == "worker-computer-1",
+  "the claim names the worker")
+
+-- An unknown task and a draining node are not claimed.
+worker:handleModem("modem-w1", "modem-master", net.PORT, 0,
+  net.encode("JOB", { id = "jobB", pub = "pub-1", task = "not.a.task", args = "", att = 1 }))
+local stillA = workerSends("CLAIM")
+equal(stillA and select(2, net.decode(stillA.frame)).id, "jobA",
+  "an unknown task is not claimed")
+
+-- The grant runs the task and answers the granting address.
+worker:handleModem("modem-w1", "modem-master", net.PORT, 0,
+  net.encode("GRANT", { id = "jobA", token = "jobA:1:1", lease = 45 }))
+local resultCall = workerSends("RESULT")
+check(resultCall ~= nil, "the granted task answers with RESULT")
+equal(resultCall.to, "modem-master", "the result goes back to the granter")
+local resultVerb, resultFields = net.decode(resultCall.frame)
+equal(resultFields.state, "done", "a healthy node runs fs.check to done")
+equal(resultFields.out, "ok", "the fs.check output is recorded")
+
+-- DRAIN persists the flag and stops claiming.
+worker:handleModem("modem-w1", "modem-master", net.PORT, 0,
+  net.encode("DRAIN", { id = "worker-computer-1", drain = "true" }))
+equal(workerConfigData.drain, "true", "the drain flag persists in the config")
+local statusFields = worker:statusFields()
+equal(statusFields.drain, "true", "STATUS reports the drain flag")
+worker:handleModem("modem-w1", "modem-master", net.PORT, 0,
+  net.encode("JOB", { id = "jobC", pub = "pub-1", task = "fs.check", args = "", att = 1 }))
+local drainClaim = workerSends("CLAIM")
+equal(drainClaim and select(2, net.decode(drainClaim.frame)).id, "jobA",
+  "a draining node does not claim new work")
+
+-- Undraining accepts work again; CANCEL drops a pending claim.
+worker:handleModem("modem-w1", "modem-master", net.PORT, 0,
+  net.encode("DRAIN", { id = "worker-computer-1", drain = "false" }))
+equal(worker:statusFields().drain, "false", "undraining clears the flag")
+worker:handleModem("modem-w1", "modem-master", net.PORT, 0,
+  net.encode("JOB", { id = "jobD", pub = "pub-1", task = "comp.count", args = "", att = 1 }))
+local claimD = workerSends("CLAIM")
+check(claimD ~= nil and select(2, net.decode(claimD.frame)).id == "jobD",
+  "an undrained node claims again")
+worker:handleModem("modem-w1", "modem-master", net.PORT, 0,
+  net.encode("CANCEL", { id = "jobD", pub = "pub-1" }))
+check(worker.claims["jobD"] == nil, "CANCEL drops the pending claim")
+
+-- Expired claims are forgotten by the tick sweep.
+worker:handleModem("modem-w1", "modem-master", net.PORT, 0,
+  net.encode("JOB", { id = "jobE", pub = "pub-1", task = "fs.check", args = "", att = 1 }))
+check(worker.claims["jobE"] ~= nil, "a new claim is pending")
+workerClock = workerClock + nodeModule.CLAIM_TTL + 1
+worker:tick()
+check(worker.claims["jobE"] == nil, "the tick sweep forgets expired claims")
+
+--------------------------------------------------------------------------------
+-- Master wiring: CLAIM and RESULT reach the publisher through cluster:handle
+--------------------------------------------------------------------------------
+
+local mClock = 2000
+local mCalls = {}
+local mComponent = {
+  list = function(kind)
+    local items = ({ modem = { "modem-m" } })[kind] or {}
+    local index = 0
+    return function()
+      index = index + 1
+      if items[index] then
+        return items[index], kind
+      end
+    end
+  end,
+  invoke = function(address, method, ...)
+    if address == "modem-m" then
+      if method == "isWired" then
+        return true
+      elseif method == "open" or method == "close" then
+        return true
+      elseif method == "send" or method == "broadcast" then
+        mCalls[#mCalls + 1] = {
+          to = (select(1, ...)),
+          verb = (net.decode((select(3, ...)))),
+          frame = (select(3, ...)),
+        }
+        return true
+      end
+    end
+    return nil, "unknown component"
+  end,
+}
+local mCluster = clusterModule.new({
+  kernel = {
+    address = "m-computer",
+    volumeAddress = "fs-m",
+    uptime = function()
+      return mClock
+    end,
+    mount = function()
+      return nil
+    end,
+  },
+  vfs = vfsModule.new(newVolume()),
+  config = {},
+  log = nil,
+  version = { version = "0.3.1" },
+  component = mComponent,
+  computer = { address = function() return "m-computer" end },
+})
+check(mCluster:start() == true, "the master starts for the jobs test")
+
+local mJob, mReason = mCluster:publishJob("fs.check", "")
+check(mJob ~= nil, "cluster:publishJob queues the job: " .. tostring(mReason))
+mCluster:handle("modem_message", "modem-m", "modem-w", net.PORT, 0,
+  net.encode("CLAIM", { id = mJob.id, worker = "wk-1" }))
+equal(mJob.state, "granted", "a CLAIM routes to the publisher")
+local mGrant = nil
+for _, call in ipairs(mCalls) do
+  if call.verb == "GRANT" then
+    mGrant = call
+  end
+end
+check(mGrant ~= nil, "the publisher grants through cluster:send")
+mCluster:handle("modem_message", "modem-m", "modem-w", net.PORT, 0,
+  net.encode("RESULT", { id = mJob.id, token = mJob.token, state = "done", out = "ok" }))
+equal(mJob.state, "done", "a RESULT routes to the publisher")
+check(mCluster:cancelJob(mJob.id) == nil, "a closed job cannot be canceled again")
+local mCounts = mCluster:jobsSummary()
+equal(mCounts.done, 1, "the cluster summary counts the finished job")
+
+end
+
 return table.concat(failures, "\n")

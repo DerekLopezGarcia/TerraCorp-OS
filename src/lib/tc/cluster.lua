@@ -10,6 +10,7 @@ local net = require("tc.net")
 local provision = require("tc.provision")
 local registry = require("tc.registry")
 local updater = require("tc.updater")
+local jobsModule = require("tc.jobs")
 
 local cluster = {}
 cluster.__index = cluster
@@ -61,6 +62,21 @@ function cluster.new(env)
   self.lastInstallLog = nil
   self.lastInstallLogAt = 0
   self.badFrames = 0
+
+  self.jobs = jobsModule.newPublisher({
+    id = self.kernel.address or self.computer.address(),
+    vfs = self.vfs,
+    log = self.logger,
+    now = function()
+      return self:now()
+    end,
+    send = function(address, verb, fields)
+      return self:send(address, verb, fields)
+    end,
+    broadcast = function(verb, fields)
+      return self:broadcast(verb, fields)
+    end,
+  })
 
   return self
 end
@@ -127,6 +143,16 @@ end
 function cluster:start()
   self.nodes = registry.load(self.vfs)
   self:log(string.format("Loaded %d registered node(s)", #self.nodes))
+
+  local resumed = self.jobs:start()
+  if resumed then
+    local counts = self.jobs:summary()
+    self:log(string.format(
+      "Resumed the job queue (%d queued, %d granted)",
+      counts.queued,
+      counts.granted
+    ))
+  end
 
   local ok, reason = self:openModem()
   if not ok then
@@ -932,6 +958,12 @@ function cluster:handle(name, localAddress, remoteAddress, port, distance, messa
     self:handleList(fields, remoteAddress)
   elseif verb == "FETCH" then
     self:handleFetch(fields, remoteAddress)
+  elseif verb == "CLAIM" then
+    self.jobs:handleClaim(fields, remoteAddress)
+  elseif verb == "RESULT" then
+    self.jobs:handleResult(fields)
+  elseif verb == "JOB" or verb == "CANCEL" or verb == "DRAIN" then
+    -- Relay verbs the master publishes but never consumes.
   elseif verb == "PING" then
     -- Masters do not answer PING; only nodes do.
   end
@@ -998,7 +1030,38 @@ function cluster:tick()
   if self.dirty and now - self.lastSave >= cluster.SAVE_INTERVAL then
     self:save()
   end
+
+  self.jobs:tick()
   return changed
+end
+
+--- Publish a job on the cluster queue. Returns the job, or nil and a reason.
+function cluster:publishJob(task, args)
+  local ok, reason = self:openModem()
+  if not ok then
+    return nil, "the network card is unavailable: " .. tostring(reason)
+  end
+  local job, publishReason = self.jobs:publish(task, args)
+  if job then
+    self:log(string.format("Published job %s (%s)", job.id, job.task))
+  end
+  return job, publishReason
+end
+
+function cluster:cancelJob(jobId)
+  local job, reason = self.jobs:cancel(jobId)
+  if job then
+    self:log("Canceled job " .. tostring(job.id))
+  end
+  return job, reason
+end
+
+function cluster:jobsList()
+  return self.jobs:list()
+end
+
+function cluster:jobsSummary()
+  return self.jobs:summary()
 end
 
 function cluster:shutdown()

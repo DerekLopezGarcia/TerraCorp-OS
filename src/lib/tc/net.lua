@@ -32,6 +32,12 @@ local VERBS = {
   DATA = { "id", "path" },
   MISS = { "id", "path" },
   PULL = { "id", "v" },
+  JOB = { "id", "pub", "task" },
+  CLAIM = { "id", "worker" },
+  GRANT = { "id", "token" },
+  RESULT = { "id", "token", "state" },
+  CANCEL = { "id", "pub" },
+  DRAIN = { "id" },
 }
 
 local ESCAPES = {

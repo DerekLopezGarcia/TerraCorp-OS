@@ -59,12 +59,15 @@ wait for Vault (0.3.3) or are written to a file and referenced by name.
 - On `JOB`: if the task is known, the slot is free, the node is not draining,
   and the TTL is sane, it sends `CLAIM`; the first `GRANT` with a matching
   token starts the task.
-- Tasks are a registry of built-ins (`tc.tasks`): each is
-  `{ name, run(args, ctx) → ok, out }`. First set:
+- Tasks are a registry of built-ins (`node.TASKS`): each is a named function
+  `run(self, args) -> ok, out`. First set:
   - `fs.check` — integrity sweep of the node's own system paths (the boot
     check, reportable)
-  - `disk.report` — per-disk used/total for the node
-  - `bench.ping` — signal round-trip measurement for the segment
+  - `disk.report` — system disk used/total for the node
+  - `log.tail` — the last N lines of the node's own `/var/log/tc.log`
+  - `comp.count` — component census by kind
+  - `bench.ping` was dropped: measuring signal round-trips from inside the
+    worker loop would consume the loop's own frames.
 - A running task cannot be interrupted in 0.3.2 (tasks are short, seconds);
   `CANCEL` only prevents a queued claim from starting.
 - Drain: a `DRAIN` frame persists the flag in the node config; a draining node
