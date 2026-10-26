@@ -404,7 +404,7 @@ function nodes:drawLog(ctx, installer, row)
   end
 end
 
-function nodes:drawNode(ctx, node, selected, x, y, width, twoLine)
+function nodes:drawNode(ctx, node, selected, x, y, width, twoLine, servable)
   local c = ctx.colors
   local v = ctx.view
 
@@ -428,7 +428,13 @@ function nodes:drawNode(ctx, node, selected, x, y, width, twoLine)
   v:textRight(width, y, right, stateFg, bg)
 
   if twoLine then
-    local version = node.v and node.v ~= "" and (" · v" .. tostring(node.v)) or ""
+    local version = ""
+    if node.v and node.v ~= "" then
+      version = " · v" .. tostring(node.v)
+      if servable and node.v ~= servable then
+        version = version .. " (update)"
+      end
+    end
     local detail = string.format(
       "%s · %s RAM · %s disk%s",
       tostring(node.role or "worker"),
@@ -514,11 +520,24 @@ function nodes:draw(ctx)
   self.hits = {}
 
   v:put(1, 1, "Rack nodes", c.accent, c.deep)
+  local servable = cluster and select(2, cluster:serveTree()) or nil
+  local stale = 0
+  if servable then
+    for _, node in ipairs(list) do
+      if node.state == "online" and node.v and node.v ~= "" and node.v ~= servable then
+        stale = stale + 1
+      end
+    end
+  end
   if summary then
     local right = string.format("%d/%d up", summary.online, summary.total)
     local color = c.dim
     if summary.total > 0 then
       color = summary.online == summary.total and c.ok or c.warn
+    end
+    if stale > 0 then
+      right = string.format("%s · %d to update", right, stale)
+      color = c.warn
     end
     v:textRight(ctx.w, 1, right, color, c.deep)
   end
@@ -557,7 +576,8 @@ function nodes:draw(ctx)
         1,
         y,
         ctx.w,
-        layout.twoLine
+        layout.twoLine,
+        servable
       )
     end
   end

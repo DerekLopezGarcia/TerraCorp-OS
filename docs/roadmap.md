@@ -112,9 +112,19 @@ interrupted pull retries cleanly from the floppy.
 
 ### 0.3.2 Relay — next
 
-- Add a persistent job queue and dispatch jobs to `worker` nodes.
+Design in [`relay.md`](relay.md): a **coordinator-less** work queue. Any node
+can publish work and any worker can take it — the publisher only books its own
+jobs (disk journal, re-offer on restart), the first claim wins, and leases
+re-offer stalled jobs. Adding nodes to the bus never requires a central
+broker.
+
+- Add `tc.jobs` and the `JOB`/`CLAIM`/`GRANT`/`RESULT`/`CANCEL`/`DRAIN` verbs
+  with at-least-once delivery and idempotent results.
+- Add worker slots, a built-in task registry (`fs.check`, `disk.report`,
+  `bench.ping`), and the `/var/jobs.tsv` journal on the publisher.
 - Add timeouts, retries, cancellation, and result return to the requesting app.
-- Add `plant status` and `node drain` commands.
+- Add `plant status` (Nodes summary with jobs and drained flags) and `node
+  drain`.
 - Keep jobs contracted: a node runs a named task, not arbitrary remote code.
 
 **Exit criteria:** a batch job runs on a worker and returns to its requester;
