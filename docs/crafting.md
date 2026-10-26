@@ -14,6 +14,13 @@ operator pick which types to allow and how much to feed, and gate the feed
 while the result's stock is below its limit. Target: 0.5.x `tc/craft` plus a
 selection UI. Design; "verify" items need in-game probes.
 
+**Why this exists**: drawers ship a redstone upgrade that outputs 0–15 by
+fill fraction — too coarse for precise or large stores. The program
+**replaces that redstone logic**: exact item counts from inventory reads,
+aggregate warehouses (many drawers = one logical stock), and per-type control.
+Redstone stays only as wiring the program emits, never as the sensor of
+record.
+
 ## Architecture
 
 ```text
@@ -32,6 +39,24 @@ selection UI. Design; "verify" items need in-game probes.
   result type and its count to enforce the stock limit.
 - **Gate**: one redstone line (Redstone Card) enables/disables the feed from
   IN into the circuit. The circuit and machines are untouched.
+
+## Warehouse abstraction
+
+A **named stock** is the unit of control, not a physical container:
+
+```
+craft1.in  = drawer A + drawer B        (aggregated counts per type)
+craft1.out = drawer C + drawer D
+```
+
+- The program sums exact per-type counts across every container assigned to a
+  name. This is what makes stores **bigger** (N drawers behave as one stock
+  with full precision, no 0–15 ceiling) and **more precise** (true counts, no
+  fill fractions).
+- Containers join/leave a stock by config line; the loop never changes.
+- The drawer redstone upgrade (0–15 by fill) is acknowledged but **not
+  used by TerraCorp**: it is the constraint being replaced. It remains
+  available for dumb vanilla-side indicators.
 
 ## Program contract
 
@@ -69,21 +94,21 @@ every pass (≤ 1 Hz):
 - When `out_count` crosses the limit, the gate closes and the selection
   stays armed for the next run (or auto-resets, configurable).
 
-## The sensing requirement (harder than plain gating)
+## The sensing requirement (the load-bearing dependency)
 
-Type + quantity selection **requires inventory reads** — a comparator cannot
-tell item types apart. This is the load-bearing dependency:
+Type + quantity selection and precise limits **require inventory reads** —
+the drawer upgrade's 0–15 signal cannot identify types or give exact counts:
 
 | Sensor | Role | To verify |
 |---|---|---|
-| **Adapter on buffer (chest/barrel/drawer)** | `inventory` component: `getStackInSlot`-style reads with item type + count (full NBT per OC's inventory_controller precedent) | Does the Adapter expose the exact buffer types in use? Especially **Storage Drawers** — not on OC's vanilla integration list |
-| Comparator | Fast coarse stock (0–15) for the gate when OUT is a simple container | strength→count table per buffer type |
-| Transposer (optional later) | Push-mode feeding if the passive feed + gate cannot respect per-type quantities | insertion into the circuit's entry point |
+| **Adapter on drawer/chest/barrel** | `inventory` component: per-slot reads with item type + count (OC's inventory_controller precedent returns full NBT). This is the sensor of record | Does the Adapter expose Storage Drawers? Not on OC's vanilla integration list — if it fails, precision fails with it |
+| Drawer redstone upgrade (0–15) | Emergency fallback only: gate on total fill when adapter reads are unavailable, with a persistent "types unverified" warning | Fill fraction basis (per slot? per capacity?) |
+| Transposer (optional) | Push-mode feeding if the passive feed + gate cannot respect per-type quantities | Insertion into the circuit's entry point |
 
-**Degradation rule**: if a buffer cannot be item-read (adapter path fails),
-that line runs in **coarse mode** — gate on total comparator stock only, with
-a persistent warning "ingredient types unverified". The program must never
-pretend to know types it did not read.
+**Degradation rule**: a line without inventory reads runs in **coarse mode**
+(gate by total fill only, warning shown). The program must never pretend to
+know types or exact counts it did not read. Precision is opt-in per container,
+and the UI must show which stocks are exact and which are coarse.
 
 ## Failure semantics
 
@@ -110,12 +135,14 @@ pretend to know types it did not read.
 
 ## Verification checklist (crafting hall session)
 
-1. **Adapter inventory reads on the real buffers**: kinds, methods, and
-   whether full item NBT (type + count) comes through — especially drawers.
-2. Comparator tables (coarse mode) per buffer type.
-3. Gate semantics: does gate-low truly stop the existing feed?
-4. Read cadence: cost of a full inventory read at 1 Hz on a worker node
-   alongside Relay duty.
+1. **Adapter inventory reads on the real drawers**: kinds, methods, and
+   whether full item NBT (type + count) comes through. This decides whether
+   the project delivers precision or stays coarse.
+2. Drawer redstone upgrade (fallback): fill-fraction basis of the 0–15
+   signal, for the coarse mode only.
+3. Aggregation probe: read N drawers from one node at 1 Hz — read cost and
+   whether component visibility allows it from a single machine.
+4. Gate semantics: does gate-low truly stop the existing feed?
 5. Delta accounting: consume items manually and confirm the loop's
    `fed_so_far` tracks the deltas correctly.
 
