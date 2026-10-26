@@ -536,10 +536,16 @@ local function apply()
 
   local stageRoot = STAGE_ROOT .. "/" .. version
   local backupRoot = BACKUP_ROOT .. "/" .. version
-  local clearOk, clearError = removeTree(stageRoot)
-  if not clearOk then
-    finish(false, "could not clear the staging directory (" .. tostring(clearError) .. ")")
-    return false, clearError
+  if source ~= "master" then
+    -- Re-downloading from GitHub: clear a stale stage of this version first.
+    -- A master-staged tree IS the download source, so it must survive until
+    -- its files are renamed into place; clearing it here destroyed the update
+    -- and stranded nodes on the old version.
+    local clearOk, clearError = removeTree(stageRoot)
+    if not clearOk then
+      finish(false, "could not clear the staging directory (" .. tostring(clearError) .. ")")
+      return false, clearError
+    end
   end
   local restored, restoreError = restoreBackup(backupRoot)
   if not restored then

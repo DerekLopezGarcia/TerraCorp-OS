@@ -35,6 +35,7 @@
     "test:updater-rollback": "node tools/harness/simulate.js updater_rollback --strict",
     "test:updater-recover": "node tools/harness/simulate.js updater_recover --strict",
     "test:boot-update": "node tools/harness/simulate.js boot_update --strict",
+    "test:boot-update-master": "node tools/harness/simulate.js boot_update_master --strict",
     "test:dashboard-tick": "node tools/harness/simulate.js dashboard_tick --strict",
     "test:refresh-rate": "node tools/harness/simulate.js refresh_rate --strict",
     "test:drag-metric": "node tools/harness/simulate.js drag_metric --strict"

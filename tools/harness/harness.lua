@@ -512,11 +512,13 @@ local fakeUpdateRollback = rawget(_G, "SCENARIO") == "updater_rollback"
 local fakeLegacyInternet = rawget(_G, "SCENARIO") == "updater_legacy"
 local fakeUpdateRecover = rawget(_G, "SCENARIO") == "updater_recover"
 local fakeBootUpdate = rawget(_G, "SCENARIO") == "boot_update"
+local fakeBootUpdateMaster = rawget(_G, "SCENARIO") == "boot_update_master"
 local nodesScenario = rawget(_G, "SCENARIO") == "nodes"
 local savedIconOrder = rawget(_G, "SCENARIO") == "icon_order_saved"
 local savedIconSlot = rawget(_G, "SCENARIO") == "icon_slot_saved"
 local savedUpdateIcon = rawget(_G, "SCENARIO") == "icon_update"
-local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet or fakeUpdateRecover or fakeBootUpdate
+local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet
+  or fakeUpdateRecover or fakeBootUpdate or fakeBootUpdateMaster
 local mockedReleaseVersion
 if updateScenario then
   local currentVersion = files["/lib/tc/version.lua"]:match('version%s*=%s*"([^"]+)"')
@@ -535,6 +537,33 @@ if fakeBootUpdate then
   directories[stale .. "/lib"] = true
   directories[stale .. "/lib/tc"] = true
   written[stale .. "/lib/tc/version.lua"] = 'return { version = "0.0.0" }\n'
+end
+if fakeBootUpdateMaster then
+  -- A node update staged by tc.pull: the full runtime under
+  -- /var/update/stage/<version>/ (paths without src/) and a pending marker
+  -- with source=master. The applier must rename it into place WITHOUT
+  -- clearing the stage first.
+  directories["/var/update"] = true
+  written["/var/update/pending"] = "version=" .. mockedReleaseVersion
+    .. "\ntag=v" .. mockedReleaseVersion .. "\nsource=master\n"
+  written["/var/notes.txt"] = "Reactor inspection due Friday\n"
+  for path, body in pairs(files) do
+    if path == "/init.lua" or path:sub(1, 6) == "/boot/" or path:sub(1, 6) == "/lib/" or path:sub(1, 6) == "/apps/" then
+      local stagedPath = "/var/update/stage/" .. mockedReleaseVersion .. path
+      local dir = stagedPath:match("^(.*)/[^/]+$")
+      while dir and dir ~= "" do
+        directories[dir] = true
+        dir = dir:match("^(.*)/[^/]+$")
+      end
+      written[stagedPath] = body
+    end
+  end
+  local currentVersion = files["/lib/tc/version.lua"]:match('version%s*=%s*"([^"]+)"')
+  written["/var/update/stage/" .. mockedReleaseVersion .. "/lib/tc/version.lua"] =
+    files["/lib/tc/version.lua"]:gsub(
+      'version%s*=%s*"' .. currentVersion .. '"',
+      'version = "' .. mockedReleaseVersion .. '"'
+    )
 end
 if savedIconOrder then
   written["/etc/terracorp.cfg"] = 'return {\n'
@@ -1031,7 +1060,7 @@ elseif scenario == "vault" then
   idle(1)
   typeText("r") -- refresh
   idle(1)
-elseif scenario == "boot_update" then
+elseif scenario == "boot_update" or scenario == "boot_update_master" then
   idle(2)
 elseif scenario == "updater" or scenario == "updater_legacy" or scenario == "updater_recover" then
   if scenario ~= "updater" and scenario ~= "updater_legacy" then
@@ -1188,7 +1217,7 @@ if scenario == "updater_recover" then
   end
 end
 
-if scenario == "boot_update" then
+if scenario == "boot_update" or scenario == "boot_update_master" then
   if readReal("/var/update/pending") ~= nil then
     errors = errors + 1
     print("FAIL: the pending update marker was not cleared")
