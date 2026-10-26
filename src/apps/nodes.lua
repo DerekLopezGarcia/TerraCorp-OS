@@ -293,11 +293,32 @@ function nodes:checkJobs(ctx)
     return self:notify(ctx, "error", "Cluster service is unavailable.")
   end
 
-  local job, reason = cluster:publishJob("fs.check", "")
-  if job then
-    self:notify(ctx, "info", "Integrity check queued as " .. tostring(job.id) .. ".")
+  -- Queue the full diagnostic set: integrity, disk space, component census,
+  -- and the node's own log tail (which carries the boot applier's verdict on
+  -- a failed update). Results land in the master's log as each job completes.
+  local queued, failed = 0, nil
+  for _, task in ipairs({ "fs.check", "disk.report", "comp.count" }) do
+    local job, reason = cluster:publishJob(task, "")
+    if job then
+      queued = queued + 1
+    else
+      failed = reason
+    end
+  end
+  -- 30 lines of the node's own log: it carries the boot applier's verdict
+  -- after a failed update.
+  do
+    local job, reason = cluster:publishJob("log.tail", "30")
+    if job then
+      queued = queued + 1
+    else
+      failed = reason
+    end
+  end
+  if queued > 0 then
+    self:notify(ctx, "info", queued .. " diagnostic job(s) queued; watch the log.")
   else
-    self:notify(ctx, "warn", tostring(reason or "Could not queue the check."))
+    self:notify(ctx, "warn", tostring(failed or "Could not queue the check."))
   end
 end
 
