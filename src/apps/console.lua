@@ -136,6 +136,7 @@ function console:command(ctx, line)
       "echo <text>    print text",
       "clear          clear the terminal",
       "uptime         show session uptime",
+      "tps            estimate the site server tick rate",
       "mem            show node memory",
       "comps          list connected components",
       "log [n]        show recent log entries",
@@ -369,6 +370,20 @@ function console:command(ctx, line)
 
   if name == "uptime" then
     self:push("Session uptime: " .. ctx.util.humanTime(kernel:uptime()), "ok")
+    return
+  end
+
+  if name == "tps" then
+    local tps = kernel:tps()
+    if not tps then
+      self:push("tps: sampling the site clock (first reading in ~10 s)", "dim")
+      return
+    end
+    local level = (tps < 15 and "err") or (tps < 19 and "warn") or "ok"
+    local verdict = (tps < 15 and " · site overloaded")
+      or (tps < 19 and " · site degraded")
+      or " · nominal"
+    self:push(string.format("Site tick rate: %.1f TPS%s", tps, verdict), level)
     return
   end
 

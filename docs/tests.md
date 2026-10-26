@@ -169,6 +169,12 @@ Manual in-game checks for 0.3.0:
   `/var/vault/index.tsv` and reboot the master — after a node reports its
   disks, the log records "Vault index restored from the pool backup" and the
   file is browsable again.
+- Tick rate (0.3.6): run `tps` in the Terminal right after boot — it reports
+  "sampling the site clock (first reading in ~10 s)"; ~10 s later it prints
+  "Site tick rate: N TPS". Compare with `/forge tps` in the server chat:
+  TerraCorp's estimate should be within ~1 TPS. The System card shows
+  "Site N TPS" in its detail once the first window completes. Confirm
+  `computer.realTime` behaves as wall-clock seconds in-game (pending).
 
 ## 0.2.3 desktop pictogram checks
 

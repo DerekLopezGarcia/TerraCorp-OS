@@ -711,6 +711,12 @@ function computer.uptime()
   return clock
 end
 
+-- Wall clock, deliberately slower than the emulated clock so the kernel's
+-- tick-rate estimate lands below 20 and the degradation path is exercised.
+function computer.realTime()
+  return clock * 1.1
+end
+
 function computer.pullSignal(timeout)
   stats.pullCalls = (stats.pullCalls or 0) + 1
   stats.lastPullTimeout = timeout
@@ -865,6 +871,9 @@ if scenario == "dashboard_tick" then
     uptime = function()
       return now
     end,
+    tps = function()
+      return nil
+    end,
   }
   local app = module.create({ kernel = kernelMock })
   local initialReads = expensiveReads
@@ -971,6 +980,12 @@ elseif scenario == "icon_drag" then
 elseif scenario == "console" then
   ev("key_down", "screen-1", nil, 0x3D, "tester")
   typeText("help")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  -- Give the tick-rate sampler a full 10 s wall window (the harness clock
+  -- advances 1/30 s per loop iteration) before reading it.
+  idle(320)
+  typeText("tps")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(2)
 elseif scenario == "files" then
@@ -1217,6 +1232,10 @@ if STRICT then
   if scenario == "drag_metric" and not screen:find("interpolated frames", 1, true) then
     errors = errors + 1
     print("FAIL: drag interpolation did not report intermediate redraws")
+  end
+  if scenario == "console" and not screen:find("Site tick rate", 1, true) then
+    errors = errors + 1
+    print("FAIL: the tps command did not report the site tick rate")
   end
 
   if screen:find("could not list", 1, true) then

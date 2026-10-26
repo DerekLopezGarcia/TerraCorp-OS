@@ -41,6 +41,7 @@ function dashboard:refresh(ctx)
   self.storageUsed, self.storageTotal = kernel:storage()
   self.components = kernel:components()
   self.uptime = kernel:uptime()
+  self.tps = kernel:tps()
   self.samplesAt = kernel:uptime()
 end
 
@@ -84,6 +85,15 @@ function dashboard:draw(ctx)
     topKinds[#topKinds + 1] = entry.kind .. " x" .. entry.count
   end
 
+  local tpsColor = c.text
+  if type(self.tps) == "number" then
+    if self.tps < 15 then
+      tpsColor = c.danger
+    elseif self.tps < 19 then
+      tpsColor = c.warn
+    end
+  end
+
   -- Cards follow reading order and wrap to the next row without leaving the window.
   local cards = {
     {
@@ -95,8 +105,10 @@ function dashboard:draw(ctx)
     {
       title = "UPTIME",
       value = ctx.util.humanTime(self.uptime),
-      detail = "Session active",
-      tint = c.text,
+      detail = type(self.tps) == "number"
+        and string.format("Site %.1f TPS", self.tps)
+        or "Session active",
+      tint = tpsColor,
     },
     {
       title = "MEMORY",

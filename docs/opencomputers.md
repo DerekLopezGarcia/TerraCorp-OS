@@ -55,6 +55,11 @@ Verified scan-code subset:
   without an energy component; call it under `pcall`.
 - `computer.totalMemory()` / `freeMemory()` and filesystem `spaceUsed()` /
   `spaceTotal()` return bytes. OpenComputers has no filesystem `space()` method.
+- `computer.uptime()` returns emulated time that advances with server ticks;
+  `computer.realTime()` is believed to return wall-clock seconds with sub-second
+  resolution, but its exact behavior in 1.7.x is **pending in-game
+  verification**. The kernel's tick-rate estimate (`kernel:tps()`) degrades to
+  "no data" when `realTime` is missing or non-numeric.
 - `filesystem.list(path)` returns a table; OpenOS wraps it as an iterator, but
   the TerraCorp VFS works with the table.
 - Component filesystem handles are opaque values passed to `read`, `write`, and

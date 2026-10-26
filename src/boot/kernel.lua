@@ -55,6 +55,47 @@ function kernel:uptime()
   return computer.uptime()
 end
 
+-- Wall clock. Not present in every sandbox; callers must tolerate nil.
+function kernel:realTime()
+  local ok, value = pcall(computer.realTime)
+  if not ok or type(value) ~= "number" then
+    return nil
+  end
+  return value
+end
+
+-- The emulated uptime advances with server ticks while the wall clock does
+-- not, so their ratio estimates the server tick rate: TPS = 20 * dUptime /
+-- dRealTime. Pending in-game verification of computer.realTime resolution.
+local TPS_WINDOW = 10
+
+function kernel:tickClock()
+  local real = self:realTime()
+  if not real then
+    self.tpsClock = nil
+    self.tpsValue = nil
+    return
+  end
+  local clock = self.tpsClock
+  if not clock then
+    self.tpsClock = { real = real, up = self:uptime() }
+    return
+  end
+  local realDelta = real - clock.real
+  if realDelta >= TPS_WINDOW then
+    local upDelta = self:uptime() - clock.up
+    if upDelta >= 0 then
+      self.tpsValue = 20 * upDelta / realDelta
+    end
+    self.tpsClock = { real = real, up = self:uptime() }
+  end
+end
+
+--- The last server tick rate estimate, or nil until a window completes.
+function kernel:tps()
+  return self.tpsValue
+end
+
 function kernel:energy()
   local ok, stored, maximum = pcall(computer.energy)
   if not ok or type(stored) ~= "number" then
@@ -232,6 +273,7 @@ function kernel:loop()
   local lastTick = computer.uptime()
   local renderErrors = 0
   local gpuFailures = 0
+  self:tickClock()
 
   while true do
     -- Cap idle wait to one 30 Hz interval. Signals still wake the loop
@@ -279,6 +321,7 @@ function kernel:loop()
     end
 
     local now = computer.uptime()
+    pcall(self.tickClock, self)
     if now - lastTick >= 1 then
       lastTick = now
       if self.cluster then
@@ -480,6 +523,8 @@ function kernel.start(boot)
     volumeAddress = boot.address,
     address = address,
     hostname = hostname,
+    tpsClock = nil,
+    tpsValue = nil,
   }, { __index = kernel })
 
   -- A node has no desktop and may not have a GPU. Start the headless runtime
