@@ -311,16 +311,17 @@ function netfetch.findTarget(env, bootAddress, vfsModule, provisionModule)
   return nil, "no writable hard disk was found"
 end
 
---- Offline install from the floppy's own /payload (no master answered).
+--- Offline install from the floppy's own /payload.
+-- Runs when no master answered in time OR the network pull failed halfway.
 -- Same check chain as the pull path: safe target, install marker, verified
 -- per-file copy (done by provision.install), completeness check, node config,
 -- and the boot address only after everything is on disk.
-function netfetch.installOffline(env, bootAddress, id, net)
+function netfetch.installOffline(env, bootAddress, id, net, why)
   local component, computer = env.component, env.computer
 
-  appendLog(env, "OFFLINE no master answered; installing from the payload")
+  appendLog(env, "OFFLINE " .. tostring(why or "no master answered"))
   draw(env, "Offline install", {
-    "No master answered within " .. tostring(netfetch.WAIT) .. " s.",
+    tostring(why or "No master answered in time."),
     "Installing the runtime carried on this floppy...",
   }, COLORS.warn)
 
@@ -354,6 +355,18 @@ function netfetch.installOffline(env, bootAddress, id, net)
     env, bootAddress, vfsModule, provisionModule)
   if not targetAddress then
     return fail(env, "No target disk", tostring(targetReason))
+  end
+
+  -- A failed network pull may have left a partial runtime: start the runtime
+  -- paths from scratch (the /var install marker survives, so a retry after a
+  -- power cut is still accepted).
+  for _, root in ipairs({ "/init.lua", "/boot", "/lib", "/apps", "/etc" }) do
+    if target.exists(root) then
+      local cleared = provisionModule.removeTree(target, root)
+      if not cleared then
+        return fail(env, "Install failed", "could not clear " .. root)
+      end
+    end
   end
 
   -- No master named this node; it adopts a master from a later PING or PULL.
@@ -529,18 +542,23 @@ function netfetch.run(env)
   }, COLORS.accent)
 
   -- Load the pull client and its helpers from the master before walking the
-  -- whole tree.
+  -- whole tree. Any pull failure falls back to the offline payload: the
+  -- master can be busy (for example staging a GitHub release) and unable to
+  -- answer FETCH frames for a while.
   local pullSource, pullReason = fetchWhole(env, modem, master, id, "/lib/tc/pull.lua")
   if not pullSource then
-    return fail(env, "Pull failed", tostring(pullReason))
+    return netfetch.installOffline(env, bootAddress, id, net,
+      "network pull failed: " .. tostring(pullReason))
   end
   local vfsSource, vfsReason = fetchWhole(env, modem, master, id, "/lib/tc/vfs.lua")
   if not vfsSource then
-    return fail(env, "Pull failed", tostring(vfsReason))
+    return netfetch.installOffline(env, bootAddress, id, net,
+      "network pull failed: " .. tostring(vfsReason))
   end
   local provisionSource, provisionReason = fetchWhole(env, modem, master, id, "/lib/tc/provision.lua")
   if not provisionSource then
-    return fail(env, "Pull failed", tostring(provisionReason))
+    return netfetch.installOffline(env, bootAddress, id, net,
+      "network pull failed: " .. tostring(provisionReason))
   end
 
   local provisionModule, provisionError = loadModule(env, provisionSource, "/lib/tc/provision.lua", modules)
@@ -620,7 +638,8 @@ function netfetch.run(env)
     dirs = { "/boot", "/lib", "/apps" },
   })
   if not walked then
-    return fail(env, "Install failed", tostring(walkError))
+    return netfetch.installOffline(env, bootAddress, id, net,
+      "network pull failed: " .. tostring(walkError))
   end
   if not target.exists("/init.lua") or not target.exists("/boot/kernel.lua") then
     return fail(env, "Install failed", "the pulled runtime is incomplete")
