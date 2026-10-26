@@ -459,6 +459,32 @@ check(reused and reused.reused == true, "a reused prepare reports reused")
 check(floppy.read("/ready.txt") == readyMarker, "reuse keeps the readiness marker")
 check(floppy.exists("/init.lua"), "reuse keeps the bootstrap entry point")
 
+-- With the offline payload the floppy also carries the full runtime.
+local payloadVolume = newVolume()
+local payloadFloppy = vfsModule.new(payloadVolume)
+local withPayload, payloadReason = provision.prepare(source, payloadFloppy, {
+  version = "0.3.0",
+  payload = true,
+})
+check(withPayload ~= nil, "prepare writes the offline payload: " .. tostring(payloadReason))
+check(withPayload and withPayload.payload == true, "a payload prepare reports payload")
+check(payloadFloppy.exists("/payload/init.lua"), "the payload carries the entry point")
+check(payloadFloppy.exists("/payload/boot/kernel.lua"), "the payload carries the kernel")
+local payloadMarker = payloadFloppy.read("/payload/.ready") or ""
+check(
+  payloadMarker:find("version=0.3.0", 1, true) ~= nil,
+  "the payload marker names the version"
+)
+local payloadReused, payloadReuseReason = provision.prepare(source, payloadFloppy, {
+  version = "0.3.0",
+  reuse = true,
+  payload = true,
+})
+check(
+  payloadReused ~= nil and payloadReused.reused == true,
+  "a prepared payload floppy is reused: " .. tostring(payloadReuseReason)
+)
+
 -- A legacy payload floppy is converted: the payload tree is dropped and the
 -- bootstrap is written in its place, even on a nearly full floppy.
 local legacyVolume = newVolume({ total = 640 * 1024 })
@@ -706,6 +732,43 @@ for index = serveCalls3 + 1, #clusterCalls do
   end
 end
 check(refused, "a path outside the runtime tree is refused")
+
+-- A node that reports a version older than the staged node-update tree earns
+-- an automatic PULL offer, once per staged version (nodeAutoUpdate). This
+-- runs after the serving scenarios because a staged tree changes what the
+-- master serves.
+put(master, "/var/nodeupdate/current.txt", "version=9.9.9\n")
+put(master, "/var/nodeupdate/9.9.9/init.lua", "return true\n")
+local autoCluster = clusterModule.new({
+  kernel = clusterKernel,
+  vfs = master,
+  config = { get = function() return true end },
+  log = nil,
+  version = { version = "0.3.0" },
+  component = clusterComponent,
+  computer = clusterComputer,
+})
+check(autoCluster:start() == true, "the auto-update cluster starts")
+local autoCalls = #clusterCalls
+autoCluster:handle("modem_message", "modem-master", "auto-node-modem", net.PORT, 0,
+  net.encode("STATUS", { id = "auto-node-1", name = "Auto1", role = "worker",
+    state = "online", v = "0.3.0" }))
+local autoOffered = false
+for index = autoCalls + 1, #clusterCalls do
+  local call = clusterCalls[index]
+  if call.method == "send" then
+    local verb = net.decode(call.args[3])
+    if verb == "PULL" then
+      autoOffered = true
+    end
+  end
+end
+check(autoOffered, "a stale STATUS earns an automatic PULL offer")
+local afterOffer = #clusterCalls
+autoCluster:handle("modem_message", "modem-master", "auto-node-modem", net.PORT, 0,
+  net.encode("STATUS", { id = "auto-node-1", name = "Auto1", role = "worker",
+    state = "online", v = "0.3.0" }))
+check(#clusterCalls == afterOffer, "the automatic offer is sent once per staged version")
 
 local hello = net.encode("HELLO", {
   id = "node-1",

@@ -132,7 +132,7 @@ local function capacity(vfs)
   return used, total
 end
 
-local function writeTree(target, entries, root)
+local function writeTree(target, entries, root, verify)
   for _, entry in ipairs(entries) do
     local path = root .. entry.path
     local directory = path:match("^(.*)/[^/]+$")
@@ -145,6 +145,20 @@ local function writeTree(target, entries, root)
     local written, reason = target.write(path, entry.data)
     if not written then
       return nil, reason or ("could not write " .. path)
+    end
+    if verify then
+      -- Check that everything installed correctly: every file must read back
+      -- byte-identical, and Lua files must compile. A truncated write or a
+      -- full volume fails here instead of at boot.
+      if target.read(path) ~= entry.data then
+        return nil, "verification failed for " .. path
+      end
+      if path:sub(-4) == ".lua" then
+        local chunk = load(entry.data, "@" .. path, "t", {})
+        if not chunk then
+          return nil, "invalid Lua in " .. path
+        end
+      end
     end
   end
   return true
@@ -172,8 +186,10 @@ end
 -- The floppy is a pull bootstrap: a small `/init.lua` installer plus `tc.net`,
 -- with `/ready.txt` marking the version. The server fetches the runtime from
 -- the master over the network while the installer window is armed.
+-- With `opts.payload`, the full runtime is also copied to `/payload` so a
+-- server can install offline when no master answers (`nodeFloppyPayload`).
 -- With `reuse`, a floppy that already holds the same version is kept as is.
--- Returns { files, bytes, version, reused? } or nil and a reason.
+-- Returns { files, bytes, version, payload?, reused? } or nil and a reason.
 function provision.prepare(source, target, opts)
   opts = opts or {}
   local version = tostring(opts.version or "unknown")
@@ -186,12 +202,17 @@ function provision.prepare(source, target, opts)
   local ready = provision.readReady(target)
   if opts.reuse and ready and ready.version == version
     and target.exists("/init.lua") and target.exists(provision.netPath) then
-    return {
-      reused = true,
-      files = ready.files,
-      bytes = ready.bytes,
-      version = ready.version,
-    }
+    local samePayload = not opts.payload
+      or (target.isDirectory(provision.payloadRoot)
+        and target.exists(provision.payloadRoot .. "/.ready"))
+    if samePayload then
+      return {
+        reused = true,
+        files = ready.files,
+        bytes = ready.bytes,
+        version = ready.version,
+      }
+    end
   end
 
   local netfetch = source.read(provision.netfetchPath)
@@ -201,6 +222,18 @@ function provision.prepare(source, target, opts)
   local netSource = source.read(provision.netModulePath)
   if type(netSource) ~= "string" or netSource == "" then
     return nil, "missing " .. provision.netModulePath
+  end
+
+  -- With the offline payload the whole runtime also rides the floppy. Collect
+  -- it first so the space check covers bootstrap plus payload in one pass.
+  local payloadEntries, payloadTotal
+  if opts.payload then
+    local collected, collectedBytes = provision.collect(source)
+    if not collected then
+      return nil, collectedBytes
+    end
+    payloadEntries = collected
+    payloadTotal = collectedBytes
   end
 
   -- Remove the old entry point first so a server cannot boot a half-written
@@ -217,7 +250,7 @@ function provision.prepare(source, target, opts)
     return nil, clearError
   end
 
-  local total = #netfetch + #netSource
+  local total = #netfetch + #netSource + (payloadTotal or 0)
   local used, size = capacity(target)
   if used and size and size - used < total + provision.margin then
     return nil, string.format(
@@ -236,7 +269,26 @@ function provision.prepare(source, target, opts)
     return nil, netError or "could not write the network module"
   end
 
-  local marker = string.format("version=%s\nfiles=2\nbytes=%d\n", version, total)
+  local payloadFiles = 0
+  if payloadEntries then
+    local payloadOk, payloadError = writeTree(target, payloadEntries, provision.payloadRoot, true)
+    if not payloadOk then
+      return nil, payloadError or "could not write the offline payload"
+    end
+    payloadFiles = #payloadEntries
+    local readyOk, readyError = target.write(provision.payloadRoot .. "/.ready", string.format(
+      "version=%s\nfiles=%d\nbytes=%d\n",
+      version,
+      payloadFiles,
+      payloadTotal or 0
+    ))
+    if not readyOk then
+      return nil, readyError or "could not write the payload marker"
+    end
+  end
+
+  local marker = string.format("version=%s\nfiles=%d\nbytes=%d\n",
+    version, 2 + payloadFiles, total)
   local markerOk, markerError = target.write(provision.readyPath, marker)
   if not markerOk then
     return nil, markerError or "could not write the readiness marker"
@@ -252,9 +304,10 @@ function provision.prepare(source, target, opts)
   end
 
   return {
-    files = 2,
+    files = 2 + payloadFiles,
     bytes = total,
     version = version,
+    payload = payloadEntries ~= nil,
     capacity = size,
   }
 end
@@ -374,7 +427,7 @@ function provision.install(target, payload, opts)
     return nil, markReason or "could not write the install marker"
   end
 
-  local written, writeReason = writeTree(target, entries, "")
+  local written, writeReason = writeTree(target, entries, "", true)
   if not written then
     return nil, writeReason
   end

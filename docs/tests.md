@@ -101,6 +101,14 @@ filesystem, floppy, and modem components:
 15. The Vault app opens from its desktop icon, shows the namespace with
     per-file sizes and pool usage, and renders without errors at every
     simulated resolution.
+16. The hybrid installer floppy (0.3.6): `prepare` with `payload = true`
+    writes the bootstrap plus the full runtime under `/payload` with its own
+    `.ready` marker, reuses a same-version payload floppy, and verifies every
+    copied file (byte-identical read-back and `.lua` compilation). Without
+    `payload` the bootstrap-only layout is unchanged.
+17. Node-driven updates (0.3.6): a `STATUS` reporting a version older than
+    the staged `/var/nodeupdate` tree earns an automatic `PULL` offer, sent
+    once per staged version, and only when `nodeAutoUpdate` is enabled.
 
 `npm run test:nodes` runs the Nodes app in the desktop harness with a fake
 floppy, rack drive, and wired modem. It presses F7, verifies the rack list, and
@@ -169,6 +177,19 @@ Manual in-game checks for 0.3.0:
   `/var/vault/index.tsv` and reboot the master — after a node reports its
   disks, the log records "Vault index restored from the pool backup" and the
   file is browsable again.
+- Hybrid installer floppy (0.3.6): with `nodeFloppyPayload = true`, arm the
+  installer and confirm the floppy holds `/init.lua`, `/net.lua`,
+  `/ready.txt`, `/payload/` with the runtime, and `/payload/.ready`. Power on
+  a server **with the master's installer window NOT armed**: after 60 s it
+  must install offline from the payload, name itself `TC-XXXX`, reboot into
+  its HDD, and appear in Nodes once the master pings it (it adopts the master
+  from a `PING`/`PULL`). Then power on another server with the window armed:
+  it must still prefer the network pull path.
+- Node-driven updates (0.3.6): stage a release for the nodes (press
+  **Update** once), then power-cycle one node without arming anything — the
+  node must report its old version, receive `PULL` once, stage, reboot
+  through the applier, and come back on the staged version. Verify the
+  master offered it only once (log line "offering staged <v>").
 - Tick rate (0.3.6): run `tps` in the Terminal right after boot — it reports
   "sampling the site clock (first reading in ~10 s)"; ~10 s later it prints
   "Site tick rate: N TPS". Compare with `/forge tps` in the server chat:

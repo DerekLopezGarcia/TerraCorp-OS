@@ -19,6 +19,8 @@ config.defaults = {
   nodeRole = "worker",
   master = "",
   masterId = "",
+  nodeFloppyPayload = true,
+  nodeAutoUpdate = true,
 }
 
 config.data = {}
@@ -89,6 +91,9 @@ local function accepted(key, value)
     return false
   end
   if key == "clock24" or key == "splash" then
+    return type(value) == "boolean"
+  end
+  if key == "nodeFloppyPayload" or key == "nodeAutoUpdate" then
     return type(value) == "boolean"
   end
   if key == "role" then

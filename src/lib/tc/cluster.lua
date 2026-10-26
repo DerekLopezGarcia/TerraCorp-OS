@@ -363,13 +363,32 @@ function cluster:prepareInstaller()
   end
 
   local version = self.version and self.version.version or "unknown"
+  local wantPayload = self.config
+    and type(self.config.get) == "function"
+    and self.config.get("nodeFloppyPayload") == true
   local lastReason
   for _, candidate in ipairs(candidates) do
     if candidate.safe then
-      local result, why = provision.prepare(self.vfs, candidate.vfs, {
-        version = version,
-        reuse = true,
-      })
+      -- With nodeFloppyPayload the floppy also carries the full runtime so a
+      -- server can install offline. If the payload does not fit, fall back to
+      -- the pull-only bootstrap instead of failing the preparation.
+      local result, why
+      if wantPayload then
+        result, why = provision.prepare(self.vfs, candidate.vfs, {
+          version = version,
+          reuse = true,
+          payload = true,
+        })
+        if not result then
+          self:log("Offline payload does not fit (" .. tostring(why) .. "); writing the pull bootstrap")
+        end
+      end
+      if not result then
+        result, why = provision.prepare(self.vfs, candidate.vfs, {
+          version = version,
+          reuse = true,
+        })
+      end
       if result then
         local now = self:now()
         self.floppy = candidate
@@ -622,6 +641,19 @@ function cluster:armUpdate()
   return true, "Checking for the latest release..."
 end
 
+--- The staged node-update tree, if one exists. Unlike serveTree, this never
+-- falls back to the master's own runtime: it only reports a release that was
+-- explicitly staged for the nodes (Update pressed at least once).
+-- Returns the path prefix and the version, or nil and nil.
+function cluster:stagedTree()
+  local marker = self.vfs.read(cluster.NODEUPDATE_ROOT .. "/current.txt")
+  local version = marker and marker:match("version=([%w%.%-]+)")
+  if version and self.vfs.isDirectory(cluster.NODEUPDATE_ROOT .. "/" .. version) then
+    return cluster.NODEUPDATE_ROOT .. "/" .. version, version
+  end
+  return nil, nil
+end
+
 --- Resolve the tree the master serves to nodes: an armed update's staged
 -- tree first, then the last staged release, then the master's own runtime.
 -- Returns the path prefix (nil for the live runtime) and the version served.
@@ -629,10 +661,9 @@ function cluster:serveTree()
   if self.update and self.update.tree then
     return self.update.tree, self.update.target
   end
-  local marker = self.vfs.read(cluster.NODEUPDATE_ROOT .. "/current.txt")
-  local version = marker and marker:match("version=([%w%.%-]+)")
-  if version and self.vfs.isDirectory(cluster.NODEUPDATE_ROOT .. "/" .. version) then
-    return cluster.NODEUPDATE_ROOT .. "/" .. version, version
+  local prefix, version = self:stagedTree()
+  if prefix then
+    return prefix, version
   end
   return nil, self.version and self.version.version or nil
 end
@@ -961,6 +992,20 @@ function cluster:handleAck(fields, remoteAddress)
   self:log(tostring(pending.name) .. " acknowledged the install; waiting for STATUS")
 end
 
+-- Compare dotted version strings: -1 when a < b, 0 when equal, 1 when a > b.
+local function compareVersion(a, b)
+  local at, bt = {}, {}
+  for n in tostring(a):gmatch("%d+") do at[#at + 1] = tonumber(n) end
+  for n in tostring(b):gmatch("%d+") do bt[#bt + 1] = tonumber(n) end
+  for index = 1, math.max(#at, #bt) do
+    local left, right = at[index] or 0, bt[index] or 0
+    if left ~= right then
+      return left < right and -1 or 1
+    end
+  end
+  return 0
+end
+
 function cluster:handleStatus(fields, remoteAddress)
   local id = fields.id
   if type(id) ~= "string" or id == "" then
@@ -1009,6 +1054,33 @@ function cluster:handleStatus(fields, remoteAddress)
   self.pending[id] = nil
   self:markDirty()
   self:save()
+
+  -- Node-driven update check: a node that just came online reports its
+  -- version here; if a newer release is staged for the nodes, answer with
+  -- PULL once per staged version. The node stages it and reboots into the
+  -- boot-time applier. An operator-driven update session takes precedence.
+  local auto = self.config
+    and type(self.config.get) == "function"
+    and self.config.get("nodeAutoUpdate")
+  if auto and stored and not (self.update and self.update.active) then
+    local _, stagedVersion = self:stagedTree()
+    if stagedVersion
+      and compareVersion(stagedVersion, version) > 0
+      and stored.modem and stored.modem ~= ""
+      and stored.autoPull ~= stagedVersion then
+      stored.autoPull = stagedVersion
+      local sent = self:send(stored.modem, "PULL", {
+        id = id,
+        v = stagedVersion,
+        master = self.modem and self.modem.address or "",
+        masterId = self.kernel.address or self.computer.address(),
+      })
+      if sent then
+        self:log(tostring(stored.name or id) .. " reported " .. tostring(version or "unknown")
+          .. "; offering staged " .. stagedVersion)
+      end
+    end
+  end
 end
 
 function cluster:handlePong(fields)

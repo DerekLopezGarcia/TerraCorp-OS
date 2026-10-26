@@ -169,37 +169,54 @@ The rack is also a power distributor. Feed it once and it powers every slot.
 
 ## Provisioning procedure
 
+The installer floppy is **hybrid** (0.3.6): it carries the pull bootstrap
+plus, when the master config has `nodeFloppyPayload = true` (the default),
+the full runtime under `/payload`. A server prefers the master when one
+answers, and installs offline from the payload when none does.
+
 1. Install 0.3.0 or later on the master as usual.
 2. Insert a floppy into the mountable disk drive. The master sees the drive on
    the data bus.
 3. In the Nodes app, choose **Prepare installer**. The master writes a pull
    bootstrap to the floppy: a small `/init.lua` (the network installer) and
-   `tc.net`, marked by `/ready.txt` with the version. Preparing again with the
-   same version reuses the bootstrap instead of rewriting it, and a different
-   master version rebuilds it. A legacy full-payload floppy is converted.
+   `tc.net`, marked by `/ready.txt` with the version — and, with
+   `nodeFloppyPayload`, the whole runtime under `/payload` (marked by
+   `/payload/.ready`) so an offline install is possible. Preparing again with
+   the same version reuses the floppy instead of rewriting it, a different
+   master version rebuilds it, and a legacy full-payload floppy is converted.
+   If the payload does not fit, the master logs it and writes the bootstrap
+   only.
 4. Sneak-right-click the front of an unprovisioned server to power it on. It has
    no boot address yet, so the BIOS boots the only `/init.lua` it can see: the
    rack floppy.
-5. The bootstrap sends `HELLO` to the master and waits for `ASSIGN`. The master
-   replies with the node's name, role, and its own addresses.
-6. The bootstrap pulls the runtime tree from the master over the wired network
-   (`LIST`/`FETCH`), writes it to the server's first HDD, writes
-   `/etc/terracorp.cfg` with `role` and `master`, sends `ACK`, and only then
-   sets the boot address to that HDD and reboots. An interrupted pull leaves
-   the boot address alone, so the next boot runs the floppy again.
-7. The server boots its HDD in headless mode, checks the installed system
+5. The bootstrap broadcasts `HELLO` and waits for an `ASSIGN` for 60 seconds:
+   - **Master answers:** the bootstrap pulls the runtime tree from the master
+     over the wired network (`LIST`/`FETCH`), writes it to the server's first
+     HDD, writes `/etc/terracorp.cfg` with `role` and `master`, sends `ACK`,
+     and only then sets the boot address to that HDD and reboots. An
+     interrupted pull leaves the boot address alone, so the next boot runs
+     the floppy again.
+   - **No master answers within 60 s and the floppy carries a payload:** the
+     bootstrap installs the offline payload onto the first HDD with the same
+     check chain, names the node `TC-XXXX` with the `worker` role, and leaves
+     the master fields empty — the node adopts a master from a later `PING`
+     or `PULL` (existing protocol rule), so no re-provisioning is needed.
+6. The server boots its HDD in headless mode, checks the installed system
    (`/init.lua`, the kernel, the `tc` libraries, the config, and no
    `/var/install-incomplete` marker), and only then sends `STATUS`. The Nodes
    app lists it as online with its memory, disk, and version. A node that
-   fails the check stays silent and never appears in the list.
-8. Repeat for the next server. One bootstrap can provision every server on the
+   fails the check stays silent and never appears in the list. Both install
+   paths verify every file: each copied file must read back byte-identical
+   and every `.lua` payload file must compile before the copy counts as
+   complete.
+7. Repeat for the next server. One floppy can provision every server on the
    bus; each server is identified by its own computer address, so several may
    be powered on together.
-9. Leave the floppy in the drive as a rescue medium. Provisioned servers boot
+8. Leave the floppy in the drive as a rescue medium. Provisioned servers boot
    their HDD because their boot address is set; the floppy is only used when a
    server has no valid boot address.
-10. Record the rack slot, the node name, and the computer address. The OS
-    identifies nodes by address, not by physical slot.
+9. Record the rack slot, the node name, and the computer address. The OS
+   identifies nodes by address, not by physical slot.
 
 Re-provisioning is not automatic. The installer must detect an existing
 TerraCorp installation on the target HDD and stop with a message instead of
@@ -225,6 +242,13 @@ future work.
 4. After the reboot the node reports its new version in `STATUS`, and Nodes
    shows it on the node card. A node shows offline while it pulls (30 s
    heartbeat gap); it returns online after the swap.
+
+**Node-driven updates (0.3.6, `nodeAutoUpdate = true` by default):** a node
+that boots and reports a `STATUS` older than the staged node-update tree
+receives a `PULL` automatically, once per staged version. Freshly installed
+or rebooted slaves therefore bring themselves up to the staged release
+without the operator launching waves. An operator-driven update session
+always takes precedence.
 
 The master updates itself separately through the Update app (GitHub
 Releases); the node update never rewrites the master.
@@ -302,6 +326,7 @@ Rules:
 | Server does not boot the floppy | Drive has a floppy; drive primary and server primary are on the same bus; relay is off; the server has no valid boot address |
 | Master does not see the drive | Master's card is wired; cable touches the configured rack face; drive primary is on that face's bus; rack is powered |
 | Server boots but the master never sees `HELLO` | Network card is installed; server primary is connected; the card's slim row is connected; port 4200 is open; no relay |
+| Server installs without any master online | Expected with `nodeFloppyPayload`: the floppy carries the runtime under `/payload` and installs offline after a 60 s wait; the node adopts the master later from a `PING`/`PULL` |
 | Node disappears when the player leaves | Chunk loader does not cover the rack |
 | Node is offline after a world reload | Servers do not auto-start; sneak-use each front face |
 | Master cannot read a node's files | Expected: server components are `Visibility.Neighbors`; use 0.3.2 storage, not the bus |

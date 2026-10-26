@@ -13,6 +13,10 @@
 
 local netfetch = {}
 
+-- Seconds to wait for a master ASSIGN before falling back to the offline
+-- payload on the floppy (when it carries one).
+netfetch.WAIT = 60
+
 local COLORS = {
   bg = 15,
   text = 0,
@@ -307,6 +311,96 @@ function netfetch.findTarget(env, bootAddress, vfsModule, provisionModule)
   return nil, "no writable hard disk was found"
 end
 
+--- Offline install from the floppy's own /payload (no master answered).
+-- Same check chain as the pull path: safe target, install marker, verified
+-- per-file copy (done by provision.install), completeness check, node config,
+-- and the boot address only after everything is on disk.
+function netfetch.installOffline(env, bootAddress, id, net)
+  local component, computer = env.component, env.computer
+
+  appendLog(env, "OFFLINE no master answered; installing from the payload")
+  draw(env, "Offline install", {
+    "No master answered within " .. tostring(netfetch.WAIT) .. " s.",
+    "Installing the runtime carried on this floppy...",
+  }, COLORS.warn)
+
+  local vfsSource, vfsReason = readComponent(env, bootAddress, "/payload/lib/tc/vfs.lua")
+  if not vfsSource then
+    return fail(env, "Broken payload", "could not read vfs.lua: " .. tostring(vfsReason))
+  end
+  local provisionSource, provisionReason = readComponent(env, bootAddress, "/payload/lib/tc/provision.lua")
+  if not provisionSource then
+    return fail(env, "Broken payload", "could not read provision.lua: " .. tostring(provisionReason))
+  end
+
+  local modules = { ["tc.net"] = net }
+  local vfsModule, vfsError = loadModule(env, vfsSource, "/payload/lib/tc/vfs.lua", modules)
+  if not vfsModule then
+    return fail(env, "Broken payload", "could not load tc.vfs: " .. tostring(vfsError))
+  end
+  local provisionModule, provisionLoadError = loadModule(
+    env, provisionSource, "/payload/lib/tc/provision.lua", modules)
+  if not provisionModule then
+    return fail(env, "Broken payload", "could not load tc.provision: " .. tostring(provisionLoadError))
+  end
+
+  local volume = component.proxy(bootAddress)
+  local floppy = volume and vfsModule.new(volume)
+  if not floppy then
+    return fail(env, "Broken payload", "the boot floppy is not readable")
+  end
+
+  local targetAddress, target, targetReason = netfetch.findTarget(
+    env, bootAddress, vfsModule, provisionModule)
+  if not targetAddress then
+    return fail(env, "No target disk", tostring(targetReason))
+  end
+
+  -- No master named this node; it adopts a master from a later PING or PULL.
+  local name = "TC-" .. tostring(id):sub(1, 4)
+  appendLog(env, "INSTALL target=" .. tostring(targetAddress) .. " (offline)")
+
+  local result, installReason = provisionModule.install(target, floppy, {
+    version = tostring(env.version),
+    configText = provisionModule.configText({
+      name = name,
+      role = "worker",
+      master = "",
+      masterId = "",
+    }),
+  })
+  if not result then
+    return fail(env, "Install failed", tostring(installReason))
+  end
+
+  appendLog(env, string.format(
+    "OK %d files, disk=%s (offline)",
+    result.files or 0,
+    tostring(targetAddress)
+  ))
+
+  local setOk, setReason = pcall(computer.setBootAddress, targetAddress)
+  if not setOk then
+    return fail(env, "Boot address", "Could not set the boot address: " .. tostring(setReason))
+  end
+  if type(computer.getBootAddress) == "function" then
+    local checkOk, current = pcall(computer.getBootAddress)
+    if checkOk and type(current) == "string" and current ~= "" and current ~= targetAddress then
+      return fail(env, "Boot address", "The EEPROM did not keep the new boot address.")
+    end
+  end
+
+  draw(env, "Install complete", {
+    name .. " is ready.",
+    string.format("%d files copied from the payload.", result.files or 0),
+    "It will find the master on the next boot.",
+  }, COLORS.accent)
+
+  pcall(env.os.sleep, 2)
+  pcall(computer.shutdown, true)
+  return true
+end
+
 function netfetch.run(env)
   env = env or {}
   env.os = env.os or os
@@ -343,6 +437,17 @@ function netfetch.run(env)
     end
   end
 
+  -- An offline payload lets this floppy install without a master. The payload
+  -- version is authoritative for the install itself.
+  local payloadReady = readComponent(env, bootAddress, "/payload/.ready")
+  local payloadVersion = payloadReady and payloadReady:match("version=([^\r\n]+)")
+  local hasPayload = payloadReady ~= nil
+    and readComponent(env, bootAddress, "/payload/lib/tc/provision.lua") ~= nil
+    and readComponent(env, bootAddress, "/payload/lib/tc/vfs.lua") ~= nil
+  if payloadVersion and payloadVersion ~= "" then
+    env.version = payloadVersion
+  end
+
   local modem = net.newModem({ component = component, computer = computer, port = net.PORT })
   local opened, openReason = modem:open()
   if not opened then
@@ -361,6 +466,8 @@ function netfetch.run(env)
 
   local assignment = nil
   local lastHello = -math.huge
+  local offline = false
+  local waitDeadline = hasPayload and (computer.uptime() + netfetch.WAIT) or nil
   draw(env, "Waiting for the master", {
     "Server " .. tostring(id):sub(1, 8),
     "Broadcasting HELLO on port " .. tostring(net.PORT) .. ".",
@@ -369,6 +476,10 @@ function netfetch.run(env)
 
   while not assignment do
     local now = computer.uptime()
+    if waitDeadline and now >= waitDeadline then
+      offline = true
+      break
+    end
     if now - lastHello >= 5 then
       lastHello = now
       modem:broadcast("HELLO", hello)
@@ -390,6 +501,10 @@ function netfetch.run(env)
         end
       end
     end
+  end
+
+  if offline then
+    return netfetch.installOffline(env, bootAddress, id, net)
   end
 
   local master = assignment.master
