@@ -210,6 +210,8 @@ terminals in factories.
 - Add a minimal terminal client and kiosk profile.
 - Limit remote-session refresh to 10 Hz and group spans; local screens have no
   fixed Hz setting in OpenComputers.
+- The verb-level terminal contract is specified in `docs/terminal-protocol.md`
+  (FRAME/INPUT/RESUME, input ACK piggyback, bandwidth ceilings).
 
 **Exit criteria:** two terminals (cable and Linked Card) connected to a headless
 core, reconnect under 5 seconds, documented bandwidth/latency, no session-state
@@ -232,6 +234,8 @@ same-dimension links, and Redstone Control as a signal-level fallback
 - Add a resumable tablet client; sessions do not survive dimension changes or
   reconnects without an explicit resume.
 - Add a reduced lunar kiosk for status and emergency controls.
+- Plant power coordination is designed in `docs/power.md`; the hologram
+  status wall in `docs/holo.md`.
 
 **Exit criteria:** transfer 1 KB with a valid CRC between dimensions, command
 round-trip under 2 seconds, and emergency control remains available if the
