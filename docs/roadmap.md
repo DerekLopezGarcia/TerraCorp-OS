@@ -237,7 +237,8 @@ same-dimension links, and Redstone Control as a signal-level fallback
 - Plant power coordination is designed in `docs/power.md`; the hologram
   status wall in `docs/holo.md`.
 - Automated GT crafting with input/output buffers is designed in
-  `docs/crafting.md` (field requirement from logistics).
+  `docs/crafting.md` (field requirement from logistics): stock-limited
+  feeding of any machine — gate mode via redstone, push mode via transposer.
 
 **Exit criteria:** transfer 1 KB with a valid CRC between dimensions, command
 round-trip under 2 seconds, and emergency control remains available if the
