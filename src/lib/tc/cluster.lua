@@ -367,12 +367,22 @@ function cluster:prepareInstaller()
     and type(self.config.get) == "function"
     and self.config.get("nodeFloppyPayload") == true
   local lastReason
+  local armed, written = false, 0
+  local result, why
+
+  -- Prepare every writable floppy on the bus, not just one: a master cannot
+  -- tell its own drive's floppy from a rack drive's, so writing them all
+  -- guarantees the rack floppy is bootable and the log names each address.
   for _, candidate in ipairs(candidates) do
-    if candidate.safe then
+    local label = shortAddress(candidate.address)
+    if not candidate.safe then
+      self:log("Skipped floppy " .. label .. ": " .. tostring(candidate.reason or "other data"))
+      lastReason = candidate.reason or "the floppy contains other data"
+    else
+      result, why = nil, nil
       -- With nodeFloppyPayload the floppy also carries the full runtime so a
       -- server can install offline. If the payload does not fit, fall back to
       -- the pull-only bootstrap instead of failing the preparation.
-      local result, why
       if wantPayload then
         result, why = provision.prepare(self.vfs, candidate.vfs, {
           version = version,
@@ -380,7 +390,8 @@ function cluster:prepareInstaller()
           payload = true,
         })
         if not result then
-          self:log("Offline payload does not fit (" .. tostring(why) .. "); writing the pull bootstrap")
+          self:log("Floppy " .. label .. ": offline payload does not fit ("
+            .. tostring(why) .. "); writing the pull bootstrap")
         end
       end
       if not result then
@@ -390,48 +401,51 @@ function cluster:prepareInstaller()
         })
       end
       if result then
-        local now = self:now()
-        self.floppy = candidate
-        self.installer = {
-          active = true,
-          preparedAt = now,
-          expiresAt = now + cluster.INSTALL_WINDOW,
-          files = result.files,
-          bytes = result.bytes,
-          version = result.version,
-          floppy = candidate.address,
-          assigned = 0,
-          lastName = nil,
-        }
-        self.pending = {}
-        self.lastInstallLog = nil
-        self.lastInstallLogAt = 0
-        if result.reused then
-          self:log(string.format(
-            "Reused the %s payload on %s (%d files, %d KB)",
-            result.version,
-            shortAddress(candidate.address),
-            result.files,
-            math.floor(result.bytes / 1024 + 0.5)
-          ))
-          return true, "Payload " .. result.version
-            .. " is already on the floppy; installer armed."
-        end
+        armed = true
+        written = written + 1
         self:log(string.format(
-          "Installer armed on %s: %d files, %d KB",
-          shortAddress(candidate.address),
+          "Floppy %s ready: %d files, %d KB (%s)",
+          label,
           result.files,
-          math.floor(result.bytes / 1024 + 0.5)
+          math.floor(result.bytes / 1024 + 0.5),
+          result.reused and "reused" or "written"
         ))
-        return true, "Installer armed. Power on each unprovisioned server."
+        lastResult, lastCandidate = result, candidate
+      else
+        self:log("Floppy " .. label .. " failed: " .. tostring(why))
+        lastReason = why
       end
-      lastReason = why
-    else
-      lastReason = candidate.reason or "the floppy contains other data"
     end
   end
 
-  return nil, lastReason or "no usable floppy was found"
+  if not armed then
+    return nil, lastReason or "no usable floppy was found"
+  end
+
+  do
+    local result, candidate = lastResult, lastCandidate
+    local now = self:now()
+    self.floppy = candidate
+    self.installer = {
+      active = true,
+      preparedAt = now,
+      expiresAt = now + cluster.INSTALL_WINDOW,
+      files = result.files,
+      bytes = result.bytes,
+      version = result.version,
+      floppy = candidate.address,
+      assigned = 0,
+      lastName = nil,
+    }
+    self.pending = {}
+    self.lastInstallLog = nil
+    self.lastInstallLogAt = 0
+    if result.reused and written == 1 then
+      return true, "Payload " .. result.version
+        .. " is already on the floppy; installer armed."
+    end
+    return true, "Installer armed on " .. written .. " floppy(ies). Power on each unprovisioned server."
+  end
 end
 
 function cluster:stopInstaller()
