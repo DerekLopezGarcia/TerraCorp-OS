@@ -190,9 +190,20 @@ function vault:handleDisk(fields, remoteAddress)
   end
   self.disks = keep
   self:save()
-  if self.log and #reported > 0 then
-    self.log.info("Vault pool: " .. #reported .. " disk(s) from " .. nodeId:sub(1, 8)
-      .. " (" .. table.concat(reported, ",") .. ")")
+
+  -- Diagnostics: log the first report of a node and every change in its disk
+  -- count. A node that reports zero spares while it has disks installed is
+  -- the signature of an unseen component, not a transport problem.
+  self.diskReports = self.diskReports or {}
+  local previous = self.diskReports[nodeId]
+  self.diskReports[nodeId] = #reported
+  if self.log then
+    if #reported > 0 then
+      self.log.info("Vault pool: " .. #reported .. " disk(s) from " .. nodeId:sub(1, 8)
+        .. " (" .. table.concat(reported, ",") .. ")")
+    elseif previous == nil then
+      self.log.warn("Vault pool: node " .. nodeId:sub(1, 8) .. " reports NO spare disk(s)")
+    end
   end
 end
 
