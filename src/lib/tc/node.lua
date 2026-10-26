@@ -382,10 +382,11 @@ node.TASKS["disk.report"] = function(self, args)
   if not ok then
     return false, "storage is unavailable"
   end
+  -- kernel:storage() already reports KB; dividing again shrank 4 MB to 4 KB.
   return true, string.format(
     "used=%dKB total=%dKB",
-    kilobytes((tonumber(used) or 0) / 1024),
-    kilobytes((tonumber(total) or 0) / 1024)
+    kilobytes(tonumber(used) or 0),
+    kilobytes(tonumber(total) or 0)
   )
 end
 
@@ -413,28 +414,35 @@ node.TASKS["log.tail"] = function(self, args)
 end
 
 node.TASKS["comp.count"] = function(self, args)
-  local kinds = {}
-  local total = 0
-  if self.component and type(self.component.list) == "function" then
-    local ok, iterator = pcall(self.component.list)
-    if ok and type(iterator) == "function" then
-      while true do
-        local address, kind = iterator()
-        if not address then
-          break
-        end
-        kind = tostring(kind or "unknown")
-        kinds[kind] = (kinds[kind] or 0) + 1
-        total = total + 1
-      end
+  local _ = args
+  if not self.component or type(self.component.list) ~= "function" then
+    return false, "component API unavailable"
+  end
+
+  -- Count with a kind filter AND without it: they are different code paths in
+  -- the component API, and a node whose no-filter listing comes back empty
+  -- while filtered listings work pinpoints a visibility/hot-plug issue.
+  local function count(kind)
+    local ok, iterator = pcall(self.component.list, kind)
+    if not ok or type(iterator) ~= "function" then
+      return "ERR(" .. tostring(iterator) .. ")"
     end
+    local total = 0
+    while true do
+      local address = iterator()
+      if not address then
+        break
+      end
+      total = total + 1
+    end
+    return total
   end
-  local parts = { "total=" .. total }
-  for kind, count in pairs(kinds) do
-    parts[#parts + 1] = kind .. "=" .. count
-  end
-  table.sort(parts)
-  return true, table.concat(parts, " ")
+
+  return true, string.format(
+    "all=%s filesystem=%s modem=%s eeprom=%s gpu=%s internet=%s redstone=%s",
+    count(nil), count("filesystem"), count("modem"), count("eeprom"),
+    count("gpu"), count("internet"), count("redstone")
+  )
 end
 
 function node:isDraining()
