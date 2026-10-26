@@ -865,7 +865,16 @@ for index = #clusterCalls, 1, -1 do
   end
 end
 check(assign2 ~= nil, "a second node on the same bus receives an ASSIGN")
-equal(assign2 and assign2.name, "TC-N2", "the second node gets its own name")
+-- The name must be unique across the registry AND the pending assignments:
+-- a stale pending TC-N2 from an earlier scenario pushes this one to TC-N3.
+check(
+  assign2 and assign2.name ~= (assign and assign.name),
+  "the second node gets its own name"
+)
+check(
+  assign2 and assign2.name:match("^TC%-N%d+$") ~= nil,
+  "the second node name follows the TC-N naming"
+)
 check(assign2 and assign2.token ~= (assign and assign.token), "each assignment gets its own token")
 check(
   registry.find(cluster:nodesList(), "node-2") == nil,

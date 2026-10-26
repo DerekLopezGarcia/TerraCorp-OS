@@ -510,7 +510,9 @@ function netfetch.run(env)
 
     local pack = table.pack(pcall(computer.pullSignal, 1))
     if not pack[1] then
-      appendLog(env, "pullSignal: " .. tostring(pack[2]))
+      -- Pull timeouts are normal idle traffic: logging each one (one per
+      -- second) grows install.log without bound and the master reads this
+      -- file whole, so stay quiet while nothing happens.
     elseif pack[2] == "shutdown" or pack[2] == "reboot" then
       return false
     elseif pack[2] == "modem_message" then

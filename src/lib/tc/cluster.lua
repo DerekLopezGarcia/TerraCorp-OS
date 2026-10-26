@@ -234,13 +234,23 @@ end
 function cluster:nextName()
   local used = {}
   local highest = 0
-  for _, node in ipairs(self.nodes) do
-    local name = tostring(node.name or "")
+
+  local function reserve(name)
+    name = tostring(name or "")
     used[name:lower()] = true
     local number = name:match("^TC%-N(%d+)$")
     if number then
       highest = math.max(highest, tonumber(number) or 0)
     end
+  end
+
+  for _, node in ipairs(self.nodes) do
+    reserve(node.name)
+  end
+  -- Nodes that are still installing are not registered yet: reserve their
+  -- assigned names too, or two servers provisioned together get the same one.
+  for _, pending in pairs(self.pending) do
+    reserve(pending and pending.name)
   end
 
   local number = highest
@@ -346,9 +356,43 @@ function cluster:installLog()
   local now = self:now()
   if not self.lastInstallLogAt or now - self.lastInstallLogAt >= 2 then
     self.lastInstallLogAt = now
-    self.lastInstallLog = self.floppy.vfs.read(provision.logPath)
+    self.lastInstallLog = self:installLogTail(self.floppy.vfs)
   end
   return self.lastInstallLog
+end
+
+--- Read the last few kilobytes of the install log without holding the whole
+-- file in memory: a long-waiting node grew it past what a 2 MB master can
+-- buffer, which killed the read with an allocation error. Read in chunks and
+-- keep only a sliding window of the tail.
+function cluster:installLogTail(floppy)
+  local handle, reason = floppy.volume and floppy.volume.open
+    and floppy.volume.open(provision.logPath, "r")
+  if not handle then
+    return self.lastInstallLog
+  end
+
+  local window, newest = {}, 0
+  local keep = 4 -- keep the last ~16 KB
+  while true do
+    local data = select(2, pcall(floppy.volume.read, handle, 4096))
+    if type(data) ~= "string" or data == "" then
+      break
+    end
+    if newest >= keep then
+      table.remove(window, 1)
+      newest = newest - 1
+    end
+    window[#window + 1] = data
+    newest = newest + 1
+  end
+  pcall(floppy.volume.close, handle)
+
+  local tail = {}
+  for _, chunk in ipairs(window) do
+    tail[#tail + 1] = chunk
+  end
+  return table.concat(tail)
 end
 
 function cluster:prepareInstaller()
