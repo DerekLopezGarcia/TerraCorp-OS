@@ -356,15 +356,47 @@ end
 local function parseMarker(body)
   local version = body and body:match("version%s*=%s*([^\r\n]+)")
   local tag = body and body:match("tag%s*=%s*([^\r\n]+)")
+  local source = body and body:match("source%s*=%s*([^\r\n]+)")
   if not version or not tag then
     return nil, "The pending update marker is incomplete."
   end
   version = version:gsub("%s+$", "")
   tag = tag:gsub("%s+$", "")
+  if source then
+    source = source:gsub("%s+$", "")
+  end
   if not version:match("^%d+%.%d+%.%d+$") or tag ~= "v" .. version then
     return nil, "The pending update marker is invalid."
   end
-  return version, tag
+  return version, tag, source
+end
+
+--- List the runtime paths already staged under `root` (relative form).
+local function collectStage(root)
+  if not isDirectory(root) then
+    return nil, "the staging directory is missing"
+  end
+
+  local paths, pending = {}, { { path = root, relative = "" } }
+  while #pending > 0 do
+    local current = table.remove(pending)
+    local entries, reason = fs("list", current.path)
+    if not entries then
+      return nil, reason
+    end
+    for _, entry in ipairs(entries) do
+      local name = tostring(entry):gsub("/+$", "")
+      local full = current.path .. "/" .. name
+      local relative = current.relative == "" and name or (current.relative .. "/" .. name)
+      if isDirectory(full) then
+        pending[#pending + 1] = { path = full, relative = relative }
+      else
+        paths[#paths + 1] = relative
+      end
+    end
+  end
+  table.sort(paths)
+  return paths
 end
 
 -- An interrupted install can leave originals in the backup tree. Restore them
@@ -463,7 +495,7 @@ local function apply()
     return true, "no pending update"
   end
 
-  local version, tag = parseMarker(marker)
+  local version, tag, source = parseMarker(marker)
   if not version then
     finish(false, tag or "invalid marker")
     return false, tag or "invalid marker"
@@ -473,15 +505,33 @@ local function apply()
   draw("Preparing update", "Checking the download source", "", 0.02)
 
   local base = RAW_URL .. "/" .. tag
-  local manifest, manifestError = request(base .. "/tools/manifest.txt")
-  if not manifest then
-    finish(false, "could not download the manifest (" .. tostring(manifestError) .. ")")
-    return false, manifestError
-  end
-  local paths, pathError = manifestPaths(manifest)
-  if not paths then
-    finish(false, pathError)
-    return false, pathError
+  local paths
+  if source == "master" then
+    -- The node runtime staged the tree from the master over tc.net; apply it
+    -- directly without touching the network again.
+    draw("Preparing update", "Using the staged copy from the master", "", 0.02)
+    local stagedPaths, walkError = collectStage(STAGE_ROOT .. "/" .. version)
+    if not stagedPaths then
+      finish(false, "the staged update is missing (" .. tostring(walkError) .. ")")
+      return false, "staged update missing"
+    end
+    if #stagedPaths == 0 then
+      finish(false, "the staged update is empty")
+      return false, "staged update empty"
+    end
+    paths = stagedPaths
+  else
+    local manifest, manifestError = request(base .. "/tools/manifest.txt")
+    if not manifest then
+      finish(false, "could not download the manifest (" .. tostring(manifestError) .. ")")
+      return false, manifestError
+    end
+    local osPaths, pathError = manifestPaths(manifest)
+    if not osPaths then
+      finish(false, pathError)
+      return false, pathError
+    end
+    paths = osPaths
   end
 
   local stageRoot = STAGE_ROOT .. "/" .. version
@@ -510,11 +560,22 @@ local function apply()
   local staged, totalBytes, versionSource = {}, 0, nil
   for _, repositoryPath in ipairs(paths) do
     step("Downloading " .. version, repositoryPath, string.format("%d of %d files", #staged + 1, #paths))
-    local body, downloadError = request(base .. "/" .. repositoryPath)
-    if not body then
-      removeTree(stageRoot)
-      finish(false, "could not download " .. repositoryPath .. " (" .. tostring(downloadError) .. ")")
-      return false, downloadError
+    local body
+    if source == "master" then
+      body = readFile(stageRoot .. "/" .. repositoryPath)
+      if body == nil then
+        removeTree(stageRoot)
+        finish(false, "the staged file is missing: " .. repositoryPath)
+        return false, "staged file missing"
+      end
+    else
+      local downloadError
+      body, downloadError = request(base .. "/" .. repositoryPath)
+      if not body then
+        removeTree(stageRoot)
+        finish(false, "could not download " .. repositoryPath .. " (" .. tostring(downloadError) .. ")")
+        return false, downloadError
+      end
     end
     if repositoryPath:sub(-4) == ".lua" then
       local chunk, syntaxError = load(body, "@" .. repositoryPath, "t", {})
@@ -524,7 +585,7 @@ local function apply()
         return false, syntaxError
       end
     end
-    local runtimePath = repositoryPath:sub(5)
+    local runtimePath = source == "master" and repositoryPath or repositoryPath:sub(5)
     local stagePath = stageRoot .. "/" .. runtimePath
     local writeOk, writeError = writeFile(stagePath, body)
     if not writeOk then

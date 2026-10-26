@@ -405,17 +405,6 @@ function netboot.run(env)
     return fail(env, "No target disk", tostring(targetReason))
   end
 
-  local setOk, setReason = pcall(computer.setBootAddress, targetAddress)
-  if not setOk then
-    return fail(env, "Boot address", "Could not set the boot address: " .. tostring(setReason))
-  end
-  if type(computer.getBootAddress) == "function" then
-    local checkOk, current = pcall(computer.getBootAddress)
-    if checkOk and type(current) == "string" and current ~= "" and current ~= targetAddress then
-      return fail(env, "Boot address", "The EEPROM did not keep the new boot address.")
-    end
-  end
-
   draw(env, "Installing " .. name, {
     "Target disk " .. tostring(targetAddress):sub(1, 8),
     "Copying the payload...",
@@ -444,6 +433,21 @@ function netboot.run(env)
     result.bytes,
     tostring(targetAddress)
   ))
+
+  -- The boot address moves to the system disk only after a complete copy. An
+  -- interrupted install leaves the EEPROM alone, so the next boot runs this
+  -- floppy again instead of a half-written disk.
+  local setOk, setReason = pcall(computer.setBootAddress, targetAddress)
+  if not setOk then
+    return fail(env, "Boot address", "Could not set the boot address: " .. tostring(setReason))
+  end
+  if type(computer.getBootAddress) == "function" then
+    local checkOk, current = pcall(computer.getBootAddress)
+    if checkOk and type(current) == "string" and current ~= "" and current ~= targetAddress then
+      return fail(env, "Boot address", "The EEPROM did not keep the new boot address.")
+    end
+  end
+
   draw(env, "Install complete", {
     name .. " is ready.",
     string.format("%d files copied (%d KB).", result.files, math.floor(result.bytes / 1024 + 0.5)),

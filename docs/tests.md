@@ -56,9 +56,27 @@ filesystem, floppy, and modem components:
    pings it, and accepts a later `STATUS`.
 6. A node persists a runtime `ASSIGN`, adopts a replacement master from `PING`,
    sends `PONG` to the pinging master, and ignores a stale token.
-7. The netboot installer completes a full run: picks the first HDD, writes the
-   runtime and node configuration, sets the boot address to that HDD, sends
-   `ACK`, writes `/install.log`, and reboots.
+7. The classic netboot installer completes a full run against a hand-built
+   payload floppy: picks the first HDD, copies the runtime, sends `ACK`, and
+   sets the boot address only after a complete copy; a refused target disk
+   leaves the boot address alone.
+8. Re-arming reuses a same-version bootstrap, a full legacy payload floppy is
+   converted, a broken readiness marker is rebuilt, the master registers a
+   node only from a verified `STATUS`, refresh pings every known node, forget
+   drops a node from the registry, and a node that fails the boot check stays
+   silent.
+9. The pull installer (`netfetch`) completes a full provisioning run against
+   fake hardware: it loads `tc.net` from the floppy, pulls the runtime over
+   `LIST`/`FETCH`, writes the node configuration, and sets the boot address
+   only after the copy completes.
+10. The master refuses the filesystem root and paths outside the runtime tree
+    with `MISS`, answers directory listings while serving, and `armUpdate`
+    falls back to the master's own version when no release check is
+    available, offering `PULL` to the known nodes.
+11. A node stages a `PULL` update under `/var/update/stage/<version>/` with
+    the `source=master` marker for the boot-time applier, and `STATUS`
+    records the node version in the registry (legacy 8-column files still
+    load).
 
 `npm run test:nodes` runs the Nodes app in the desktop harness with a fake
 floppy, rack drive, and wired modem. It presses F7, verifies the rack list, and
@@ -83,6 +101,23 @@ Manual in-game checks for 0.3.0:
 - Remove power from one node (or let it go offline); Nodes marks it offline
   after the grace period and a **Ping** sends a frame once it returns.
 - Rename a node and cycle its role; verify `/var/nodes.tsv` and the list update.
+- Press **Prepare** again with the same floppy: it arms instantly, reuses the
+  bootstrap, and the notification says the payload is already there.
+- Press **Refresh**: every node with a modem is pinged and returns online via
+  `PONG`; a node that stays silent goes offline after the grace period.
+- Select an offline node and press **Forget**: it disappears from the list and
+  `/var/nodes.tsv` no longer holds it.
+- Power off a server while it shows "Pulling the runtime over the network..."
+  and power it on again: it must boot the floppy once more instead of the
+  half-written HDD, and the install completes on the second run.
+- A server whose system disk is incomplete must never appear in Nodes; only a
+  node that booted its HDD and passed the boot check shows up.
+- Press **Update** with no newer release available: the master falls back to
+  its own version, offers `PULL` to the nodes, and each node pulls, stages,
+  reboots, and reports the same version again.
+- Publish a newer release, press **Update**: the Nodes line shows the
+  download progress, the nodes pull, reboot through the boot applier, and
+  come back online reporting the new version on their cards.
 
 ## 0.2.3 desktop pictogram checks
 
@@ -271,6 +306,18 @@ updater, and GPU-fault suites. Published as
 [`v0.3.0`](https://github.com/DerekLopezGarcia/TerraCorp-OS/releases/tag/v0.3.0)
 on 2026-10-26. The in-game rack build, floppy netboot, two-node online state, and
 post-update registry persistence are pending confirmation.
+
+Post-release work under development: an interrupted install could leave the
+EEPROM pointed at a half-written disk (the boot address is now set after a
+complete copy), re-preparing an already prepared floppy rewrote it (same
+versions are now reused), the node list kept failed installs (nodes now join
+only after a verified `STATUS` following the boot integrity check), and Nodes
+gained global **Refresh**, per-node **Forget**, and master-driven **Update**
+actions. The floppy now carries only a pull bootstrap (`netfetch.lua` +
+`tc.net`): the slave fetches the runtime from the master over `LIST`/`FETCH`,
+the master stages the latest GitHub release for its nodes before offering
+updates, and node versions are tracked in the registry. These changes are not
+part of the published v0.3.0 release.
 
 ## F0 exit checklist
 

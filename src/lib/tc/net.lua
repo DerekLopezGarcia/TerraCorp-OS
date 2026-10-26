@@ -16,7 +16,7 @@ net.MAX_FRAME = 1024
 net.PROTOCOL = "TC1"
 net.VERSION = 1
 
--- Required fields per verb. Extra scalar fields are accepted so a newer peer
+-- Required fields per verb. Extra scalar fields are allowed so a newer peer
 -- can add data without breaking an older one. Field names start lowercase;
 -- camelCase is allowed (`masterId`), but the first letter must stay lowercase.
 local VERBS = {
@@ -26,6 +26,12 @@ local VERBS = {
   STATUS = { "id", "state" },
   PING = { "id" },
   PONG = { "id", "state" },
+  LIST = { "id", "path" },
+  FETCH = { "id", "path" },
+  DIRS = { "id", "path" },
+  DATA = { "id", "path" },
+  MISS = { "id", "path" },
+  PULL = { "id", "v" },
 }
 
 local ESCAPES = {
@@ -251,6 +257,18 @@ function modem:send(address, verb, fields)
   local frame, reason = net.encode(verb, fields)
   if not frame then
     return nil, reason
+  end
+  if type(address) ~= "string" or address == "" then
+    return nil, "missing destination address"
+  end
+  return dispatch(self, "send", address, self.port, frame)
+end
+
+--- Send an already encoded frame, used when the sender sizes the payload
+-- itself (file transfers shrink chunks to fit the 1 KB limit).
+function modem:sendFrame(address, frame)
+  if type(frame) ~= "string" or #frame == 0 or #frame > net.MAX_FRAME then
+    return nil, "invalid frame"
   end
   if type(address) ~= "string" or address == "" then
     return nil, "missing destination address"

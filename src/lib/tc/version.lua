@@ -5,8 +5,8 @@ return {
   product = "TerraCorp OS",
   company = "TerraCorp Industrial Systems",
   tagline = "Architects of Dawn",
-  version = "0.3.0",
-  codename = "Rack",
+  version = "0.3.1",
+  codename = "Pull",
   api = 1,
   license = "MIT",
 }

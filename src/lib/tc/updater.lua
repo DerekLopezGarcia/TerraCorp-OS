@@ -377,6 +377,48 @@ function updater.check(currentVersion)
   }
 end
 
+--- Resolve the OS file list of a release tag by downloading its manifest.
+-- Returns the sorted runtime paths ("src/..." form), or nil and a reason.
+function updater.releasePaths(tag)
+  local manifest, reason = request(RAW_URL .. "/" .. tag .. "/tools/manifest.txt")
+  if not manifest then
+    return nil, "Could not download the release manifest: " .. tostring(reason)
+  end
+  local paths, manifestError = manifestPaths(manifest)
+  if not paths then
+    return nil, manifestError
+  end
+  return paths
+end
+
+--- Download one release file into `root` without installing anything.
+-- Used by the master to stage a runtime tree for its nodes. Returns the byte
+-- count of the stored file, or nil and a reason.
+function updater.stageFile(vfs, volume, tag, repositoryPath, root)
+  local body, reason = request(RAW_URL .. "/" .. tag .. "/" .. repositoryPath)
+  if not body then
+    return nil, "Download failed: " .. tostring(reason)
+  end
+  if repositoryPath:sub(-4) == ".lua" then
+    local chunk, syntaxError = load(body, "@" .. repositoryPath, "t", {})
+    if not chunk then
+      return nil, "Invalid Lua file " .. repositoryPath .. ": " .. tostring(syntaxError)
+    end
+  end
+
+  local runtimePath = repositoryPath:sub(5)
+  local stagePath = root .. "/" .. runtimePath
+  local writeOk, writeError = writeFile(vfs, volume, stagePath, body)
+  if not writeOk then
+    return nil, "Could not stage " .. repositoryPath .. ": " .. tostring(writeError)
+  end
+  local stored = vfs.read(stagePath)
+  if stored ~= body then
+    return nil, "Staged file verification failed: " .. repositoryPath
+  end
+  return #body, body
+end
+
 -- Queue a release for the boot-time applier (src/boot/apply.lua). The desktop
 -- only records the target; downloading, verification, and installation happen
 -- before the kernel starts, with their own progress screen.

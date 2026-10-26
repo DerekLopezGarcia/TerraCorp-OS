@@ -85,7 +85,30 @@ registry survives an OS update; no EEPROM is written.
 > 0.3.0 shipped on 2026-10-26. The in-game rack build and provisioning test are
 > still pending; see [`tests.md`](tests.md) for the checklist.
 
-### 0.3.1 Relay — next
+### 0.3.1 Pull — built, in-game checks pending
+
+- Shrink the installer floppy to a pull bootstrap: `/init.lua` (`netfetch.lua`)
+  plus `tc.net`, marked by `/ready.txt`; re-arming reuses it per version and
+  legacy payload floppies are converted.
+- Add the network install path: the unprovisioned server pulls the runtime
+  from the master over `LIST`/`FETCH` after `ASSIGN`, and the boot address
+  moves to the HDD only after a complete copy.
+- Gate the node list on a boot integrity check: `HELLO`/`ACK` no longer
+  register nodes; only a verified `STATUS` does.
+- Add **Refresh** (global PING) and per-node **Forget** in Nodes.
+- Track node versions: `STATUS` carries `v`, the registry gains a `v` column,
+  and Nodes shows it on the node card.
+- Add master-driven updates: the master stages the latest GitHub release into
+  `/var/nodeupdate/<version>/` (falling back to its own runtime), offers
+  `PULL` to the nodes, and the boot-time applier applies the staged tree with
+  backups and rollback.
+
+**Exit criteria:** two nodes provisioned from a bootstrap floppy come back
+online with their versions; a newer release published on GitHub propagates to
+the nodes through **Update** without touching the master's own install; an
+interrupted pull retries cleanly from the floppy.
+
+### 0.3.2 Relay — next
 
 - Add a persistent job queue and dispatch jobs to `worker` nodes.
 - Add timeouts, retries, cancellation, and result return to the requesting app.
@@ -96,10 +119,11 @@ registry survives an OS update; no EEPROM is written.
 draining a node stops new assignments without losing queued work; a master
 restart does not lose the queue.
 
-### 0.3.2 Vault
+### 0.3.3 Vault
 
 - Add a remote filesystem service: chunked reads and writes, checksums, and
-  atomic rename over `tc.net`.
+  atomic rename over `tc.net`. The node-update pull already uses chunked
+  `LIST`/`FETCH`/`DATA` frames; Vault generalizes that transport.
 - Add the `storage` role and mount remote volumes in Files.
 - Mirror to a second node; a single node failure must not corrupt data.
 - Do not attempt distributed RAID; use the storage node's own RAID where

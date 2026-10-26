@@ -9,6 +9,7 @@
 local net = require("tc.net")
 local provision = require("tc.provision")
 local registry = require("tc.registry")
+local updater = require("tc.updater")
 
 local cluster = {}
 cluster.__index = cluster
@@ -16,9 +17,14 @@ cluster.__index = cluster
 cluster.INSTALL_WINDOW = 600
 cluster.OFFLINE_AFTER = 30
 cluster.OFFLINE_GRACE = 5
-cluster.PROVISION_TIMEOUT = 240
+cluster.UPDATE_WINDOW = 600
+cluster.CHUNK = 512
 cluster.SAVE_INTERVAL = 10
 cluster.LOG_LIMIT = 40
+cluster.NODEUPDATE_ROOT = "/var/nodeupdate"
+
+-- Runtime paths the master may serve to a booting or updating node.
+local SERVE_ROOTS = { "/init.lua", "/boot", "/lib", "/apps" }
 
 local function shortAddress(address)
   return tostring(address or "?"):sub(1, 8)
@@ -310,7 +316,10 @@ function cluster:prepareInstaller()
   local lastReason
   for _, candidate in ipairs(candidates) do
     if candidate.safe then
-      local result, why = provision.prepare(self.vfs, candidate.vfs, { version = version })
+      local result, why = provision.prepare(self.vfs, candidate.vfs, {
+        version = version,
+        reuse = true,
+      })
       if result then
         local now = self:now()
         self.floppy = candidate
@@ -328,6 +337,17 @@ function cluster:prepareInstaller()
         self.pending = {}
         self.lastInstallLog = nil
         self.lastInstallLogAt = 0
+        if result.reused then
+          self:log(string.format(
+            "Reused the %s payload on %s (%d files, %d KB)",
+            result.version,
+            shortAddress(candidate.address),
+            result.files,
+            math.floor(result.bytes / 1024 + 0.5)
+          ))
+          return true, "Payload " .. result.version
+            .. " is already on the floppy; installer armed."
+        end
         self:log(string.format(
           "Installer armed on %s: %d files, %d KB",
           shortAddress(candidate.address),
@@ -375,6 +395,334 @@ function cluster:ping(id)
   end
   self:log("Pinged " .. tostring(node.name))
   return true
+end
+
+--- Ping every node with a known modem address so the list reflects reality.
+-- A node that answers comes back online through PONG; silent ones fall to the
+-- regular offline tracking.
+function cluster:refreshNodes()
+  local known, sent = 0, 0
+  for _, node in ipairs(self.nodes) do
+    if node.modem and node.modem ~= "" then
+      known = known + 1
+      node.pinged = nil
+      local ok = self:send(node.modem, "PING", {
+        id = node.id,
+        master = self.modem and self.modem.address or "",
+        masterId = self.kernel.address or self.computer.address(),
+      })
+      if ok then
+        sent = sent + 1
+      end
+    end
+  end
+  if known == 0 then
+    return nil, "no node has a known network address yet"
+  end
+  self:log("Refreshed " .. sent .. " of " .. known .. " node(s)")
+  return true, "Pinged " .. sent .. " of " .. known .. " node(s)."
+end
+
+--- Remove a node from the registry. Used to drop entries that never come back.
+function cluster:forget(id)
+  local node = registry.find(self.nodes, id)
+  if not node then
+    return nil, "unknown node"
+  end
+
+  registry.remove(self.nodes, id)
+  self.pending[id] = nil
+  self:save(true)
+  self:log("Forgot " .. tostring(node.name))
+  return true, "Forgot " .. tostring(node.name) .. "."
+end
+
+--- A path the master is allowed to serve, or nil. Blocks traversal outside
+-- the runtime tree so /etc and /var never leave the master.
+function cluster:serveAllowed(path)
+  if type(path) ~= "string" or path == "" or #path > 96 then
+    return nil
+  end
+  if path:find("%.%.") or path:find("//") then
+    return nil
+  end
+  for _, root in ipairs(SERVE_ROOTS) do
+    if path == root or path:sub(1, #root + 1) == root .. "/" then
+      return path
+    end
+  end
+  return nil
+end
+
+--- File serving is open while the installer window is armed, and restricted
+-- to registered nodes while an update window is armed.
+function cluster:mayServe(id)
+  local now = self:now()
+  if self.installer and self.installer.active and now < self.installer.expiresAt then
+    return true
+  end
+  if self.update and self.update.active and now < self.update.expiresAt then
+    if id and registry.find(self.nodes, id) then
+      return true
+    end
+  end
+  return false
+end
+
+function cluster:handleList(fields, remoteAddress)
+  if not self:mayServe(fields.id) then
+    return
+  end
+
+  local tree = self:serveTree()
+  local path = self:serveAllowed(fields.path)
+  local files, dirs = nil, nil
+  if path and self.vfs.isDirectory((tree or "") .. path) then
+    local entries, reason = self.vfs.list((tree or "") .. path)
+    if entries then
+      files, dirs = {}, {}
+      for _, entry in ipairs(entries) do
+        local name = tostring(entry):gsub("/+$", "")
+        if name ~= "" then
+          if self.vfs.isDirectory((tree or "") .. path .. "/" .. name) then
+            dirs[#dirs + 1] = name
+          else
+            files[#files + 1] = name
+          end
+        end
+      end
+    end
+  end
+
+  if not files then
+    self:send(remoteAddress, "MISS", { id = fields.id or "", path = tostring(fields.path or "") })
+    return
+  end
+  self:send(remoteAddress, "DIRS", {
+    id = fields.id or "",
+    path = path,
+    files = table.concat(files, ","),
+    dirs = table.concat(dirs, ","),
+  })
+end
+
+function cluster:handleFetch(fields, remoteAddress)
+  if not self:mayServe(fields.id) then
+    return
+  end
+
+  local tree = self:serveTree()
+  local path = self:serveAllowed(fields.path)
+  local body = path and self.vfs.read((tree or "") .. path) or nil
+  if type(body) ~= "string" then
+    self:send(remoteAddress, "MISS", { id = fields.id or "", path = tostring(fields.path or "") })
+    return
+  end
+
+  local off = math.min(math.max(0, math.floor(tonumber(fields.off) or 0)), #body)
+  local chunk = body:sub(off + 1, off + cluster.CHUNK)
+  local frame, reason = net.encode("DATA", {
+    id = fields.id or "",
+    path = path,
+    off = off,
+    size = #body,
+    data = chunk,
+  })
+  -- An escaping-heavy span can overflow the 1 KB frame; shrink and retry so
+  -- any chunk still arrives.
+  while not frame and #chunk > 32 do
+    chunk = chunk:sub(1, math.floor(#chunk / 2))
+    frame, reason = net.encode("DATA", {
+      id = fields.id or "",
+      path = path,
+      off = off,
+      size = #body,
+      data = chunk,
+    })
+  end
+  if not frame then
+    self:send(remoteAddress, "MISS", { id = fields.id or "", path = path })
+    return
+  end
+  if self.modem then
+    self.modem:sendFrame(remoteAddress, frame)
+  end
+end
+
+--- Offer the master's runtime version to every known node. The master first
+-- checks GitHub for a newer stable release: if one exists it is downloaded to
+-- /var/nodeupdate/<version> and served from there, so nodes receive the
+-- latest even before the master itself is updated. Without a working check
+-- the master serves its own runtime.
+function cluster:armUpdate()
+  local ok, reason = self:openModem()
+  if not ok then
+    return nil, "the network card is unavailable: " .. tostring(reason)
+  end
+
+  local own = self.version and self.version.version or "unknown"
+  self.update = {
+    active = true,
+    phase = "checking",
+    startedAt = self:now(),
+    target = own,
+    sent = 0,
+  }
+  self:log("Update requested; checking for the latest release")
+  return true, "Checking for the latest release..."
+end
+
+--- Resolve the tree the master serves to nodes: an armed update's staged
+-- tree first, then the last staged release, then the master's own runtime.
+-- Returns the path prefix (nil for the live runtime) and the version served.
+function cluster:serveTree()
+  if self.update and self.update.tree then
+    return self.update.tree, self.update.target
+  end
+  local marker = self.vfs.read(cluster.NODEUPDATE_ROOT .. "/current.txt")
+  local version = marker and marker:match("version=([%w%.%-]+)")
+  if version and self.vfs.isDirectory(cluster.NODEUPDATE_ROOT .. "/" .. version) then
+    return cluster.NODEUPDATE_ROOT .. "/" .. version, version
+  end
+  return nil, self.version and self.version.version or nil
+end
+
+--- Send the PULL frames once the target tree is resolved.
+function cluster:finishUpdateArm()
+  local update = self.update
+  if not update then
+    return
+  end
+  update.phase = "ready"
+  update.expiresAt = self:now() + cluster.UPDATE_WINDOW
+  local sent = 0
+  for _, node in ipairs(self.nodes) do
+    if node.modem and node.modem ~= "" then
+      local pulled = self:send(node.modem, "PULL", {
+        id = node.id,
+        v = update.target,
+        master = self.modem and self.modem.address or "",
+        masterId = self.kernel.address or self.computer.address(),
+      })
+      if pulled then
+        sent = sent + 1
+      end
+    end
+  end
+  update.sent = sent
+  self:log("Update to " .. update.target .. " offered to " .. sent .. " node(s)")
+end
+
+--- Advance the update state machine by one step. The GitHub check and the
+-- per-file downloads run from tick so the desktop stays responsive.
+function cluster:tickUpdate()
+  local update = self.update
+  if update.phase == "checking" then
+    local okCheck, checkOrError = pcall(updater.check, update.target)
+    local check, reason
+    if okCheck then
+      if type(checkOrError) == "table" then
+        check = checkOrError
+      else
+        reason = checkOrError
+      end
+    else
+      reason = checkOrError
+    end
+
+    if check and check.available and check.tag then
+      local versionText = tostring(check.tag):sub(2)
+      local okPaths, pathsOrError = pcall(updater.releasePaths, check.tag)
+      local paths = okPaths and pathsOrError or nil
+      if not paths then
+        self:log("Could not list the release files (" ..
+          tostring(okPaths and pathsOrError or pathsOrError) .. "); serving " .. update.target)
+      else
+        update.latest = versionText
+        update.tag = check.tag
+        update.paths = paths
+        update.index = 1
+        update.files = 0
+        update.phase = "downloading"
+        self:log("Downloading " .. versionText .. " for the nodes (" .. #paths .. " files)")
+        return
+      end
+    elseif check and not check.available then
+      self:log("The master already runs the latest release (" .. update.target .. ")")
+    else
+      self:log("No release check (" .. tostring(reason) .. "); serving " .. update.target)
+    end
+    self:finishUpdateArm()
+  elseif update.phase == "downloading" then
+    local repositoryPath = update.paths and update.paths[update.index]
+    if not repositoryPath then
+      self:finishUpdateArm()
+      return
+    end
+
+    if not self.volume and self.component and self.kernel and self.kernel.volumeAddress
+      and type(self.component.proxy) == "function" then
+      self.volume = self.component.proxy(self.kernel.volumeAddress)
+    end
+    local okStage, bytesOrError, body = pcall(
+      updater.stageFile, self.vfs, self.volume, update.tag, repositoryPath, update.stageRoot
+    )
+    if not okStage or not bytesOrError then
+      self:log("Download failed for " .. repositoryPath ..
+        " (" .. tostring(okStage and bytesOrError or bytesOrError) .. "); serving " .. update.target)
+      update.phase = "ready"
+      update.tree = nil
+      self:finishUpdateArm()
+      return
+    end
+    if repositoryPath == "src/lib/tc/version.lua" then
+      update.stagedVersion = tostring(body or ""):match('version%s*=%s*"([^"]+)"')
+    end
+    update.index = update.index + 1
+    update.files = (update.files or 0) + 1
+    if update.index > #update.paths then
+      if update.stagedVersion ~= update.latest then
+        self:log("The staged version.lua does not match the release; serving " .. update.target)
+        update.tree = nil
+        self:finishUpdateArm()
+        return
+      end
+      self.vfs.ensureDir(cluster.NODEUPDATE_ROOT)
+      self.vfs.write(cluster.NODEUPDATE_ROOT .. "/current.txt", "version=" .. update.latest .. "\n")
+      update.tree = update.stageRoot
+      update.target = update.latest
+      self:log("Staged " .. update.latest .. " for the nodes")
+      self:finishUpdateArm()
+    end
+  end
+end
+
+function cluster:cancelUpdate()
+  if not self.update then
+    return true, "No update is armed."
+  end
+  self.update = nil
+  self:log("Update window closed")
+  return true, "Update window closed."
+end
+
+function cluster:updateState()
+  local now = self:now()
+  if not self.update then
+    return { active = false, remaining = 0 }
+  end
+  local update = self.update
+  local remaining = update.expiresAt and math.max(0, update.expiresAt - now) or 0
+  return {
+    active = update.active,
+    phase = update.phase,
+    remaining = remaining,
+    target = update.target,
+    latest = update.latest,
+    files = update.files,
+    total = update.paths and #update.paths or nil,
+    sent = update.sent,
+  }
 end
 
 function cluster:rename(id, name)
@@ -432,17 +780,8 @@ function cluster:handleHello(fields, remoteAddress)
     pending.at = now
   end
 
-  registry.upsert(self.nodes, {
-    id = id,
-    name = pending.name,
-    role = pending.role,
-    modem = remoteAddress,
-    state = "provisioning",
-    mem = kilobytes(fields.mem),
-    disk = kilobytes(fields.disk),
-    lastSeen = now,
-  })
-  self:markDirty()
+  -- The node is not registered yet: it only joins the list once it boots its
+  -- own disk, passes the integrity check, and reports STATUS.
 
   local sent, reason = self:send(remoteAddress, "ASSIGN", {
     id = id,
@@ -489,21 +828,7 @@ function cluster:handleAck(fields, remoteAddress)
   pending.acked = true
   pending.at = self:now()
   pending.boot = fields.boot
-  local node = registry.upsert(self.nodes, {
-    id = id,
-    name = pending.name,
-    role = pending.role,
-    modem = remoteAddress,
-    state = "provisioning",
-    mem = fields.mem,
-    disk = fields.disk,
-    lastSeen = self:now(),
-  })
-  self:markDirty()
-  self:save()
-  if node then
-    self:log(tostring(node.name) .. " acknowledged the install; waiting for STATUS")
-  end
+  self:log(tostring(pending.name) .. " acknowledged the install; waiting for STATUS")
 end
 
 function cluster:handleStatus(fields, remoteAddress)
@@ -514,12 +839,17 @@ function cluster:handleStatus(fields, remoteAddress)
 
   local now = self:now()
   local node = self:findNode(id)
+  local version = tostring(fields.v or "")
+  if version:match("^v?%d+%.%d+%.%d+$") == nil then
+    version = node and node.v or ""
+  end
   local record = {
     id = id,
     modem = remoteAddress,
     state = fields.state == "offline" and "offline" or "online",
     mem = fields.mem,
     disk = fields.disk,
+    v = version,
     lastSeen = now,
   }
 
@@ -598,6 +928,10 @@ function cluster:handle(name, localAddress, remoteAddress, port, distance, messa
     self:handleStatus(fields, remoteAddress)
   elseif verb == "PONG" then
     self:handlePong(fields)
+  elseif verb == "LIST" then
+    self:handleList(fields, remoteAddress)
+  elseif verb == "FETCH" then
+    self:handleFetch(fields, remoteAddress)
   elseif verb == "PING" then
     -- Masters do not answer PING; only nodes do.
   end
@@ -618,6 +952,22 @@ function cluster:tick()
     self.pending = {}
     self:log("Installer window expired")
     changed = true
+  end
+
+  if self.update and self.update.phase == "ready" and self.update.expiresAt
+    and now >= self.update.expiresAt then
+    self.update.active = false
+    self:log("Update window expired")
+    changed = true
+  end
+
+  if self.update and (self.update.phase == "checking" or self.update.phase == "downloading") then
+    local okTick, tickError = pcall(self.tickUpdate, self)
+    if not okTick then
+      self.update = nil
+      self:log("Update aborted: " .. tostring(tickError))
+      changed = true
+    end
   end
 
   for _, node in ipairs(self.nodes) do
@@ -642,11 +992,6 @@ function cluster:tick()
           changed = true
         end
       end
-    elseif node.state == "provisioning" and idle > cluster.PROVISION_TIMEOUT then
-      node.state = "offline"
-      self:markDirty()
-      self:log(tostring(node.name) .. " did not report after provisioning")
-      changed = true
     end
   end
 

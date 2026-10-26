@@ -191,6 +191,22 @@ equal(#odd, 1, "malformed lines are skipped and duplicate ids merge")
 equal(odd[1].state, "offline", "invalid state becomes offline")
 equal(odd[1].role, "worker", "invalid role keeps the default")
 
+-- The version column is optional: registry files written before it still
+-- load, and newer files round-trip the version.
+store[registry.path] = "legacy-1\tTC-L1\tworker\tmodem-1\toffline\t128\t1024\t5\n"
+local legacyNodes = registry.load(vfs)
+equal(#legacyNodes, 1, "a legacy registry line loads")
+equal(legacyNodes[1].v, "", "a legacy line has no version")
+
+local removed = registry.remove(loaded, "id-2")
+check(removed ~= nil, "remove returns the dropped record")
+equal(registry.find(loaded, "id-2"), nil, "the removed node is gone")
+
+registry.upsert(loaded, { id = "id-1", v = "0.3.1" })
+registry.save(vfs, loaded)
+local versioned = registry.load(vfs)
+equal(registry.find(versioned, "id-1").v, "0.3.1", "the version survives a save/reload")
+
 --------------------------------------------------------------------------------
 -- Fake filesystem components
 --------------------------------------------------------------------------------
@@ -396,9 +412,11 @@ local source = vfsModule.new(sourceVolume)
 put(source, "/init.lua", "return true\n")
 put(source, "/boot/kernel.lua", "-- test kernel\n")
 put(source, "/boot/netboot.lua", slurp("src/boot/netboot.lua"))
+put(source, "/boot/netfetch.lua", slurp("src/boot/netfetch.lua"))
 put(source, "/lib/tc/vfs.lua", slurp("src/lib/tc/vfs.lua"))
 put(source, "/lib/tc/provision.lua", slurp("src/lib/tc/provision.lua"))
 put(source, "/lib/tc/net.lua", slurp("src/lib/tc/net.lua"))
+put(source, "/lib/tc/pull.lua", slurp("src/lib/tc/pull.lua"))
 put(source, "/apps/nodes.lua", "return {}\n")
 
 --------------------------------------------------------------------------------
@@ -411,11 +429,43 @@ check(provision.checkTarget(floppy) == true, "an empty floppy is a valid target"
 
 local prepared, prepareReason = provision.prepare(source, floppy, { version = "0.3.0" })
 check(prepared ~= nil, "prepare writes the floppy: " .. tostring(prepareReason))
-check(floppy.exists("/init.lua"), "prepare writes the netboot entry point")
-check(floppy.exists("/payload/.ready"), "prepare writes the payload marker")
-check(floppy.exists("/payload/boot/kernel.lua"), "prepare copies the runtime")
-local ready = floppy.read("/payload/.ready") or ""
-check(ready:find("version=0.3.0", 1, true) ~= nil, "payload marker names the version")
+check(floppy.exists("/init.lua"), "prepare writes the pull bootstrap")
+check(floppy.exists("/net.lua"), "prepare writes tc.net for the bootstrap")
+check(floppy.exists("/ready.txt"), "prepare writes the readiness marker")
+check(not floppy.exists("/payload"), "prepare no longer copies the runtime payload")
+local ready = floppy.read("/ready.txt") or ""
+check(ready:find("version=0.3.0", 1, true) ~= nil, "the readiness marker names the version")
+check(
+  floppy.read("/init.lua") == slurp("src/boot/netfetch.lua"),
+  "prepare stages the netfetch bootstrap as /init.lua"
+)
+check(floppy.read("/net.lua") == slurp("src/lib/tc/net.lua"), "prepare stages tc.net as /net.lua")
+
+-- Re-preparing reuses the bootstrap for the same version.
+local readyMarker = floppy.read("/ready.txt")
+local reused, reuseReason = provision.prepare(source, floppy, { version = "0.3.0", reuse = true })
+check(reused ~= nil, "prepare reuses a same-version bootstrap: " .. tostring(reuseReason))
+check(reused and reused.reused == true, "a reused prepare reports reused")
+check(floppy.read("/ready.txt") == readyMarker, "reuse keeps the readiness marker")
+check(floppy.exists("/init.lua"), "reuse keeps the bootstrap entry point")
+
+-- A legacy payload floppy is converted: the payload tree is dropped and the
+-- bootstrap is written in its place, even on a nearly full floppy.
+local legacyVolume = newVolume({ total = 640 * 1024 })
+local legacy = vfsModule.new(legacyVolume)
+put(legacy, "/payload/lib/tc/vfs.lua", string.rep("x", 512 * 1024))
+local converted, convertReason = provision.prepare(source, legacy, { version = "0.3.0", reuse = true })
+check(converted ~= nil, "a full legacy floppy is converted: " .. tostring(convertReason))
+check(not legacy.exists("/payload/lib/tc/vfs.lua"), "the legacy payload is removed")
+check(legacy.exists("/init.lua") and legacy.exists("/net.lua"), "the bootstrap replaces the payload")
+
+-- A broken readiness marker is not trusted; the bootstrap is rebuilt.
+local brokenVolume = newVolume()
+local broken = vfsModule.new(brokenVolume)
+put(broken, "/ready.txt", "garbage")
+local repaired, repairedReason = provision.prepare(source, broken, { version = "0.3.0", reuse = true })
+check(repaired ~= nil, "a broken readiness marker is rebuilt: " .. tostring(repairedReason))
+check(repaired and not repaired.reused, "a broken marker does not count as a bootstrap")
 
 local dirtyVolume = newVolume()
 local dirty = vfsModule.new(dirtyVolume)
@@ -423,6 +473,17 @@ put(dirty, "/photos/holiday.txt", "not ours")
 local blocked, blockedReason = provision.prepare(source, dirty, { version = "0.3.0" })
 check(blocked == nil, "prepare refuses a floppy with unrelated data")
 check(tostring(blockedReason):find("other data") ~= nil, "unrelated data is named in the error")
+
+-- provision.install still serves the classic payload path; build that floppy
+-- by hand because prepare now writes the pull bootstrap.
+local payloadFloppyVolume = newVolume()
+local payloadFloppy = vfsModule.new(payloadFloppyVolume)
+put(payloadFloppy, "/payload/.ready", "version=0.3.0\nfiles=3\nbytes=64\n")
+put(payloadFloppy, "/payload/init.lua", "return true\n")
+put(payloadFloppy, "/payload/boot/kernel.lua", "-- kernel\n")
+put(payloadFloppy, "/payload/lib/tc/vfs.lua", "-- vfs\n")
+put(payloadFloppy, "/payload/lib/tc/provision.lua", "-- provision\n")
+put(payloadFloppy, "/payload/lib/tc/net.lua", "-- net\n")
 
 local targetVolume = newVolume({ total = 2 * 1024 * 1024 })
 local target = vfsModule.new(targetVolume)
@@ -432,7 +493,7 @@ local configText = provision.configText({
   master = "modem-master",
   masterId = "master-computer",
 })
-local installed, installReason = provision.install(target, floppy, {
+local installed, installReason = provision.install(target, payloadFloppy, {
   version = "0.3.0",
   configText = configText,
 })
@@ -453,7 +514,7 @@ local retryVolume = newVolume({ total = 2 * 1024 * 1024 })
 local retry = vfsModule.new(retryVolume)
 put(retry, "/var/install-incomplete", "version=0.3.0\n")
 put(retry, "/boot/kernel.lua", "-- partial\n")
-local retried, retryReason = provision.install(retry, floppy, {
+local retried, retryReason = provision.install(retry, payloadFloppy, {
   version = "0.3.0",
   configText = configText,
 })
@@ -468,14 +529,17 @@ check(fallbackConfig:find('nodeRole = "worker"', 1, true) ~= nil, "invalid roles
 -- Master cluster: installer, handshake, offline tracking, registry
 --------------------------------------------------------------------------------
 
+do
 local masterVolume = newVolume({ total = 4 * 1024 * 1024 })
 local master = vfsModule.new(masterVolume)
 put(master, "/init.lua", "return true\n")
 put(master, "/boot/kernel.lua", "-- master kernel\n")
 put(master, "/boot/netboot.lua", slurp("src/boot/netboot.lua"))
+put(master, "/boot/netfetch.lua", slurp("src/boot/netfetch.lua"))
 put(master, "/lib/tc/vfs.lua", slurp("src/lib/tc/vfs.lua"))
 put(master, "/lib/tc/provision.lua", slurp("src/lib/tc/provision.lua"))
 put(master, "/lib/tc/net.lua", slurp("src/lib/tc/net.lua"))
+put(master, "/lib/tc/pull.lua", slurp("src/lib/tc/pull.lua"))
 put(master, "/apps/nodes.lua", "return {}\n")
 
 local clusterFloppyVolume = newVolume()
@@ -554,6 +618,85 @@ local armed, armedReason = cluster:prepareInstaller()
 check(armed == true, "installer arms on a prepared floppy: " .. tostring(armedReason))
 check(cluster:installerState().active == true, "installer reports an active window")
 
+-- Re-arming with the bootstrap already on the floppy reuses it instead of
+-- rewriting it.
+local armedMarker = clusterFloppy.read("/ready.txt")
+local rearmed, rearmedReason = cluster:prepareInstaller()
+check(rearmed == true, "re-arming a prepared floppy succeeds: " .. tostring(rearmedReason))
+check(
+  tostring(rearmedReason):find("already on the floppy", 1, true) ~= nil,
+  "re-arming reports the reused bootstrap"
+)
+check(clusterFloppy.read("/ready.txt") == armedMarker, "re-arming does not rewrite the bootstrap")
+
+-- While the installer window is armed, the master serves its runtime tree to
+-- booting servers. The filesystem root itself is never served; runtime
+-- directories are listable and files come back in chunks.
+local serveCalls = #clusterCalls
+cluster:handle("modem_message", "modem-master", "node-modem-9", net.PORT, 0,
+  net.encode("LIST", { id = "probe", path = "/" }))
+local refusedRoot = false
+for index = serveCalls + 1, #clusterCalls do
+  local call = clusterCalls[index]
+  if call.method == "send" then
+    local verb = net.decode(call.args[3])
+    if verb == "MISS" then
+      refusedRoot = true
+    end
+  end
+end
+check(refusedRoot, "the filesystem root is never served")
+
+local serveCalls2 = #clusterCalls
+cluster:handle("modem_message", "modem-master", "node-modem-9", net.PORT, 0,
+  net.encode("LIST", { id = "probe", path = "/boot" }))
+local servedDirs
+for index = serveCalls2 + 1, #clusterCalls do
+  local call = clusterCalls[index]
+  if call.method == "send" then
+    local verb, fields = net.decode(call.args[3])
+    if verb == "DIRS" then
+      servedDirs = fields
+    end
+  end
+end
+check(servedDirs ~= nil, "a LIST receives a DIRS reply")
+check(
+  servedDirs and servedDirs.files == "kernel.lua,netboot.lua,netfetch.lua",
+  "the directory listing names the runtime files"
+)
+
+local serveCalls3 = #clusterCalls
+cluster:handle("modem_message", "modem-master", "node-modem-9", net.PORT, 0,
+  net.encode("FETCH", { id = "probe", path = "/init.lua", off = 0 }))
+local servedFile
+for index = serveCalls3 + 1, #clusterCalls do
+  local call = clusterCalls[index]
+  if call.method == "send" then
+    local verb, fields = net.decode(call.args[3])
+    if verb == "DATA" then
+      servedFile = fields
+    end
+  end
+end
+check(servedFile ~= nil, "a FETCH receives a DATA reply")
+equal(servedFile and servedFile.data, "return true\n", "DATA carries the file content")
+equal(servedFile and tonumber(servedFile.size), 12, "DATA names the file size")
+
+cluster:handle("modem_message", "modem-master", "node-modem-9", net.PORT, 0,
+  net.encode("FETCH", { id = "probe", path = "/etc/terracorp.cfg", off = 0 }))
+local refused = false
+for index = serveCalls3 + 1, #clusterCalls do
+  local call = clusterCalls[index]
+  if call.method == "send" then
+    local verb = net.decode(call.args[3])
+    if verb == "MISS" then
+      refused = true
+    end
+  end
+end
+check(refused, "a path outside the runtime tree is refused")
+
 local hello = net.encode("HELLO", {
   id = "node-1",
   mem = 512,
@@ -575,10 +718,10 @@ check(assign ~= nil, "HELLO receives an ASSIGN")
 equal(assign and assign.id, "node-1", "ASSIGN targets the new node")
 check(assign and assign.master == "modem-master", "ASSIGN names the master modem")
 check(assign and assign.masterId == "master-computer", "ASSIGN names the master computer")
-local assignedNode = registry.find(cluster:nodesList(), "node-1")
-check(assignedNode ~= nil, "HELLO registers the node")
-equal(assignedNode and assignedNode.state, "provisioning", "a new node is provisioning")
-equal(assignedNode and assignedNode.modem, "node-modem-1", "registry stores the node modem")
+check(
+  registry.find(cluster:nodesList(), "node-1") == nil,
+  "HELLO does not register the node before it boots"
+)
 
 local ack = net.encode("ACK", {
   token = assign and assign.token or "",
@@ -588,7 +731,10 @@ local ack = net.encode("ACK", {
   disk = 2048,
 })
 cluster:handle("modem_message", "modem-master", "node-modem-1", net.PORT, 0, ack)
-equal(registry.find(cluster:nodesList(), "node-1").state, "provisioning", "ACK keeps the node provisioning")
+check(
+  registry.find(cluster:nodesList(), "node-1") == nil,
+  "an ACK still does not register the node"
+)
 
 local status = net.encode("STATUS", {
   id = "node-1",
@@ -648,8 +794,20 @@ end
 check(assign2 ~= nil, "a second node on the same bus receives an ASSIGN")
 equal(assign2 and assign2.name, "TC-N2", "the second node gets its own name")
 check(assign2 and assign2.token ~= (assign and assign.token), "each assignment gets its own token")
+check(
+  registry.find(cluster:nodesList(), "node-2") == nil,
+  "the second node is not registered before it boots"
+)
+-- It joins the list only once it boots, passes the check, and reports STATUS.
+local status2 = net.encode("STATUS", {
+  id = "node-2",
+  state = "online",
+  mem = 256,
+  disk = 1024,
+})
+cluster:handle("modem_message", "modem-master", "node-modem-2", net.PORT, 0, status2)
 local secondNode = registry.find(cluster:nodesList(), "node-2")
-check(secondNode ~= nil, "the second node is registered")
+check(secondNode ~= nil, "a verified STATUS registers the second node")
 equal(secondNode and secondNode.modem, "node-modem-2", "the second node stores its own modem")
 equal(#cluster:nodesList(), 2, "both nodes are listed")
 
@@ -661,6 +819,53 @@ equal(registry.find(cluster:nodesList(), "node-1").name, "Rack 1", "cluster stor
 equal(registry.find(cluster:nodesList(), "node-1").role, "storage", "cluster stores the new role")
 check((master.read(registry.path) or ""):find("Rack 1", 1, true) ~= nil, "the node registry persists")
 
+-- Refresh pings every node with a known modem address.
+local refreshBefore = #clusterCalls
+local refreshed, refreshReason = cluster:refreshNodes()
+check(refreshed == true, "refresh pings the known nodes: " .. tostring(refreshReason))
+local refreshPings = 0
+for index = refreshBefore + 1, #clusterCalls do
+  local call = clusterCalls[index]
+  if call.method == "send" then
+    local verb = net.decode(call.args[3])
+    if verb == "PING" then
+      refreshPings = refreshPings + 1
+    end
+  end
+end
+check(refreshPings == 2, "refresh pings both known nodes")
+
+-- A node can be dropped from the registry once it is gone.
+local forgot, forgotReason = cluster:forget("node-2")
+check(forgot == true, "forget removes a node: " .. tostring(forgotReason))
+check(registry.find(cluster:nodesList(), "node-2") == nil, "the forgotten node is gone")
+equal(#cluster:nodesList(), 1, "only the remaining node is listed")
+
+-- Arm an update: without an internet card the release check is unavailable,
+-- so the master falls back to serving its own runtime and offers it.
+local armOk, armReason = cluster:armUpdate()
+check(armOk == true, "armUpdate starts: " .. tostring(armReason))
+cluster:tick()
+local update = cluster:updateState()
+check(update.phase == "ready", "without a release check the update serves the master's version")
+equal(update.target, "0.3.0", "the update target is the master version")
+local pullOffered = false
+for _, call in ipairs(clusterCalls) do
+  if call.method == "send" then
+    local verb, fields = net.decode(call.args[3])
+    if verb == "PULL" and fields.id == "node-1" and fields.v == "0.3.0" then
+      pullOffered = true
+    end
+  end
+end
+check(pullOffered, "arming the update offers PULL to the known node")
+
+-- STATUS records the node version, and the registry persists it.
+cluster:handle("modem_message", "modem-master", "node-modem-1", net.PORT, 0,
+  net.encode("STATUS", { id = "node-1", state = "online", mem = 512, disk = 2048, v = "0.3.1" }))
+equal(registry.find(cluster:nodesList(), "node-1").v, "0.3.1", "STATUS records the node version")
+check((master.read(registry.path) or ""):find("0.3.1", 1, true) ~= nil, "the node version persists")
+
 clock = clock + clusterModule.INSTALL_WINDOW + 10
 cluster:tick()
 check(cluster:installerState().active == false, "the installer window expires")
@@ -671,10 +876,13 @@ equal(#clusterCalls, expiredCalls, "an expired installer ignores HELLO")
 check(registry.find(cluster:nodesList(), "node-3") == nil, "an ignored node is not registered")
 cluster:shutdown()
 
+end
+
 --------------------------------------------------------------------------------
 -- Node runtime: assignment, ACK, PING adoption, and heartbeats
 --------------------------------------------------------------------------------
 
+do
 local nodeClock = 50
 local nodeCalls = {}
 local nodeConfigData = {
@@ -709,16 +917,69 @@ local nodeComponent = {
       elseif method == "open" or method == "close" then
         return true
       elseif method == "send" or method == "broadcast" then
+        local packed = table.pack(...)
         nodeCalls[#nodeCalls + 1] = {
           method = method,
-          args = table.pack(...),
+          args = packed,
         }
+        if method == "send" then
+          nodeRespond(packed[3])
+        end
         return true
       end
     end
     return nil, "unknown component"
   end,
 }
+-- The fake master answers LIST/FETCH from a small runtime tree so the node
+-- can stage an update without any real network.
+local nodeServed = {
+  ["/init.lua"] = "return true\n",
+  ["/boot/kernel.lua"] = "-- kernel update\n",
+}
+local nodePullQueue = {}
+function nodeRespond(frame)
+  local verb, fields = net.decode(frame)
+  if verb == "LIST" then
+    local files, dirs = "", ""
+    if fields.path == "/" then
+      files = "init.lua"
+      dirs = "boot"
+    elseif fields.path == "/boot" then
+      files = "kernel.lua"
+    end
+    nodePullQueue[#nodePullQueue + 1] = table.pack(
+      "modem_message",
+      "node-modem",
+      "modem-master",
+      net.PORT,
+      0,
+      net.encode("DIRS", {
+        id = fields.id,
+        path = fields.path,
+        files = files,
+        dirs = dirs,
+      })
+    )
+  elseif verb == "FETCH" then
+    local body = nodeServed[fields.path] or ""
+    local off = tonumber(fields.off) or 0
+    nodePullQueue[#nodePullQueue + 1] = table.pack(
+      "modem_message",
+      "node-modem",
+      "modem-master",
+      net.PORT,
+      0,
+      net.encode("DATA", {
+        id = fields.id,
+        path = fields.path,
+        off = off,
+        size = #body,
+        data = body:sub(off + 1, off + 512),
+      })
+    )
+  end
+end
 local nodeComputer = {
   address = function()
     return "node-computer-1"
@@ -728,6 +989,14 @@ local nodeComputer = {
   end,
   totalMemory = function()
     return 2 * 1024 * 1024
+  end,
+  pullSignal = function(timeout)
+    nodeClock = nodeClock + (timeout or 0)
+    local item = table.remove(nodePullQueue, 1)
+    if item then
+      return table.unpack(item, 1, item.n)
+    end
+    return nil
   end,
 }
 local nodeKernel = {
@@ -798,6 +1067,72 @@ equal(pongVerb, "PONG", "PING receives PONG")
 equal(pongCall.args[1], "modem-new", "PONG answers the pinging master")
 equal(pongFields.state, "online", "PONG reports online")
 
+-- The boot check gates reporting: a broken system stays silent.
+nodeRuntime.healthy = false
+check(nodeRuntime:sendPong("modem-new") == nil, "a node that failed the check does not answer PING")
+local silentCalls = #nodeCalls
+nodeRuntime:tick()
+equal(#nodeCalls, silentCalls, "an unhealthy node sends no heartbeat")
+nodeRuntime.healthy = nil
+
+local checkOk, checkFailures = nodeRuntime:verify()
+check(checkOk == false, "an empty system fails the boot check")
+check(type(checkFailures) == "table" and #checkFailures > 0, "the boot check names what is missing")
+
+-- A complete system passes the check and would report normally.
+local checkedVolume = newVolume()
+local checked = vfsModule.new(checkedVolume)
+put(checked, "/init.lua", "return true\n")
+put(checked, "/boot/kernel.lua", "-- kernel\n")
+put(checked, "/lib/tc/vfs.lua", "-- vfs\n")
+put(checked, "/lib/tc/net.lua", "-- net\n")
+put(checked, "/lib/tc/node.lua", "-- node\n")
+put(checked, "/lib/tc/config.lua", "-- config\n")
+put(checked, "/etc/terracorp.cfg", "return {}\n")
+local checkedNode = nodeModule.new({
+  kernel = nodeKernel,
+  config = nodeConfig,
+  vfs = checked,
+  log = nil,
+  version = { version = "0.3.0" },
+  theme = { colors = { bg = 0, text = 0, dim = 0, accent = 0, ok = 0, warn = 0 } },
+  gfxModule = nil,
+  component = nodeComponent,
+  computer = nodeComputer,
+  os = {},
+})
+check(checkedNode:verify() == true, "a complete system passes the boot check")
+
+-- A node stages a master-offered update and marks it for the boot applier.
+nodeRuntime:openModem()
+local pulledOk, pulledCount = nodeRuntime:pullUpdate({
+  v = "0.3.1",
+  master = "modem-master",
+}, "modem-master")
+check(pulledOk == true, "the node stages a master update: " .. tostring(pulledCount))
+check(pulledCount == 2, "the pull stages every served file")
+local pendingMarker = nodeRuntime.vfs.read("/var/update/pending") or ""
+check(pendingMarker:find("version=0.3.1", 1, true) ~= nil, "the pull marks the pending update")
+check(pendingMarker:find("source=master", 1, true) ~= nil, "the pull names the master source")
+check(
+  nodeRuntime.vfs.read("/var/update/stage/0.3.1/init.lua") == "return true\n",
+  "the pull stages the runtime files"
+)
+
+-- A PULL frame triggers the same staging and adopts the master address.
+nodeRuntime:handleModem("node-modem-1", "modem-master", net.PORT, 0,
+  net.encode("PULL", {
+    id = "node-computer-1",
+    v = "0.3.2",
+    master = "modem-master",
+    masterId = "master-2",
+  }))
+check(
+  (nodeRuntime.vfs.read("/var/update/pending") or ""):find("version=0.3.2", 1, true) ~= nil,
+  "a PULL frame stages the offered update"
+)
+equal(nodeRuntime.master, "modem-master", "a PULL adopts the master address")
+
 local lostNode = nodeModule.new({
   kernel = nodeKernel,
   config = {
@@ -828,11 +1163,15 @@ equal(helloVerb, "HELLO", "broadcast verb")
 equal(helloFields.id, "node-computer-1", "HELLO carries the computer id")
 check(#nodeCalls > beforeHello, "HELLO is transmitted")
 
+end
+
 --------------------------------------------------------------------------------
 -- Netboot: full provisioning run against fake hardware
 --------------------------------------------------------------------------------
 
+do
 local bootAddress = "floppy-1"
+local bootSetComplete = false
 local netbootShutdown = false
 local netbootCalls = {}
 local netbootPull = {}
@@ -846,8 +1185,14 @@ local volumes = {
   ["hdd-1"] = netbootTargetVolume,
 }
 
-local preparedInstall, preparedReason = provision.prepare(source, netbootFloppy, { version = "0.3.0" })
-check(preparedInstall ~= nil, "the netboot test floppy is prepared: " .. tostring(preparedReason))
+-- The classic installer expects a payload floppy; prepare now writes the
+-- pull bootstrap, so build the payload by hand.
+put(netbootFloppy, "/payload/.ready", "version=0.3.0\nfiles=3\nbytes=64\n")
+put(netbootFloppy, "/payload/init.lua", "return true\n")
+put(netbootFloppy, "/payload/boot/kernel.lua", "-- kernel\n")
+put(netbootFloppy, "/payload/lib/tc/vfs.lua", slurp("src/lib/tc/vfs.lua"))
+put(netbootFloppy, "/payload/lib/tc/provision.lua", slurp("src/lib/tc/provision.lua"))
+put(netbootFloppy, "/payload/lib/tc/net.lua", slurp("src/lib/tc/net.lua"))
 
 local netbootComponent = {
   list = function(kind)
@@ -903,6 +1248,9 @@ local netbootComputer = {
   end,
   setBootAddress = function(address)
     bootAddress = address
+    local log = netbootFloppy.read("/install.log") or ""
+    bootSetComplete = netbootTarget.exists("/init.lua")
+      and log:find("OK ", 1, true) ~= nil
     return true
   end,
   pullSignal = function(timeout)
@@ -945,6 +1293,7 @@ local netbootOk, netbootResult = pcall(netboot.run, {
 check(netbootOk, "netboot runs without an error: " .. tostring(netbootResult))
 check(netbootResult == true, "netboot completes the install")
 equal(bootAddress, "hdd-1", "netboot sets the boot address to the target disk")
+check(bootSetComplete == true, "the boot address is set only after a complete copy")
 check(netbootTarget.exists("/boot/kernel.lua"), "netboot installs the kernel")
 check(netbootTarget.exists("/init.lua"), "netboot installs the entry point")
 check(not netbootTarget.exists("/var/install-incomplete"), "netboot clears the install marker")
@@ -967,5 +1316,235 @@ for _, call in ipairs(netbootCalls) do
   end
 end
 check(ackSent, "netboot acknowledges the install")
+
+-- A refused target disk never takes the boot address, so an interrupted or
+-- failed install cannot leave the server unable to boot.
+bootAddress = "floppy-1"
+bootSetComplete = false
+netbootShutdown = false
+netbootPull[1] = table.pack(
+  "modem_message",
+  "node-modem-1",
+  "modem-master",
+  net.PORT,
+  0,
+  net.encode("ASSIGN", {
+    id = "node-computer-1",
+    name = "TC-N1",
+    role = "worker",
+    master = "modem-master",
+    masterId = "master-computer",
+    token = "netboot-token-2",
+  })
+)
+local refusedOk, refusedResult = pcall(netboot.run, {
+  component = netbootComponent,
+  computer = netbootComputer,
+  os = { sleep = function() end },
+  version = "0.3.0",
+  noScreen = true,
+})
+check(refusedOk == true, "the refused retry runs without an error: " .. tostring(refusedResult))
+check(refusedResult == false, "a refused target stops at the failure screen")
+equal(bootAddress, "floppy-1", "a failed install leaves the boot address alone")
+check(bootSetComplete == false, "a failed install never sets the boot address")
+
+end
+
+--------------------------------------------------------------------------------
+-- Netfetch: full pull-based provisioning run against fake hardware
+--------------------------------------------------------------------------------
+
+do
+local netfetch = require("boot.netfetch")
+
+local nfBootAddress = ""
+local nfBootComplete = false
+local nfShutdown = false
+local nfCalls = {}
+local nfPull = {}
+local nfClock = 0
+local nfFloppyVolume = newVolume()
+local nfFloppy = vfsModule.new(nfFloppyVolume)
+local nfTargetVolume = newVolume({ total = 2 * 1024 * 1024 })
+local nfTarget = vfsModule.new(nfTargetVolume)
+local nfVolumes = {
+  ["floppy-2"] = nfFloppyVolume,
+  ["hdd-2"] = nfTargetVolume,
+}
+
+put(nfFloppy, "/ready.txt", "version=0.3.0\nfiles=2\nbytes=64\n")
+put(nfFloppy, "/net.lua", slurp("src/lib/tc/net.lua"))
+
+-- The fake master serves its runtime tree (the shared `source` volume).
+local function nfRespond(frame)
+  local verb, fields = net.decode(frame)
+  if verb ~= "LIST" and verb ~= "FETCH" then
+    return
+  end
+  local reply = nil
+  if verb == "LIST" then
+    local entries = source.list(fields.path)
+    local files, dirs = {}, {}
+    for _, name in ipairs(entries or {}) do
+      local clean = tostring(name):gsub("/+$", "")
+      if source.isDirectory(fields.path .. "/" .. clean) then
+        dirs[#dirs + 1] = clean
+      else
+        files[#files + 1] = clean
+      end
+    end
+    reply = net.encode("DIRS", {
+      id = fields.id,
+      path = fields.path,
+      files = table.concat(files, ","),
+      dirs = table.concat(dirs, ","),
+    })
+  else
+    local body = source.read(fields.path) or ""
+    local off = tonumber(fields.off) or 0
+    reply = net.encode("DATA", {
+      id = fields.id,
+      path = fields.path,
+      off = off,
+      size = #body,
+      data = body:sub(off + 1, off + 512),
+    })
+  end
+  if reply then
+    nfPull[#nfPull + 1] = table.pack(
+      "modem_message",
+      "node-modem",
+      "modem-master",
+      net.PORT,
+      0,
+      reply
+    )
+  end
+end
+
+local nfComponent = {
+  list = function(kind)
+    local items = ({
+      filesystem = { "floppy-2", "hdd-2" },
+      modem = { "modem-master" },
+      gpu = {},
+    })[kind] or {}
+    local index = 0
+    return function()
+      index = index + 1
+      if items[index] then
+        return items[index], kind
+      end
+    end
+  end,
+  proxy = function(address)
+    return nfVolumes[address]
+  end,
+  invoke = function(address, method, ...)
+    if address == "modem-master" then
+      if method == "isWired" then
+        return true
+      elseif method == "open" or method == "close" then
+        return true
+      elseif method == "send" or method == "broadcast" then
+        local packed = table.pack(...)
+        nfCalls[#nfCalls + 1] = { method = method, args = packed }
+        nfRespond(packed[3])
+        return true
+      end
+    end
+    local volume = nfVolumes[address]
+    if volume and type(volume[method]) == "function" then
+      return volume[method](...)
+    end
+    return nil, "unknown component"
+  end,
+}
+local nfComputer = {
+  address = function()
+    return "node-computer-2"
+  end,
+  uptime = function()
+    return nfClock
+  end,
+  totalMemory = function()
+    return 2 * 1024 * 1024
+  end,
+  getBootAddress = function()
+    return nfBootAddress
+  end,
+  setBootAddress = function(address)
+    nfBootAddress = address
+    local log = nfFloppy.read("/install.log") or ""
+    nfBootComplete = nfTarget.exists("/init.lua")
+      and log:find("OK ", 1, true) ~= nil
+    return true
+  end,
+  pullSignal = function(timeout)
+    nfClock = nfClock + (timeout or 0)
+    local item = table.remove(nfPull, 1)
+    if item then
+      return table.unpack(item, 1, item.n)
+    end
+    return nil
+  end,
+  shutdown = function()
+    nfShutdown = true
+    return true
+  end,
+}
+
+nfPull[1] = table.pack(
+  "modem_message",
+  "node-modem",
+  "modem-master",
+  net.PORT,
+  0,
+  net.encode("ASSIGN", {
+    id = "node-computer-2",
+    name = "TC-N1",
+    role = "worker",
+    master = "modem-master",
+    masterId = "master-computer",
+    token = "netfetch-token",
+  })
+)
+
+local nfOk, nfResult = pcall(netfetch.run, {
+  component = nfComponent,
+  computer = nfComputer,
+  os = { sleep = function() end },
+  version = "0.3.0",
+  noScreen = true,
+})
+check(nfOk == true, "netfetch runs without an error: " .. tostring(nfResult))
+check(nfResult == true, "netfetch completes the pull install")
+equal(nfBootAddress, "hdd-2", "netfetch sets the boot address to the target disk")
+check(nfBootComplete == true, "netfetch sets the boot address only after a complete copy")
+check(nfTarget.exists("/boot/kernel.lua"), "netfetch installs the kernel")
+check(nfTarget.exists("/init.lua"), "netfetch installs the entry point")
+check(nfTarget.exists("/lib/tc/pull.lua"), "netfetch installs the pull client")
+check(nfTarget.exists("/etc/terracorp.cfg"), "netfetch writes the node configuration")
+check(not nfTarget.exists("/var/install-incomplete"), "netfetch clears the install marker")
+local nfConfig = nfTarget.read("/etc/terracorp.cfg") or ""
+check(nfConfig:find('hostname = "TC-N1"', 1, true) ~= nil, "netfetch stores the assigned name")
+check(nfConfig:find('master = "modem-master"', 1, true) ~= nil, "netfetch stores the master modem")
+check(nfShutdown == true, "netfetch reboots after the install")
+local nfLog = nfFloppy.read("/install.log") or ""
+check(nfLog:find("OK ", 1, true) ~= nil, "netfetch writes an install log")
+local nfAck = false
+for _, call in ipairs(nfCalls) do
+  if call.method == "send" then
+    local verb, fields = net.decode(call.args[3])
+    if verb == "ACK" and fields.token == "netfetch-token" then
+      nfAck = true
+      equal(call.args[1], "modem-master", "netfetch ACK goes to the master")
+    end
+  end
+end
+check(nfAck, "netfetch acknowledges the install")
+
+end
 
 return table.concat(failures, "\n")

@@ -11,7 +11,7 @@
 local registry = {}
 
 registry.path = "/var/nodes.tsv"
-registry.columns = { "id", "name", "role", "modem", "state", "mem", "disk", "lastSeen" }
+registry.columns = { "id", "name", "role", "modem", "state", "mem", "disk", "lastSeen", "v" }
 registry.states = { online = true, offline = true, provisioning = true }
 registry.roles = { worker = true, storage = true, node = true }
 registry.MAX_NAME = 24
@@ -84,6 +84,7 @@ function registry.upsert(nodes, record)
       mem = 0,
       disk = 0,
       lastSeen = 0,
+      v = "",
     }
     nodes[#nodes + 1] = node
     created = true
@@ -110,6 +111,9 @@ function registry.upsert(nodes, record)
   if record.lastSeen ~= nil then
     node.lastSeen = number(record.lastSeen)
   end
+  if record.v ~= nil then
+    node.v = clean(record.v)
+  end
 
   return node, created
 end
@@ -125,7 +129,9 @@ function registry.load(vfs)
     line = line:gsub("\r$", "")
     if line ~= "" and line:sub(1, 1) ~= "#" then
       local columns = split(line)
-      if #columns == #registry.columns and columns[1] ~= "" then
+      -- Files written before the version column have one field fewer; the
+      -- updater preserves the registry, so both shapes must load.
+      if #columns >= #registry.columns - 1 and columns[1] ~= "" then
         registry.upsert(nodes, {
           id = columns[1],
           name = columns[2],
@@ -137,6 +143,7 @@ function registry.load(vfs)
           mem = columns[6],
           disk = columns[7],
           lastSeen = 0,
+          v = columns[9],
         })
       end
     end
@@ -170,6 +177,7 @@ function registry.save(vfs, nodes)
       tostring(number(node.mem)),
       tostring(number(node.disk)),
       tostring(number(node.lastSeen)),
+      clean(node.v),
     }, "\t")
   end
 
@@ -235,6 +243,16 @@ function registry.rename(nodes, id, name)
   end
   node.name = name:match("^%s*(.-)%s*$")
   return node
+end
+
+--- Remove a node record entirely. Returns the removed record or nil.
+function registry.remove(nodes, id)
+  for index, node in ipairs(nodes) do
+    if node.id == id then
+      return table.remove(nodes, index)
+    end
+  end
+  return nil
 end
 
 return registry

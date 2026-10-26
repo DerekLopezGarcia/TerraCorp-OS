@@ -12,14 +12,21 @@
 local provision = {}
 
 provision.payloadRoot = "/payload"
-provision.readyPath = "/payload/.ready"
-provision.netbootPath = "/boot/netboot.lua"
+provision.readyPath = "/ready.txt"
+provision.netPath = "/net.lua"
+provision.netfetchPath = "/boot/netfetch.lua"
+provision.netModulePath = "/lib/tc/net.lua"
 provision.logPath = "/install.log"
 provision.markerPath = "/var/install-incomplete"
-provision.maxPayload = 500 * 1024
 provision.margin = 16 * 1024
 provision.runtime = { "/init.lua", "/boot", "/lib", "/apps" }
-provision.allowedRoot = { ["init.lua"] = true, ["payload"] = true, ["install.log"] = true }
+provision.allowedRoot = {
+  ["init.lua"] = true,
+  ["net.lua"] = true,
+  ["payload"] = true,
+  ["install.log"] = true,
+  ["ready.txt"] = true,
+}
 provision.payloadSkip = { ["/.ready"] = true }
 
 local function cleanName(name)
@@ -143,28 +150,74 @@ local function writeTree(target, entries, root)
   return true
 end
 
+--- Read a floppy's readiness marker.
+-- Returns { version, files, bytes } when the marker is present and parseable.
+function provision.readReady(target)
+  local data = target.read(provision.readyPath)
+  if type(data) ~= "string" or data == "" then
+    return nil
+  end
+  local ready = {
+    version = data:match("version=([^\r\n]*)") or "",
+    files = tonumber(data:match("files=(%d+)")) or 0,
+    bytes = tonumber(data:match("bytes=(%d+)")) or 0,
+  }
+  if ready.version == "" or ready.files < 1 or ready.bytes < 1 then
+    return nil
+  end
+  return ready
+end
+
 --- Prepare a floppy from the master's runtime.
--- `source` is the boot-volume VFS; `target` is the floppy VFS.
--- Returns { files, bytes, version } or nil and a reason.
+-- The floppy is a pull bootstrap: a small `/init.lua` installer plus `tc.net`,
+-- with `/ready.txt` marking the version. The server fetches the runtime from
+-- the master over the network while the installer window is armed.
+-- With `reuse`, a floppy that already holds the same version is kept as is.
+-- Returns { files, bytes, version, reused? } or nil and a reason.
 function provision.prepare(source, target, opts)
   opts = opts or {}
+  local version = tostring(opts.version or "unknown")
 
   local safe, reason = provision.checkTarget(target)
   if not safe then
     return nil, reason
   end
 
-  local entries, total = provision.collect(source)
-  if not entries then
-    return nil, total
-  end
-  if total > provision.maxPayload then
-    return nil, string.format(
-      "the runtime is too large for a floppy (%d KB)",
-      math.floor(total / 1024 + 0.5)
-    )
+  local ready = provision.readReady(target)
+  if opts.reuse and ready and ready.version == version
+    and target.exists("/init.lua") and target.exists(provision.netPath) then
+    return {
+      reused = true,
+      files = ready.files,
+      bytes = ready.bytes,
+      version = ready.version,
+    }
   end
 
+  local netfetch = source.read(provision.netfetchPath)
+  if type(netfetch) ~= "string" or netfetch == "" then
+    return nil, "missing " .. provision.netfetchPath
+  end
+  local netSource = source.read(provision.netModulePath)
+  if type(netSource) ~= "string" or netSource == "" then
+    return nil, "missing " .. provision.netModulePath
+  end
+
+  -- Remove the old entry point first so a server cannot boot a half-written
+  -- bootstrap while the floppy is being prepared. Drop a legacy payload tree
+  -- before the space check so a full floppy can be converted.
+  if target.exists("/init.lua") then
+    local removed, removeError = target.remove("/init.lua")
+    if not removed then
+      return nil, removeError or "could not replace /init.lua"
+    end
+  end
+  local cleared, clearError = removeTree(target, provision.payloadRoot)
+  if not cleared then
+    return nil, clearError
+  end
+
+  local total = #netfetch + #netSource
   local used, size = capacity(target)
   if used and size and size - used < total + provision.margin then
     return nil, string.format(
@@ -174,59 +227,32 @@ function provision.prepare(source, target, opts)
     )
   end
 
-  local netboot = source.read(provision.netbootPath)
-  if not netboot then
-    return nil, "missing " .. provision.netbootPath
+  local initOk, initError = target.write("/init.lua", netfetch)
+  if not initOk then
+    return nil, initError or "could not write the bootstrap"
+  end
+  local netOk, netError = target.write(provision.netPath, netSource)
+  if not netOk then
+    return nil, netError or "could not write the network module"
   end
 
-  -- Remove the old entry point first so a server cannot boot a half-written
-  -- payload while the floppy is being prepared.
-  if target.exists("/init.lua") then
-    local removed, removeError = target.remove("/init.lua")
-    if not removed then
-      return nil, removeError or "could not replace /init.lua"
-    end
-  end
-
-  local cleared, clearError = removeTree(target, provision.payloadRoot)
-  if not cleared then
-    return nil, clearError
-  end
-
-  local dirOk, dirError = target.ensureDir(provision.payloadRoot)
-  if not dirOk then
-    return nil, dirError
-  end
-  local written, writeError = writeTree(target, entries, provision.payloadRoot)
-  if not written then
-    return nil, writeError
-  end
-
-  local version = tostring(opts.version or "unknown")
-  local ready = string.format("version=%s\nfiles=%d\nbytes=%d\n", version, #entries, total)
-  local readyOk, readyError = target.write(provision.readyPath, ready)
-  if not readyOk then
-    return nil, readyError or "could not write the payload marker"
+  local marker = string.format("version=%s\nfiles=2\nbytes=%d\n", version, total)
+  local markerOk, markerError = target.write(provision.readyPath, marker)
+  if not markerOk then
+    return nil, markerError or "could not write the readiness marker"
   end
 
   local log = string.format(
-    "TerraCorp %s · payload prepared\n%d files · %d KB\nWaiting for a server to netboot from this floppy.\n",
-    version,
-    #entries,
-    math.floor(total / 1024 + 0.5)
+    "TerraCorp %s · pull installer ready\nThe server fetches the runtime from the master over the network.\n",
+    version
   )
   local logOk, logError = target.write(provision.logPath, log)
   if not logOk then
     return nil, logError or "could not write the install log"
   end
 
-  local initOk, initError = target.write("/init.lua", netboot)
-  if not initOk then
-    return nil, initError or "could not write the netboot script"
-  end
-
   return {
-    files = #entries,
+    files = 2,
     bytes = total,
     version = version,
     capacity = size,

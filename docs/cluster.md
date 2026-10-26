@@ -169,24 +169,30 @@ The rack is also a power distributor. Feed it once and it powers every slot.
 
 ## Provisioning procedure
 
-1. Install 0.3.0 on the master as usual.
+1. Install 0.3.0 or later on the master as usual.
 2. Insert a floppy into the mountable disk drive. The master sees the drive on
    the data bus.
-3. In the Nodes app, choose **Prepare installer**. The master writes the
-   netboot payload and a manifest to the floppy. The payload is a small
-   `/init.lua`, the runtime files, and the slave config template; it fits in
-   512 KB.
+3. In the Nodes app, choose **Prepare installer**. The master writes a pull
+   bootstrap to the floppy: a small `/init.lua` (the network installer) and
+   `tc.net`, marked by `/ready.txt` with the version. Preparing again with the
+   same version reuses the bootstrap instead of rewriting it, and a different
+   master version rebuilds it. A legacy full-payload floppy is converted.
 4. Sneak-right-click the front of an unprovisioned server to power it on. It has
    no boot address yet, so the BIOS boots the only `/init.lua` it can see: the
    rack floppy.
-5. The payload sends `HELLO` to the master and waits for `ASSIGN`. The master
+5. The bootstrap sends `HELLO` to the master and waits for `ASSIGN`. The master
    replies with the node's name, role, and its own addresses.
-6. The payload copies the runtime from the floppy to the server's first HDD,
-   writes `/etc/terracorp.cfg` with `role` and `master`, sets the boot address to
-   that HDD, sends `ACK`, and reboots.
-7. The server boots its HDD in headless mode and sends `STATUS`. The Nodes app
-   lists it as online with its memory and disk capacity.
-8. Repeat for the next server. One payload can provision every server on the
+6. The bootstrap pulls the runtime tree from the master over the wired network
+   (`LIST`/`FETCH`), writes it to the server's first HDD, writes
+   `/etc/terracorp.cfg` with `role` and `master`, sends `ACK`, and only then
+   sets the boot address to that HDD and reboots. An interrupted pull leaves
+   the boot address alone, so the next boot runs the floppy again.
+7. The server boots its HDD in headless mode, checks the installed system
+   (`/init.lua`, the kernel, the `tc` libraries, the config, and no
+   `/var/install-incomplete` marker), and only then sends `STATUS`. The Nodes
+   app lists it as online with its memory, disk, and version. A node that
+   fails the check stays silent and never appears in the list.
+8. Repeat for the next server. One bootstrap can provision every server on the
    bus; each server is identified by its own computer address, so several may
    be powered on together.
 9. Leave the floppy in the drive as a rescue medium. Provisioned servers boot
@@ -195,11 +201,33 @@ The rack is also a power distributor. Feed it once and it powers every slot.
 10. Record the rack slot, the node name, and the computer address. The OS
     identifies nodes by address, not by physical slot.
 
-Re-provisioning is not automatic. The payload must detect an existing TerraCorp
-installation on the target HDD and stop with a message instead of overwriting
-it. To reinstall a node in 0.3.0, wipe or replace its system HDD (or use a fresh
-server) and power it on with the floppy inserted. Remote reinstall is future
-work.
+Re-provisioning is not automatic. The installer must detect an existing
+TerraCorp installation on the target HDD and stop with a message instead of
+overwriting it. To reinstall a node, wipe or replace its system HDD (or use a
+fresh server) and power it on with the floppy inserted. Remote reinstall is
+future work.
+
+## Updating nodes from the master
+
+**Update** in Nodes offers the master's runtime to every known node:
+
+1. The master checks GitHub for the latest stable release. If a newer release
+   exists, it is downloaded to `/var/nodeupdate/<version>/` (one file per
+   tick, so the desktop stays responsive) and that tree is served to nodes;
+   otherwise the master serves its own runtime. The staged tree is reused
+   until a newer release appears.
+2. Every node with a known modem address receives `PULL` with the target
+   version. A node pulls the tree in chunks, validates every Lua file, and
+   stages it under `/var/update/stage/<version>/`, then reboots.
+3. The boot-time applier (`src/boot/apply.lua`, marker `source=master`)
+   installs the staged tree with backups and rollback before the kernel
+   starts. A failed swap boots the old build unchanged.
+4. After the reboot the node reports its new version in `STATUS`, and Nodes
+   shows it on the node card. A node shows offline while it pulls (30 s
+   heartbeat gap); it returns online after the swap.
+
+The master updates itself separately through the Update app (GitHub
+Releases); the node update never rewrites the master.
 
 ## Node protocol (0.3.0)
 
@@ -221,17 +249,34 @@ and frames over 1 KB. One request produces at most one reply.
 | `HELLO` | node to master | `v`, `id` (computer address), `name`, `modem`, `mem`, `disk`, `role=unprovisioned` |
 | `ASSIGN` | master to node | `id`, `name`, `role`, `master` (modem address), `masterId`, `token` |
 | `ACK` | node to master | `token` (required), `id`, `v`, `boot` (HDD address), `mem`, `disk` |
-| `STATUS` | node to master | `id`, `name`, `role`, `state`, `mem`, `disk`, `uptime`, `jobs` |
+| `STATUS` | node to master | `id`, `name`, `role`, `state`, `mem`, `disk`, `uptime`, `jobs`, `v` (node version) |
 | `PING` | master to node | `id`, optional `master` and `masterId` |
 | `PONG` | node to master | `id`, `state`, `mem`, `disk` |
+| `LIST` | node to master | `id`, `path` (a runtime directory) |
+| `FETCH` | node to master | `id`, `path`, `off` (byte offset) |
+| `DIRS` | master to node | `id`, `path`, `files`, `dirs` (comma-separated) |
+| `DATA` | master to node | `id`, `path`, `off`, `size` (total bytes), `data` (chunk) |
+| `MISS` | master to node | `id`, `path` (the request was refused or unknown) |
+| `PULL` | master to node | `id`, `v` (target version), `master`, `masterId` |
 
 Rules:
 
 - `id` is `computer.address()`, stable for the life of the computer. `modem` is
   the network card address used for routing.
 - The master keeps the registry in `/var/nodes.tsv`, one line per node:
-  `id`, `name`, `role`, `modem`, `state`, `mem`, `disk`, `lastSeen`. The
+  `id`, `name`, `role`, `modem`, `state`, `mem`, `disk`, `lastSeen`, `v`. The
   updater must preserve this file in addition to `/etc` and `/var/notes.txt`.
+  Files written before the `v` column load unchanged.
+- `HELLO` and `ACK` do not create registry entries. A node joins the list only
+  when its first `STATUS` arrives, after it has booted its own disk and passed
+  the boot integrity check, so a failed install never appears in Nodes.
+- **Refresh** in Nodes pings every node with a known modem address and `PONG`
+  brings them back online. **Forget** removes an offline node from the list.
+- The master serves only `/init.lua`, `/boot`, `/lib`, and `/apps` from its
+  runtime (or from the staged node-update tree). The filesystem root, `/etc`,
+  and `/var` are refused with `MISS`.
+- `LIST`/`FETCH` are answered while the installer window is armed (any
+  requester) or while an update window is armed (registered nodes only).
 - A node sends `HELLO` every 5 seconds for 60 seconds after boot, then every 10
   seconds while unprovisioned. It sends `STATUS` every 10 seconds when running.
 - The master marks a node offline after 30 seconds without a message and pings
@@ -239,12 +284,13 @@ Rules:
 - The master answers `HELLO` only while its installer window is armed (600
   seconds) and only for a node that is not already online. A stale floppy
   therefore cannot overwrite a running node.
-- A node adopts `master` and `masterId` from a later `PING`, so replacing the
-  master's network card does not require reinstalling every node.
+- A node adopts `master` and `masterId` from a later `PING` or `PULL`, so
+  replacing the master's network card does not require reinstalling every
+  node.
 - The token prevents a stale `ASSIGN` from being applied by a node that already
   provisioned. It is not authentication; the cluster is a local cable segment.
-- The master never sends code or component requests in 0.3.0. `ASSIGN` only
-  carries identity and configuration.
+- The master never sends arbitrary code in `ASSIGN` or `PULL`; both only carry
+  identity, configuration, and a version target.
 
 0.3.1 adds `JOB`, `RESULT`, and `CANCEL` on the same port. 0.3.2 adds chunked
 `FS_READ`, `FS_WRITE`, and `FS_STAT` frames with checksums and atomic rename.

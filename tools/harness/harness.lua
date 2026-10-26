@@ -1342,9 +1342,13 @@ if STRICT then
       errors = errors + 1
       print("FAIL: the Nodes app did not arm the installer")
     end
-    if not nodesFloppy.exists("/payload/.ready") then
+    if not nodesFloppy.exists("/ready.txt") then
       errors = errors + 1
-      print("FAIL: the install payload was not written to the floppy")
+      print("FAIL: the pull bootstrap was not written to the floppy")
+    end
+    if not nodesFloppy.exists("/net.lua") then
+      errors = errors + 1
+      print("FAIL: the pull bootstrap is missing tc.net")
     end
   end
   if (scenario == "updater" or scenario == "updater_legacy") then

@@ -28,9 +28,11 @@ if (lauxlib.luaL_dostring(L, to_luastring(prelude)) !== lua.LUA_OK) {
 const sources = {};
 for (const relative of [
   "src/boot/netboot.lua",
+  "src/boot/netfetch.lua",
   "src/lib/tc/vfs.lua",
   "src/lib/tc/provision.lua",
   "src/lib/tc/net.lua",
+  "src/lib/tc/pull.lua",
 ]) {
   sources[relative] = fs.readFileSync(path.join(repoRoot, relative), "utf8");
 }

@@ -9,6 +9,7 @@ src/apps/update.lua
 src/boot/apply.lua
 src/boot/kernel.lua
 src/boot/netboot.lua
+src/boot/netfetch.lua
 src/init.lua
 src/lib/tc/cluster.lua
 src/lib/tc/config.lua
@@ -18,6 +19,7 @@ src/lib/tc/log.lua
 src/lib/tc/net.lua
 src/lib/tc/node.lua
 src/lib/tc/provision.lua
+src/lib/tc/pull.lua
 src/lib/tc/registry.lua
 src/lib/tc/text.lua
 src/lib/tc/theme.lua

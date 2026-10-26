@@ -46,8 +46,6 @@ end
 local function stateColor(colors, state)
   if state == "online" then
     return colors.ok
-  elseif state == "provisioning" then
-    return colors.warn
   end
   return colors.dim
 end
@@ -275,6 +273,57 @@ function nodes:ping(ctx)
   end
 end
 
+function nodes:refresh(ctx)
+  local cluster = self:cluster(ctx)
+  if not cluster then
+    return self:notify(ctx, "error", "Cluster service is unavailable.")
+  end
+
+  local ok, message = cluster:refreshNodes()
+  if ok then
+    self:notify(ctx, "info", tostring(message))
+  else
+    self:notify(ctx, "warn", tostring(message or "Could not refresh the nodes."))
+  end
+end
+
+function nodes:armUpdate(ctx)
+  local cluster = self:cluster(ctx)
+  if not cluster then
+    return self:notify(ctx, "error", "Cluster service is unavailable.")
+  end
+
+  local ok, message = cluster:armUpdate()
+  if ok then
+    self:notify(ctx, "info", tostring(message))
+  else
+    self:notify(ctx, "warn", tostring(message or "Could not arm the update."))
+  end
+end
+
+function nodes:forget(ctx)
+  local node = self:selected(ctx)
+  if not node then
+    return self:notify(ctx, "warn", "Select a node first.")
+  end
+  if node.state ~= "offline" then
+    return self:notify(ctx, "warn", "Only offline nodes can be forgotten.")
+  end
+
+  local cluster = self:cluster(ctx)
+  if not cluster then
+    return self:notify(ctx, "error", "Cluster service is unavailable.")
+  end
+
+  local ok, message = cluster:forget(node.id)
+  if ok then
+    self.selectedId = nil
+    self:notify(ctx, "info", tostring(message))
+  else
+    self:notify(ctx, "warn", tostring(message or "Could not forget the node."))
+  end
+end
+
 function nodes:move(ctx, delta)
   local list = self:list(ctx)
   if #list == 0 then
@@ -291,6 +340,37 @@ end
 function nodes:drawInstaller(ctx, installer, row)
   local c = ctx.colors
   local v = ctx.view
+  local update = self:cluster(ctx) and self:cluster(ctx):updateState() or nil
+
+  if update and update.active and update.phase ~= "ready" then
+    local label
+    if update.phase == "checking" then
+      label = "Checking for the latest release..."
+    elseif update.phase == "downloading" then
+      label = string.format(
+        "Downloading %s %d/%d for the nodes",
+        tostring(update.latest),
+        update.files or 0,
+        update.total or 0
+      )
+    else
+      label = "Update running"
+    end
+    v:put(1, row, ctx.text.truncate(label, ctx.w), c.warn, c.deep)
+    return
+  end
+
+  if update and update.active and update.phase == "ready" and update.remaining > 0
+    and (not installer or not installer.active) then
+    local label = string.format(
+      "Update %s offered to %d node(s) · %s",
+      tostring(update.target),
+      update.sent or 0,
+      clock(update.remaining)
+    )
+    v:put(1, row, ctx.text.truncate(label, ctx.w), c.warn, c.deep)
+    return
+  end
 
   if not installer or not installer.active then
     v:put(1, row, "Installer idle · Prepare to start", c.dim, c.deep)
@@ -348,11 +428,13 @@ function nodes:drawNode(ctx, node, selected, x, y, width, twoLine)
   v:textRight(width, y, right, stateFg, bg)
 
   if twoLine then
+    local version = node.v and node.v ~= "" and (" · v" .. tostring(node.v)) or ""
     local detail = string.format(
-      "%s · %s RAM · %s disk",
+      "%s · %s RAM · %s disk%s",
       tostring(node.role or "worker"),
       humanKB(node.mem),
-      humanKB(node.disk)
+      humanKB(node.disk),
+      version
     )
     if width >= 66 and node.modem and node.modem ~= "" then
       detail = detail .. " · " .. tostring(node.modem):sub(1, 8)
@@ -371,37 +453,37 @@ function nodes:drawEditor(ctx)
   v:put(1, ctx.h, ctx.text.truncate("Name: " .. self.editor .. "_", ctx.w), c.onAccent, c.accent)
 end
 
-function nodes:drawButtons(ctx, installer, hasSelection)
+function nodes:drawButtons(ctx, installer, node)
   local c = ctx.colors
   local v = ctx.view
 
-  local actions
-  if installer and installer.active then
-    actions = {
-      { label = "Stop", method = "stop" },
-      { label = "Rename", method = "startRename" },
-      { label = "Role", method = "cycleRole" },
-      { label = "Ping", method = "ping" },
-    }
-  else
-    actions = {
-      { label = "Prepare", method = "prepare" },
-      { label = "Rename", method = "startRename" },
-      { label = "Role", method = "cycleRole" },
-      { label = "Ping", method = "ping" },
-    }
-  end
+  local lead = installer and installer.active and "Stop" or "Prepare"
+  local actions = {
+    { label = lead, method = lead == "Stop" and "stop" or "prepare" },
+    { label = "Refresh", method = "refresh" },
+    { label = "Update", method = "armUpdate" },
+    { label = "Rename", method = "startRename" },
+    { label = "Role", method = "cycleRole" },
+    { label = "Ping", method = "ping" },
+    { label = "Forget", method = "forget" },
+  }
 
   local x = 1
   for _, action in ipairs(actions) do
     local label = " " .. action.label .. " "
     local width = ctx.text.width(label)
-    local needsNode = action.method ~= "prepare" and action.method ~= "stop"
     if x + width - 1 > ctx.w then
       break
     end
 
-    local enabled = not needsNode or hasSelection
+    local method = action.method
+    local enabled = true
+    if method == "startRename" or method == "cycleRole" or method == "ping" then
+      enabled = node ~= nil
+    elseif method == "forget" then
+      enabled = node ~= nil and node.state == "offline"
+    end
+
     local fg, bg = c.onAccent, c.accent
     if not enabled then
       fg, bg = c.dim, c.panel
@@ -411,7 +493,7 @@ function nodes:drawButtons(ctx, installer, hasSelection)
         y = ctx.h,
         w = width,
         h = 1,
-        method = action.method,
+        method = method,
       }
     end
     v:put(x, ctx.h, label, fg, bg)
@@ -483,7 +565,7 @@ function nodes:draw(ctx)
   if self.editor then
     self:drawEditor(ctx)
   else
-    self:drawButtons(ctx, installer, self:selected(ctx) ~= nil)
+    self:drawButtons(ctx, installer, self:selected(ctx))
   end
 end
 
@@ -559,6 +641,12 @@ function nodes:handle(ctx, name, a, b, c)
   elseif char == "s" then
     self:stop(ctx)
     return true
+  elseif char == "f" then
+    self:refresh(ctx)
+    return true
+  elseif char == "u" then
+    self:armUpdate(ctx)
+    return true
   elseif char == "r" then
     self:startRename(ctx)
     return true
@@ -567,6 +655,9 @@ function nodes:handle(ctx, name, a, b, c)
     return true
   elseif char == "g" then
     self:ping(ctx)
+    return true
+  elseif char == "x" then
+    self:forget(ctx)
     return true
   end
 

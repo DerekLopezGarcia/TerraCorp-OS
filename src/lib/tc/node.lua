@@ -16,6 +16,18 @@ node.HELLO_INTERVAL = 5
 node.HELLO_WINDOW = 60
 node.MODEM_RETRY = 10
 
+-- The boot-time integrity check. A node stays silent until every path is
+-- present, so the master only lists servers that boot a complete system.
+node.CHECK_PATHS = {
+  "/init.lua",
+  "/boot/kernel.lua",
+  "/lib/tc/vfs.lua",
+  "/lib/tc/net.lua",
+  "/lib/tc/node.lua",
+  "/lib/tc/config.lua",
+  "/etc/terracorp.cfg",
+}
+
 local function shortAddress(address)
   return tostring(address or "?"):sub(1, 8)
 end
@@ -87,6 +99,40 @@ end
 
 function node:hasMaster()
   return type(self.master) == "string" and self.master ~= ""
+end
+
+--- Verify the installed system before the node reports to the master.
+-- The master only lists nodes that boot their own disk and pass this check,
+-- so a half-written install never appears in Nodes. Returns true, or false
+-- with the list of failed checks.
+function node:verify()
+  local failed = {}
+
+  if type(self.computer.getBootAddress) == "function" then
+    local ok, address = pcall(self.computer.getBootAddress)
+    if not ok or address ~= self.kernel.volumeAddress then
+      failed[#failed + 1] = "boot address"
+    end
+  end
+
+  for _, path in ipairs(node.CHECK_PATHS) do
+    local data = self.vfs.read(path)
+    if type(data) ~= "string" or #data == 0 then
+      failed[#failed + 1] = path
+    end
+  end
+
+  if self.vfs.exists("/var/install-incomplete") then
+    failed[#failed + 1] = "/var/install-incomplete"
+  end
+
+  if #failed > 0 then
+    if self.log then
+      self.log.error("node: system check failed: " .. table.concat(failed, ", "))
+    end
+    return false, failed
+  end
+  return true
 end
 
 function node:persist()
@@ -177,6 +223,7 @@ function node:statusFields()
     disk = self:diskKB(),
     uptime = math.floor(self:now()),
     jobs = 0,
+    v = self.version and self.version.version or "",
   }
 end
 
@@ -194,6 +241,9 @@ function node:sendHello()
 end
 
 function node:sendPong(remoteAddress)
+  if self.healthy == false then
+    return nil, "the system check failed"
+  end
   local fields = {
     id = self.id,
     state = "online",
@@ -305,11 +355,56 @@ function node:handleModem(localAddress, remoteAddress, port, distance, message)
 
   if verb == "ASSIGN" then
     self:applyAssignment(fields, remoteAddress)
+  elseif verb == "PULL" and fields.id == self.id then
+    self:startPull(fields, remoteAddress)
   elseif verb == "PING" and fields.id == self.id then
     self:adoptMaster(fields, remoteAddress)
     self:sendPong(remoteAddress)
   end
   return true
+end
+
+--- Stage a master-offered update and reboot into the boot-time applier.
+-- The applier (src/boot/apply.lua, source=master) swaps the staged tree with
+-- backup and rollback before the kernel starts; a failed swap boots the old
+-- build and the node simply reports its old version again.
+function node:startPull(fields, remoteAddress)
+  if self.pulling or self.healthy == false then
+    return
+  end
+  self:adoptMaster(fields, remoteAddress)
+
+  local ok, staged = self:pullUpdate(fields, remoteAddress)
+  if ok then
+    if self.log then
+      self.log.info("node: staged update to " .. tostring(fields.v)
+        .. " (" .. tostring(staged) .. " files); rebooting")
+    end
+    self:draw()
+    pcall(self.os.sleep, 1)
+    pcall(self.computer.shutdown, true)
+  else
+    if self.log then
+      self.log.error("node: update pull failed: " .. tostring(staged))
+    end
+    self:draw()
+  end
+end
+
+function node:pullUpdate(fields, remoteAddress)
+  local pull = require("tc.pull")
+  local master = fields.master
+  if type(master) ~= "string" or master == "" then
+    master = remoteAddress
+  end
+  return pull.run({
+    modem = self.modem,
+    master = master,
+    computer = self.computer,
+    id = self.id,
+    vfs = self.vfs,
+    version = tostring(fields.v or ""),
+  })
 end
 
 function node:resetScreen()
@@ -375,7 +470,12 @@ function node:draw()
   line(2, self.name, c.text)
   line(4, "ROLE   " .. tostring(self.role), c.dim)
   line(5, "ADDRESS " .. self.id:sub(1, 8), c.dim)
-  if self:hasMaster() then
+  if self.healthy == false then
+    line(8, "CHECK FAILED", c.warn)
+    if self.check and self.check[1] then
+      line(10, "missing " .. tostring(self.check[1]), c.warn)
+    end
+  elseif self:hasMaster() then
     line(6, "MASTER  " .. shortAddress(self.master), c.dim)
     line(8, "ONLINE  STATUS " .. tostring(self.statusCount), c.ok)
   else
@@ -396,6 +496,9 @@ end
 
 function node:tick()
   local now = self:now()
+  if self.healthy == false then
+    return
+  end
   if not self.modem then
     self:openModem()
   end
@@ -418,6 +521,13 @@ function node:tick()
 end
 
 function node:run()
+  local ok, failures = self:verify()
+  self.healthy = ok == true
+  self.check = failures
+  if not self.healthy and self.log then
+    self.log.error("node: staying silent until the system check passes")
+  end
+
   self:openModem()
   self:draw()
   self.lastStatus = self:now() - node.STATUS_INTERVAL
