@@ -475,10 +475,22 @@ local function finish(ok, message)
   pcall(removeTree, MARKER)
   if ok then
     pcall(writeFile, STATUS, "Update complete: " .. tostring(message) .. " installed.")
+    -- Leave a trail in the node's own log so the master's Relay `log.tail`
+    -- task can surface the applier's verdict even when the node has no screen.
+    local handle = fs("open", "/var/log/tc.log", "a")
+    if handle then
+      fs("write", handle, "APPLIER: Update complete: " .. tostring(message) .. " installed.\n")
+      fs("close", handle)
+    end
   else
     pcall(writeFile, STATUS, "Update failed: " .. tostring(message))
     draw("Update failed", tostring(message), "TerraCorp OS will start with the previous version", 1)
     computer.pullSignal(3)
+    local handle = fs("open", "/var/log/tc.log", "a")
+    if handle then
+      fs("write", handle, "APPLIER: Update failed: " .. tostring(message) .. "\n")
+      fs("close", handle)
+    end
   end
 end
 
