@@ -683,7 +683,61 @@ function cluster:handleFetch(fields, remoteAddress)
 
   local tree = self:serveTree()
   local path = self:serveAllowed(fields.path)
-  local body = path and self.vfs.read((tree or "") .. path) or nil
+
+  -- Stream the requested slice instead of reading the whole file: a whole-
+  -- file read per 512 B chunk spiked the master's memory on every request
+  -- and eventually died with an allocation error, stalling node pulls.
+  -- Fall back to the whole-file path if streaming is unavailable.
+  local body, size = nil, nil
+  local volume = self.vfs.volume
+  if type(path) == "string" and volume and type(volume.open) == "function" then
+    local okH, handle = pcall(volume.open, (tree or "") .. path, "r")
+    if okH and handle then
+      local okE, endOff = pcall(volume.seek, handle, "end", 0)
+      if okE and type(endOff) == "number" then
+        size = endOff
+        local okS = pcall(volume.seek, handle, "set", math.min(math.max(0, math.floor(tonumber(fields.off) or 0)), size))
+        if okS then
+          local okD, data = pcall(volume.read, handle, cluster.CHUNK)
+          pcall(volume.close, handle)
+          if okD and type(data) == "string" and (#data > 0 or off >= size) then
+            local off = math.min(math.max(0, math.floor(tonumber(fields.off) or 0)), size)
+            local frame, reason = net.encode("DATA", {
+              id = fields.id or "",
+              path = path,
+              off = off,
+              size = size,
+              data = data,
+            })
+            -- An escaping-heavy span can overflow the 1 KB frame; shrink and retry.
+            while not frame and #data > 32 do
+              data = data:sub(1, math.floor(#data / 2))
+              frame, reason = net.encode("DATA", {
+                id = fields.id or "",
+                path = path,
+                off = off,
+                size = size,
+                data = data,
+              })
+            end
+            if frame then
+              if self.modem then
+                self.modem:sendFrame(remoteAddress, frame)
+              end
+              return
+            end
+          end
+        else
+          pcall(volume.close, handle)
+        end
+      else
+        pcall(volume.close, handle)
+      end
+    end
+  end
+
+  -- Whole-file fallback (original path).
+  body = path and self.vfs.read((tree or "") .. path) or nil
   if type(body) ~= "string" then
     self:send(remoteAddress, "MISS", { id = fields.id or "", path = tostring(fields.path or "") })
     return
@@ -717,6 +771,7 @@ function cluster:handleFetch(fields, remoteAddress)
   if self.modem then
     self.modem:sendFrame(remoteAddress, frame)
   end
+  return
 end
 
 --- Offer the master's runtime version to every known node. The master first
