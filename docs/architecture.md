@@ -115,7 +115,7 @@ grid and a one-row taskbar; windows are drawn over the grid.
   background (System uses this). The art is drawn in the inverse color, so the
   tile is highlighted without an inset box.
 - Tile height shrinks from five rows to three, two, or one when the screen
-  cannot fit every app. The UI chooses the largest height that fits all seven
+  cannot fit every app. The UI chooses the largest height that fits all nine
   apps, then draws the app's 3-cell `icon` code instead of the 9x5 art so nothing
   is clipped; the label stays on the row below.
 - An open window is indicated by the accent-colored icon label; the tile itself
@@ -126,7 +126,7 @@ grid and a one-row taskbar; windows are drawn over the grid.
 - The taskbar lists open windows as chips. Clicking a chip focuses its window;
   clicking the focused chip minimizes it. The focused window is highlighted.
 - With no focused window, arrows move the icon selection, Home/End jump to the
-  first/last occupied cell, and Enter opens the selected app. F1-F7 always open
+  first/last occupied cell, and Enter opens the selected app. F1-F9 always open
   an app by `order`, independent of the grid arrangement.
 - The empty-desktop hint is drawn only when no window is open and the grid
   leaves room for it.
@@ -140,7 +140,7 @@ The UI keeps a z-ordered window list, focus, drag state, and the icon selection.
 | `touch` | Desktop icon, taskbar chip, window controls/title bar, or focused app. An icon press is remembered until `drop`. |
 | `drag` / `drop` | Move a window, drag the pressed icon across the full-screen grid, or forward to an app. A drop without movement opens the pressed icon; a drop that moves or swaps icons saves the layout. |
 | `scroll` | Forward to app under pointer |
-| `key_down` | Global Esc/F1-F7; arrows/Home/End/Enter when no window is focused; otherwise the focused app |
+| `key_down` | Global Esc/F1-F9; arrows/Home/End/Enter when no window is focused; otherwise the focused app |
 | `screen_resized` | Rebind GPU and resize UI |
 | `interrupted` | Ignored so Ctrl+Alt+C does not terminate the OS |
 

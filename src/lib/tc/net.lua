@@ -48,6 +48,11 @@ local VERBS = {
   VLST = { "id", "disk", "path" },
   VDIRS = { "id", "path" },
   VDEL = { "id", "disk", "path" },
+  -- External Link (docs/external-link.md). The bridge speaks these over HTTP.
+  LINK = { "id", "token", "cmd" },
+  LREP = { "id", "token", "state" },
+  LDATA = { "id", "off" },
+  LEND = { "id", "size" },
 }
 
 local ESCAPES = {

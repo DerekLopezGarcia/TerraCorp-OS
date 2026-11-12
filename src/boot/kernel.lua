@@ -11,7 +11,7 @@ local MODULE_ROOTS = {
   apps = "/apps/",
 }
 
-local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes", "vault" }
+local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes", "vault", "gaia" }
 
 local function packCall(fn, ...)
   local result = table.pack(pcall(fn, ...))
@@ -289,6 +289,9 @@ function kernel:loop()
         if self.cluster then
           self.cluster:shutdown()
         end
+        if self.link then
+          self.link:close()
+        end
         return
       end
 
@@ -364,6 +367,11 @@ function kernel:loop()
     elseif renderErrors > 0 then
       self.log.info("render recovered after " .. renderErrors .. " failures")
       renderErrors = 0
+    end
+
+    -- One HTTP step per frame at most; see lib/tc/link.lua.
+    if self.link then
+      pcall(self.link.tick, self.link)
     end
   end
 end
@@ -666,6 +674,23 @@ function kernel.start(boot)
     log.error("First render warnings: " .. table.concat(instance.ui.failures, " | "))
   else
     log.trace("First render OK")
+  end
+
+  -- The external link starts after the first render: boot never depends on it.
+  local okLink, linkModule = pcall(requireModule, "tc.link")
+  if okLink and type(linkModule) == "table" then
+    instance.link = linkModule.new({
+      kernel = instance,
+      config = config,
+      vfs = vfs,
+      log = log,
+      version = version,
+    })
+    if instance.link.enabled then
+      log.trace("external link armed")
+    end
+  else
+    log.error("External link unavailable: " .. tostring(linkModule))
   end
 
   instance:loop()

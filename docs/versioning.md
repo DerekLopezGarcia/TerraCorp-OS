@@ -52,8 +52,9 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.3.0 Rack; the latest published stable release is 0.2.3
-(2026-10-25).
+The current build is 0.3.19 Stash, published as v0.3.19 on 2026-10-29. That is
+also the latest stable release, so an up-to-date installation has nothing to
+fetch.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

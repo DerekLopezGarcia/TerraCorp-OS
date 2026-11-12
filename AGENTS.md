@@ -10,7 +10,8 @@ modpack (Minecraft 1.12.2 + Forge). It runs on player-owned computers and does
 not modify or redistribute Supersymmetry or Susy-Core.
 
 - Runtime: Lua 5.3; no build step.
-- OpenComputers: 1.7.x API verified; 1.8.x is a target.
+- OpenComputers: the desktop and filesystem API is verified on 1.7.x; rack and
+  server behaviour is verified on 1.8.x. See `docs/opencomputers.md`.
 - Use the display's native resolution (tested from 40x16 to 160x50).
 - Product UI, source comments, and documentation are in English.
 - License: MIT.
@@ -22,7 +23,7 @@ src/                  boot volume
   init.lua            entry point; finds the volume and loads the kernel
   boot/kernel.lua     VFS, module loader, services, event loop
   lib/tc/*.lua        core libraries, display, UI, updater
-  apps/*.lua          system, files, terminal, settings, notes, update
+  apps/*.lua          system, files, terminal, settings, notes, update, nodes, vault, gaia
 eeprom/init.lua       optional boot manager
 tools/install.lua     OpenOS installer
 tools/fetch.lua       OpenOS repository downloader
@@ -51,6 +52,8 @@ npm run test:updater-recover
 npm run test:boot-update
 npm run test:install
 npm run test:fetch
+npm run test:link
+npm run test:gaia
 npm run test:boot
 npm run test:faults
 npm run test:screens

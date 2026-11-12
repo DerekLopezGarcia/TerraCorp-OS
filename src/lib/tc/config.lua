@@ -22,6 +22,10 @@ config.defaults = {
   nodeFloppyPayload = true,
   nodeAutoUpdate = true,
   nodeFloppyAddress = "",
+  linkSink = "",
+  linkToken = "",
+  linkInterval = 5,
+  linkControl = "off",
 }
 
 config.data = {}
@@ -102,6 +106,12 @@ local function accepted(key, value)
   end
   if key == "nodeRole" then
     return NODE_ROLES[value] == true
+  end
+  if key == "linkInterval" then
+    return type(value) == "number" and value >= 1
+  end
+  if key == "linkControl" then
+    return value == "off" or value == "write" or value == "full"
   end
   return type(value) == "string"
 end

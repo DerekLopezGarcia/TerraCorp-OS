@@ -4,8 +4,8 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.3.0 Rack**. The prototype boots into a desktop shell with
-seven apps, persists settings, notes, and the desktop icon layout, and logs
+Current version: **0.3.19 Stash**. The prototype boots into a desktop shell with
+nine apps, persists settings, notes, and the desktop icon layout, and logs
 errors. The Nodes app provisions rack servers over a wired network and keeps a
 node registry. Local simulations cover the OpenComputers API contract; in-game
 testing is tracked in [`docs/tests.md`](docs/tests.md).
@@ -25,6 +25,12 @@ testing is tracked in [`docs/tests.md`](docs/tests.md).
 - **Nodes:** discover rack servers on a wired network, prepare a floppy
   netboot installer, watch a node install, and rename or reassign nodes in
   `/var/nodes.tsv`.
+- **Vault:** browse the cluster storage namespace, read files into a memory
+  cache, store from `/var/vault-in`, save out to `/var/vault-out`, and delete
+  entries.
+- **GAIA:** the external link. Shows whether the link to an outside agent is
+  armed, edits the sink and token, and sets how far the far side can reach
+  (`off`, `write`, `full`).
 - Difference-based framebuffer rendering.
 - No OpenOS runtime dependency: TerraCorp loads its own modules and filesystem.
 
@@ -43,8 +49,9 @@ testing is tracked in [`docs/tests.md`](docs/tests.md).
 The desktop uses the screen's actual resolution and adapts from 40x16 to
 160x50. The icon grid covers the full desktop width and height; windows open
 below the lowest occupied icon row when the remaining height is usable, and
-centered otherwise. On a 50x16 Tier 1 screen the grid still fits all seven
-pictograms in three rows. Below 80x25, System cards are compressed.
+centered otherwise. Every app icon fits on the smallest supported screen; the
+screen gate renders the desktop at 40x16. Below 80x25, System cards are
+compressed.
 
 ## Installation
 
@@ -125,7 +132,7 @@ wiring, provisioning procedure, protocol, and failure modes.
   smoothly, like a dragged window. The new layout is saved on release and
   restored after a reboot or update. With no window focused, the arrow keys move
   the selection, Home/End jump to the ends, and Enter opens the selected app.
-  F1-F7 open the seven apps directly; Esc minimizes the focused window.
+  F1-F9 open the nine apps directly; Esc minimizes the focused window.
 - **Taskbar:** click a window chip to focus it; clicking the focused chip
   minimizes it.
 - **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.
@@ -158,7 +165,7 @@ src/                  boot-volume contents
   boot/kernel.lua     filesystem, services, module loader, event loop
   boot/netboot.lua    floppy netboot installer
   lib/tc/             core libraries, graphics, UI, updater, and cluster
-  apps/               system, files, terminal, settings, notes, update, nodes
+  apps/               system, files, terminal, settings, notes, update, nodes, vault, gaia
 eeprom/init.lua       optional boot manager (not required for normal installs)
 tools/                OpenOS installer, downloader, and manifest
 tools/harness/        local Node.js simulation and tests

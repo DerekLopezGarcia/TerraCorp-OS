@@ -294,9 +294,11 @@ Manual in-game checks for 0.2.1:
 ## 0.2.0 desktop shell checks
 
 `npm run test:desktop` clicks the Files icon and requires the final screen to
-show exactly one window titled Files. `npm run test:screens` runs seven
-scenarios (System, desktop, Terminal, Files, Settings, Notes, updater) across
-five resolutions (160x50, 120x40, 80x25, 60x20, 40x16), for 35 combinations.
+show exactly one window titled Files. `npm run test:screens` runs nine
+scenarios (System, desktop, Terminal, Files, Settings, Notes, updater, Nodes,
+Vault) across five resolutions (160x50, 120x40, 80x25, 60x20, 40x16), for 45
+combinations. GAIA has its own gate, `npm run test:gaia`, because the screen
+matrix does not open it.
 Each combination must adopt the requested resolution, finish without errors,
 and paint visible content.
 
@@ -317,7 +319,7 @@ Manual in-game checks add what the harness cannot prove:
 2. Reboot and time startup until the desktop appears.
 3. Read `/var/log/tc.log` from TerraCorp's boot volume. Record the `gpu` line's
    resolution/free-memory values and the uptime on `First render OK`.
-4. Run a 30-minute session. Open all seven apps by icon and by F1-F7; verify the
+4. Run a 30-minute session. Open all nine apps by icon and by F1-F9; verify the
    desktop selection, Enter-to-open, and taskbar chips. Drag two icons to swap
    their cells, restart, and confirm the order remains. In System, verify uptime
    advances once per second and readings refresh every two seconds. In Update,
