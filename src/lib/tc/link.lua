@@ -193,12 +193,15 @@ function link:beginExchange(now)
     ["Accept"] = "text/plain",
   }
 
+  -- OpenComputers sends GET when the post argument is nil and POST when it is a
+  -- string, even an empty one, so an empty outbox still passes "". The bridge
+  -- serves /link/next as POST only; see docs/opencomputers.md.
   local requestOk, handle, reason = pcall(
     self.component.invoke,
     card,
     "request",
     url,
-    body ~= "" and body or nil,
+    body,
     headers
   )
   if not requestOk then

@@ -74,6 +74,25 @@ Verified scan-code subset:
 - Component filesystem handles are opaque values passed to `read`, `write`, and
   `close`. EOF reads return `nil` without a reason.
 
+## Internet Card
+
+Verified against `master-MC1.12` (1.8.x) and the pack's 1.8.9a build.
+
+- `request(url[, postData[, headers[, method]]])` returns a handle. The request
+  is **POST when `postData` is a string, empty included**, and GET when the
+  argument is absent or nil. A caller that needs POST must pass `""`, not `nil`.
+  The `method` argument exists only in 1.8.x; 1.7.x has the same string test and
+  no method override.
+- Custom headers are accepted only while `internet.enableHttpHeaders` is true.
+- `internet.filteringRules` is evaluated first-match. The stock list—
+  `deny private`, `deny bogon`, `allow default`—blocks loopback and LAN targets,
+  so a bridge on the local network needs an `allow ip:<address>` rule ahead of
+  the deny rules.
+- `internet.requestTimeout = 0` means the module never times out; the caller's
+  own deadline is the only bound.
+- Handles expose `finishConnect`, `response`, `read`, and `close`. `read` returns
+  `nil` at end of stream and `""` when no bytes are ready yet.
+
 ## Racks and servers
 
 Verified against `master-MC1.12` (1.8.x) and the pack's 1.8.9a build.

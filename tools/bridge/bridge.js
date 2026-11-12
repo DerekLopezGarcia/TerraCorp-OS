@@ -438,11 +438,23 @@ function handleResults(res, state, query) {
 }
 
 function handleState(res, state) {
+  // The counters are cheap; the address list is what tells an operator which
+  // node to queue work for, since nothing else reveals a computer's address.
+  const addresses = [];
+  for (const [name, node] of state.nodes) {
+    addresses.push({
+      node: name,
+      queued: node.queue.length,
+      results: node.results.size,
+    });
+  }
+
   sendJson(res, 200, {
     nodes: state.nodes.size,
     queued: countQueued(state),
     delivered: state.delivered,
     results: countResults(state),
+    addresses,
   });
 }
 

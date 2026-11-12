@@ -46,7 +46,7 @@ on a trusted LAN: the token is the only gate the protocol has.
 | `POST /link/next?node=<addr>` | Result frames `LREP`, `LDATA`, `LEND`, one per line, or empty | The node's queued `LINK` frames, one per line, or empty |
 | `POST /link/queue?node=<addr>` | One or more `LINK` frames, one per line | `queued=<n>` |
 | `GET /link/results?node=<addr>` | none | Assembled result bodies |
-| `GET /link/state` | none | JSON counters: `nodes`, `queued`, `delivered`, `results` |
+| `GET /link/state` | none | JSON counters: `nodes`, `queued`, `delivered`, `results`, plus `addresses` |
 | `GET /` | none | Plain text help |
 
 `GET /` also requires the token: the gate covers every request, not only the
@@ -79,6 +79,30 @@ curl -s -X POST -H "X-Link-Token: $LINK_TOKEN" \
 curl -s -X POST -H "X-Link-Token: $LINK_TOKEN" \
   'http://127.0.0.1:8787/link/next?node=1a2b3c4d'
 ```
+
+## Operator client
+
+`linkctl.js` wraps the queue/result dance, because a TC1 frame is easy to get
+wrong by hand. It keeps its settings in `.link/` at the repository root, which is
+git-ignored:
+
+| File | Meaning |
+|---|---|
+| `.link/token` | Shared secret, the same value as `--token` |
+| `.link/node` | The node address learned with `nodes` then `use` |
+| `.link/bridge` | Optional base URL, default `http://127.0.0.1:8787` |
+
+```sh
+node tools/bridge/linkctl.js nodes                 # who has polled
+node tools/bridge/linkctl.js use 1a2b3c4d-...      # remember one address
+node tools/bridge/linkctl.js queue status
+node tools/bridge/linkctl.js queue log n=20 --wait # queue and poll the result
+node tools/bridge/linkctl.js results
+```
+
+`/link/state` includes an `addresses` array with each node's queued and result
+counts; that is the only way to learn a computer's UUID from outside the game,
+since the bridge keys everything by the address the OS sends.
 
 ## State
 

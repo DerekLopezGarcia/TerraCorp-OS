@@ -1,6 +1,6 @@
 # External Link
 
-Status: **phase 1 implemented** on branch `conexion-externa`. What exists today:
+Status: **phase 1 and 2 implemented**, merged for 0.3.20. What exists today:
 
 | Piece | Where |
 |---|---|

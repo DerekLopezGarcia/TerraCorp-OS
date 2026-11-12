@@ -52,7 +52,7 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.3.19 Stash, published as v0.3.19 on 2026-10-29. That is
+The current build is 0.3.20 Stash, published as v0.3.20 on 2026-11-12. That is
 also the latest stable release, so an up-to-date installation has nothing to
 fetch.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
