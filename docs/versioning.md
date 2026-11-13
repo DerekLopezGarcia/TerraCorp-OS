@@ -52,13 +52,13 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.3.24 Scratch, published as v0.3.24 on 2026-11-13. That is
+The current build is 0.3.25 Mirror, published as v0.3.25 on 2026-11-13. That is
 also the latest stable release, so an up-to-date installation has nothing to
-fetch. Versions through 0.3.23 update to it in-game as usual: no manifest or
-paths changed shape, and no files were added. 0.3.24 fixes the interpreter's
-`=expr` without a space after `=` (it compiled as `returncomponent`), keeps
-Ctrl/Shift held until `key_up` so a second `Shift+Enter` or `Shift+arrow` still
-counts, and aligns selection columns with the tab-expanded text on screen.
+fetch. Versions through 0.3.24 update to it in-game as usual: no manifest or
+paths changed shape, and no files were added. 0.3.25 makes the interpreter
+evaluate a line as an expression first and as a statement second, like OpenOS,
+so a bare `component.list()` prints, and shows string results quoted and table
+results keyed instead of a `table: 0x...` address.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

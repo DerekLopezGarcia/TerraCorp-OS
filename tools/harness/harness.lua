@@ -1117,6 +1117,15 @@ elseif scenario == "lab_repl" then
   typeText("count = 6")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(1)
+  -- A bare expression prints like it does in the OpenOS interpreter: the line
+  -- is tried as `return <line>` before it is tried as a statement.
+  typeText("type(1)")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  -- A table result is elided by depth and entry count, with sorted keys.
+  typeText("= { answer = 42 }")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
   typeText("= count * 7")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(2)
@@ -1663,6 +1672,14 @@ if STRICT then
       errors = errors + 1
       print("FAIL: the interpreter did not evaluate a name assigned on an earlier line")
     end
+    if not journal:find('\n"number"\n', 1, true) then
+      errors = errors + 1
+      print("FAIL: a bare expression did not print its result")
+    end
+    if not journal:find('["answer"]=42', 1, true) then
+      errors = errors + 1
+      print("FAIL: a table result was not shown with its keys")
+    end
     if not (journal:find("\n4\n", 1, true) and journal:find("\n6\n", 1, true)) then
       errors = errors + 1
       print("FAIL: the interpreter did not run a block typed across several lines")
@@ -1671,7 +1688,7 @@ if STRICT then
       errors = errors + 1
       print("FAIL: a submission was not recorded under its session name")
     end
-    if not journal:find("\nnil\n", 1, true) then
+    if not journal:find('\n"nil"\n', 1, true) then
       errors = errors + 1
       print("FAIL: a new session did not start with a clean environment")
     end
@@ -1683,7 +1700,7 @@ if STRICT then
       errors = errors + 1
       print("FAIL: the session list did not mark the active session")
     end
-    if not journal:find("\ntable\n", 1, true) then
+    if not journal:find('\n"table"\n', 1, true) then
       errors = errors + 1
       print("FAIL: `component.gpu` did not resolve to the primary component")
     end

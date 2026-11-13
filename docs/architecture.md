@@ -240,8 +240,14 @@ session.
 
 - Enter evaluates. A line that leaves a block open (`for`, `if`, `function`)
   switches the prompt to `... ` and keeps accumulating until the block closes.
-- `=expr` prints the values of an expression, and a bare expression such as
-  `1 + 1` goes through the same door instead of failing as a statement.
+- Like the OpenOS interpreter, a line is tried as `return <line>` first and as a
+  statement second, so `component.list()` prints its table while `a = 1` still
+  assigns. `=expr` skips the statement fallback and is the explicit form; the
+  two disagree only for a line that is both a valid statement and a valid
+  expression, such as a bare call.
+- Results are shown with strings quoted and tables keyed by sorted key, elided
+  at depth two and ten entries, so one result stays inside the transcript
+  budget. Numbers, booleans and nil print as themselves.
 - Arrow up and down walk the submitted lines. `Reset` drops every name in the
   active session.
 - Sessions are named environments: `:new work` starts one, `:use main` switches

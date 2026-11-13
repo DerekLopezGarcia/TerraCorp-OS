@@ -1,6 +1,6 @@
 {
   "name": "terracorp-os",
-  "version": "0.3.24",
+  "version": "0.3.25",
   "private": true,
   "description": "TerraCorp OS: industrial desktop operating system for OpenComputers in the Supersymmetry modpack",
   "license": "MIT",

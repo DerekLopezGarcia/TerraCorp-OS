@@ -29,6 +29,52 @@ local MAX_TAIL_BYTES = 16384
 local MAX_TRANSCRIPT_LINES = 400
 local MAX_HISTORY = 50
 
+-- How much of a table a REPL result shows. OpenOS serializes the whole value;
+-- the Lab bounds it so one result cannot fill the transcript or the log.
+local MAX_SHOW_DEPTH = 2
+local MAX_SHOW_ENTRIES = 10
+local MAX_SHOW_SCAN = 64
+
+-- REPL results are shown the way an operator inspects a component: strings
+-- quoted, tables keyed and elided, everything else tostring. Keys are sorted
+-- so the same value prints the same way twice.
+local function displayValue(value, depth)
+  local kind = type(value)
+  if kind == "string" then
+    return string.format("%q", value)
+  elseif kind ~= "table" then
+    return tostring(value)
+  end
+
+  depth = depth or 0
+  if depth >= MAX_SHOW_DEPTH then
+    return "{...}"
+  end
+
+  local keys, count = {}, 0
+  for key in pairs(value) do
+    count = count + 1
+    if count > MAX_SHOW_SCAN then
+      break
+    end
+    keys[#keys + 1] = key
+  end
+  table.sort(keys, function(a, b)
+    return tostring(a) < tostring(b)
+  end)
+
+  local parts = {}
+  for index = 1, math.min(#keys, MAX_SHOW_ENTRIES) do
+    local key = keys[index]
+    parts[#parts + 1] = "[" .. displayValue(key, depth + 1) .. "]="
+      .. displayValue(value[key], depth + 1)
+  end
+  if #keys > MAX_SHOW_ENTRIES then
+    parts[#parts + 1] = "..."
+  end
+  return "{" .. table.concat(parts, ", ") .. "}"
+end
+
 -- Standard library surface. `io` is omitted: scripts write through `print` or
 -- the VFS. `os` is copied without the entry points that would terminate the
 -- machine process.
@@ -562,33 +608,31 @@ function repl:submit(input)
   local source = table.concat(self.pending, "\n")
   local started = uptime()
 
-  local chunk, compileError = load(source, "=" .. REPL_PATH, "t", self.env)
-  local expression = false
+  -- OpenOS's interpreter tries the line as an expression first and falls back
+  -- to a statement, so a bare call prints its result there. Match it: `=expr`
+  -- only skips the statement fallback. An open block shows up in the statement
+  -- error, while `1 +` only reports `<eof>` as an expression, so both errors
+  -- are consulted before waiting for another line.
+  local chunk, expression, compileError
+  local explicit = source:match("^%s*=") ~= nil
 
-  if not chunk then
+  if explicit then
     local body = source:gsub("^%s*=", "", 1)
-    if body ~= source then
-      -- `=expr`: whether the block is still open is answered by the
-      -- expression's own error, not by the statement error, which always
-      -- complains about the leading `=` and never mentions `<eof>`.
-      -- The space after `return` is required: `=component.gpu` would otherwise
-      -- compile as the identifier `returncomponent`.
-      local attempt, attemptError = load("return " .. body, "=" .. REPL_PATH, "t", self.env)
-      if attempt then
-        chunk, expression = attempt, true
-      elseif tostring(attemptError):find("<eof>", 1, true) then
-        return { incomplete = true }
-      else
-        compileError = attemptError
-      end
+    chunk, compileError = load("return " .. body, "=" .. REPL_PATH, "t", self.env)
+    expression = chunk ~= nil
+    if not chunk and tostring(compileError):find("<eof>", 1, true) then
+      return { incomplete = true }
+    end
+  else
+    local asExpression, expressionError = load("return " .. source, "=" .. REPL_PATH, "t", self.env)
+    if asExpression then
+      chunk, expression = asExpression, true
     else
-      -- A bare expression such as `1 + 1` is not a statement, so it goes
-      -- through the same door instead of failing with a syntax error.
-      local attempt = load("return " .. source, "=" .. REPL_PATH, "t", self.env)
-      if attempt then
-        chunk, expression = attempt, true
-      elseif tostring(compileError):find("<eof>", 1, true) then
-        -- An open block: keep the buffer and wait for the rest of it.
+      local asStatement, statementError = load(source, "=" .. REPL_PATH, "t", self.env)
+      chunk, compileError = asStatement, statementError
+      if not asStatement
+        and (tostring(statementError):find("<eof>", 1, true)
+          or tostring(expressionError):find("<eof>", 1, true)) then
         return { incomplete = true }
       end
     end
@@ -607,7 +651,11 @@ function repl:submit(input)
       ok, failure = false, packed[2]
     elseif expression then
       for index = 2, packed.n do
-        pushLine(self.buffer, tostring(packed[index]))
+        local text = displayValue(packed[index])
+        if #text > MAX_LINE_CHARS then
+          text = text:sub(1, MAX_LINE_CHARS - 1) .. "…"
+        end
+        pushLine(self.buffer, text)
       end
     end
   else

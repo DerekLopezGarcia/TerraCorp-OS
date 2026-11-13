@@ -64,6 +64,11 @@ empty (`type(count)` is `nil`), switching back restored `count` (`count + 1` is
 `7`), `:list` marked the active session, every record reached
 `/var/log/lab.log` under its session name, and the prompt came back.
 
+It also submits `type(1)` with no `=` and requires `"number"` in the log: the
+interpreter tries the line as an expression first, like OpenOS, so a bare call
+prints. `= { answer = 42 }` must show `["answer"]=42`, which covers the sorted
+table display and its elision.
+
 The same scenario covers the later fixes: `Shift+Enter` keeps two lines in one
 record, a held `Shift` keeps adding lines across two Enters (the modifier is
 only released by `key_up`), an open `= 300 +` waits for the next line instead
