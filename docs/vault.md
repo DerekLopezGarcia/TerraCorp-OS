@@ -3,7 +3,11 @@
 > Decision: **no RAID and no mirror for now**. Every server's system disk
 > stays local for the OS and programs; all other disks on every server join
 > one shared storage pool, presented as a single namespace instead of X
-> separate nodes. Mirroring and redundancy are future work (F5), not 0.3.4.
+> separate nodes. Mirroring and redundancy are future work (F6), not 0.3.4.
+>
+> **Vault holds files, not goods** (decision 12 in `roadmap.md`): item and
+> fluid storage is the world's containers, surfaced as stocks in F3. This
+> pool is for OS and operator files.
 
 Transport: `tc.net` frames. A node reads and writes **its own** disks locally
 (server HDD components are `Visibility.Neighbors`, so only the node itself can
@@ -79,7 +83,7 @@ RAID volume is just one more spare disk as far as this OS is concerned:
   so a RAID block's volume joins the pool automatically with its full
   capacity, and Vault stores files on it like any other disk.
 - Redundancy, rebuilds, and failure behavior stay the RAID block's problem;
-  the F5 mirror work is dropped. The only TerraCorp-side item left is
+  the F6 mirror work is dropped. The only TerraCorp-side item left is
   surfacing per-disk health/usage in the data-center views.
 - **Pending in-game verification:** the RAID block's component kind, whether
   its volume reports `spaceTotal`/`spaceUsed` in bytes like other disks, and

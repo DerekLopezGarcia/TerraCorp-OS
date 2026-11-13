@@ -94,9 +94,11 @@ Expect patch releases; the checklist lives in
 
 ## What's next
 
-0.4 **Sessions**: replacing the desktop singleton with per-session windows and
-packed framebuffers (2 bytes per cell), so apps can eventually run on the node
-with the most free RAM and serve lightweight factory terminals (0.5).
+0.4 **Plant readout** (F3): one in-game probe of what the Adapter can actually
+read, then items and fluids as named stocks, one alarm list, and energy
+history — the numbers an operator needs to find a bottleneck or a power fault.
+Sessions and packed framebuffers move to 0.5, after the readout; app placement
+and factory terminals follow in 0.6.
 
 *The step-by-step verification checklist for this whole phase lives in
 [`docs/tests.md`](https://github.com/DerekLopezGarcia/TerraCorp-OS/blob/main/docs/tests.md).*

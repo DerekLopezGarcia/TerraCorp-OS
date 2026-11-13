@@ -57,12 +57,12 @@ with a rack prefix (for example `R1-S1`) when that distinction matters.
 The master also needs a graphics card, a screen, and a keyboard. A Tier 2 screen
 (80x25) is recommended for the Nodes app; 50x16 works but is cramped.
 
-### Recommended for 0.3.x and 0.4
+### Recommended for 0.3.x and 0.5
 
 | Qty | Item | Notes |
 |---:|---|---|
 | 1 | Rack | Three servers plus the provisioning drive |
-| 3 | Server (Tier 2) | Headroom for delegated apps in 0.4 |
+| 3 | Server (Tier 2) | Headroom for delegated apps in 0.5 |
 | 3 | CPU (Tier 3) | One per Tier 2 server |
 | 9 | RAM (Tier 3) | Three per Tier 2 server |
 | 9 | HDD (Tier 3) | Three per server; extra disks can become storage in 0.3.2 |
@@ -80,7 +80,7 @@ one Tier 2 component bus, and two Tier 2 expansion cards.
 ### Rack capacity
 
 A rack has four mountable slots. The provisioning drive occupies one, so a
-single rack holds at most **three servers**. A Terminal Server (planned for 0.4)
+single rack holds at most **three servers**. A Terminal Server (planned for 0.5)
 would occupy another slot.
 
 To grow past three nodes, add a second rack and join its data bus to the first

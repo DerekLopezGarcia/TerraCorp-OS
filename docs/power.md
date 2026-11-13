@@ -2,8 +2,9 @@
 
 How TerraCorp coordinates the staged startup, shutdown, and load shedding
 described in `distributed.md` ("The data center uses a dedicated power plant
-and UPS…"). Design for 0.5.x; depends on Relay (0.3.2), the alarm channel
-(`long-distance.md`), and telemetry (`docs/telemetry.md`).
+and UPS…"). Design for 0.7.x; depends on Relay (0.3.2), the alarm registry and
+energy history (0.4.1), the alarm channel (`long-distance.md`), and telemetry
+(`docs/telemetry.md`).
 
 ## The hard constraint first
 
@@ -32,14 +33,28 @@ good samples (10 s apart) — flap protection.
 
 ## Who decides
 
-- **Master** runs `tc/plant.lua`, a small state machine ticked once per
-  second from the kernel loop (same budget discipline as the TPS sampler).
-- Inputs: `computer.energy()` of the master itself (always available), node
-  `STATUS` reports, telemetry probes (UPS charge, if the bridge works —
-  `telemetry.md`), operator orders (Nodes app button / Terminal
-  `plant shed` / `plant island`).
-- **Outputs**: Relay jobs (`drain`, `shutdown`), the alarm channel, the
-  dashboard banner, the hologram wall (if built, `holo.md`).
+Split the same way as the readout ([`plant-service.md`](plant-service.md)):
+
+- **Plant service** holds the policy when the link is up: it has the UPS
+  telemetry, the history and the operator's orders. It proposes the plant state
+  and the staged orders.
+- **Master** executes the orders it can enforce — drain Relay, refuse sessions,
+  close files — and keeps the last setpoints. It runs **no plant policy of its
+  own** (decision 16): thresholds, stages and shedding decisions are service
+  work, not translator work.
+- Inputs: `computer.energy()` of the master itself, node `STATUS` reports,
+  telemetry probes (UPS charge, if the bridge works — `telemetry.md`), service
+  setpoints, and operator orders (Nodes app button / Terminal `plant shed` /
+  `plant island`).
+- **Outputs**: Relay jobs (`drain`, `shutdown`), the alarm channel, the panel,
+  the desktop banner, the hologram wall (if built, `holo.md`).
+
+**The accepted cost:** with the bridge down there is no shedding, only the last
+setpoints. That is tolerable while the service runs on the same host as the
+world — the two fail together — and it is honest where the alternative is a
+second, weaker policy living inside the game and disagreeing with the real one.
+Power loss itself is not preventable here anyway: OC servers have no remote
+power-on.
 
 ## Startup sequencing (after a power event)
 
@@ -88,13 +103,19 @@ separate alarms — never mask one with the other.
 
 ## Sequencing
 
-1. `tc/plant.lua` core (states, orders, dashboard banner) — small, ships
-   with 0.5.x after sessions; standby gating can even land in 0.4.x.
-2. UPS telemetry inputs — blocked on the gtce2oc verification in
+1. **Alarms and energy history first** (0.4.1): the numbers this policy acts
+   on are built in F3, without GregTech integration. Nothing in this document
+   should be implemented before that data exists.
+2. **States and orders in the plant service** (0.7): the state machine
+   (`ONLINE`/`DEGRADED`/`SHED`/`ISLAND`/`BLACKOUT`), the staged orders and the
+   operator commands live outside the game, where the history is. The master
+   only executes what it can enforce.
+3. UPS telemetry inputs — blocked on the gtce2oc verification in
    `telemetry.md`; until then the policy runs on master energy + node
    presence only.
-3. Cross-base coordination — rides the RC alarm channel once that link
+4. Cross-base coordination — rides the RC alarm channel once that link
    is proven (`long-distance.md` exit criteria).
 
-Cross-links: `distributed.md` (policy source), `relay.md`, `vault.md`
-(checkpoint), `telemetry.md`, `long-distance.md`.
+Cross-links: `distributed.md` (policy source), `plant-service.md` (where the
+policy runs), `relay.md`, `vault.md` (checkpoint), `telemetry.md`,
+`long-distance.md`.

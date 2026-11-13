@@ -3,7 +3,7 @@
 This document records the target architecture for OpenComputers and the
 Supersymmetry modpack. The design is a single application server with
 lightweight terminals in each factory; 0.3.x adds the first cable-connected
-cluster, while sessions remain local until 0.4.
+cluster, while sessions remain local until 0.5.
 
 ## Mod constraints
 
@@ -56,7 +56,7 @@ The physical build, rack GUI wiring, and protocol are in
 
 In 0.3.x the `core` is the existing desktop and is called the master. The
 `worker` and `storage` roles are assigned to rack nodes; `terminal` arrives with
-remote sessions in 0.4.
+remote sessions in 0.5.
 
 Each terminal has its own desktop session (windows, apps, focus). Profiles are
 `desktop` and `kiosk:<app>`. Session state lives on the server so a replacement
@@ -74,13 +74,13 @@ Reuse the local row-delta renderer. Send spans as
   is a network bandwidth policy, not an OpenComputers screen refresh limit.
 - RLE may encode repeated row backgrounds; do not send video or images.
 
-0.4 introduces `tc.display.local`, `tc.display.remote`, and
+0.5 introduces `tc.display.local`, `tc.display.remote`, and
 `tc.display.headless` backends.
 
 ## Memory budget
 
 The current Lua-table framebuffer may consume 200-250 KB per 80x25 session, so
-it cannot support multiple tier-2 sessions. 0.4 packs each cell into two bytes:
+it cannot support multiple tier-2 sessions. 0.5 packs each cell into two bytes:
 
 | Allocation | Estimate |
 |---|---:|

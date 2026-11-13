@@ -1,96 +1,186 @@
-# Component naming service (tc.names)
+# Component addressing and the semantic registry
 
-Design research for a "component DNS": friendly, stable names for the pieces
-of the plant, so operators and apps stop passing raw 36-character addresses.
+Status: **0.4.1, first slice of F3**. Two namespaces, deliberately separate: an
+opaque **physical address** for routing, and a **semantic path** for search and
+grouping. Nothing outside the game ever handles the physical one by hand.
 
-Status: **design** — targeted at 0.4.x after Sessions, in parallel with the
-inter-segment links in `docs/redlink.md`.
+Design agreed with the pack's co-operator on 2026-11-13; it supersedes the
+earlier single-name registry.
 
-## Why addresses hurt today
+## Two namespaces, one job each
 
-- Component addresses are 36-character UUIDs (`component.list()`), stable per
-  component instance but meaningless to humans and painful in configs.
-- Registry entries already store node addresses (`/var/nodes.tsv`), Vault
-  disks (`/var/vault/disks.tsv`) — but there is no one namespace tying
-  "the induction matrix at the moon base" to an address.
-- `component.invoke` accepts a **unique prefix** instead of a full address,
-  but the prefix only resolves against *the local machine's* components —
-  remote components are behind their node's network and unreachable by
-  address from the master at all (that is why Vault needed the node gateway).
+| | Physical address | Semantic path |
+|---|---|---|
+| Looks like | `1a2b…:9f3c…:north` (node, component, face) | `hall1/ore_processing/grinders` |
+| Answers | *Where does this call go?* | *What is this thing, and what else is like it?* |
+| Uniqueness | One owner, one address | Many members, many paths per component |
+| Written by | Machines: the registry and the proxies | Humans, from the tablet or the app |
+| Stored in configs | **Yes** — a saved line references the address | Only as a convenience; renames must not break configs |
 
-## What OC gives us to build on
+Routing needs uniqueness; meaning needs redundancy. Trying to have both in one
+string is what makes plant configs unmaintainable.
 
-- `component.list([kind])` — local component inventory `(address, kind)`.
-- `component.invoke(address|prefix, method, ...)` — prefix must be unique
-  locally.
-- Component addresses persist across reboots (NBT-persisted per block/card),
-  but change when a component is physically replaced or re-crafted. Anything
-  addressing-cached must survive an address change gracefully.
-- `component_added` / `component_removed` signals — the kernel already
-  unmounts on removal; the name service can hook the same events.
+## Physical address
 
-## Design: a two-level name service
-
-### Level 1 — local names (`tc.names`)
-
-Maps a short name to a local component address, persisted at
-`/var/names.tsv`, one line per entry:
-
-```
-name<TAB>kind<TAB>address<TAB>label
-matrix<TAB>induction_matrix<TAB>1a2b…<TAB>Reactor hall IM
-store<TAB>filesystem<TAB>9f3c…<TB>The big vault disk
+```text
+<node-address>:<component-address>:<face>
+1a2b3c4d-…:9f3c5e21-…:north
 ```
 
-- `names:resolve(name)` — exact match, else unique prefix among *named*
-  components, else nil with reason.
-- `names:bind(name, address)` — operator action (Settings or Terminal
-  `name <component> <name>`), validated against `component.list()`.
-- Self-healing: on `component_added`, entries whose old address vanished but
-  whose kind matches a single new candidate get **re-bound automatically**
-  and logged ("Rebound 'matrix' to 3fa2…"); ambiguous cases go to a warning
-  state surfaced in the System card.
-- `names:proxy(name)` — convenience: resolve then `component.proxy`.
+- `node-address` is the computer that can actually **see** the component: the one
+  whose bus it hangs from. A rack server's internals are `Visibility.Neighbors`,
+  so this can never be "some computer on the network" — it is the owner.
+- `component-address` is what `component.list()` reports, stable across reboots
+  and **different after a block is broken and re-placed**.
+- `face` is which side of the block is being addressed. It matters because
+  inventories are read and transposed **per side**, so the same block can behave
+  as several endpoints. Kinds without sides (a filesystem, a CPU) carry `-`.
+  The per-side inventory API and the `address:side` argument form are
+  **pending in-game verification** (see the checklist); until then the face is
+  part of the address but the operations pass it explicitly.
 
-### Level 2 — cluster names (master registry)
+The registry also keeps a short **node alias** (`hall1-oc`) so logs and the
+combined view can print `hall1-oc/9f3c…:north` instead of two UUIDs.
 
-The cluster registry (nodes) already is a level-2 DNS for *computers*. The
-extension is naming **peripherals behind nodes**: a node announces its
-components (kinds + addresses) with its `STATUS`, the master keeps
-`name → (node, address)`, and apps call through the Relay (a named-task call)
-or through a new `INVOKE` verb so the master never touches the remote
-component directly.
+## Semantic path
 
-- Verb sketch: `INVOKE { node, address|name, method, args… }` → job-style
-  reply. Reuses Relay's lease/ACK machinery instead of inventing a new one.
-- Security posture matches Relay: only **named, contract-bound procedures**
-  may run remotely; the DNS layer never turns into arbitrary remote code
-  execution. A remote invoke is allowed for whitelisted component kinds
-  (filesystem, redstone, transposer…) — never for arbitrary `component`.
+```text
+hall1/ore_processing/grinders
+hall1/ore_processing/entrada
+lineas/grinder_1/entrada
+```
 
-### Cross-segment names
+- Segments separated by `/`; `-` or `_` inside a segment. Using `-` between
+  segments makes compound words ambiguous (`ore_processing-grinders` cannot say
+  whether that is two levels or one).
+- **Many-to-many.** A component appears in every path that describes it, so the
+  same drawer is in `hall1/ore_processing/entrada` and in
+  `lineas/grinder_1/entrada` at once. This is what the registry exists for.
+- **Prefix and wildcard queries**: `hall1/*/tanks`, `**/grinders`,
+  `lineas/*/entrada`. Semantic search is the point: the agent should not need to
+  memorise the base.
+- **Declared, never inferred.** The system may *propose* `hall2/nuevo_drawer_3`
+  for a component it just noticed, but a human accepts the path. Declared
+  cardinality (`single` / `pool`) records intent, so a `single` path resolving to
+  two components is `cardinality_mismatch` — an alarm, not a silent choice.
+- **Renaming** updates the registry and reports the saved lines that mention the
+  old path. Configs store addresses, so a rename never silently rewires a line.
 
-When `docs/redlink.md` lands, names become global: the gateway wraps
-`INVOKE` per segment exactly like Vault disk requests. Names are unique per
-plant, owned by the master that knows the component's node.
+## A path resolves to a set; the operation reduces it
+
+This is where the pool idea and the DNS idea turn out to be the same mechanism:
+
+| Operation | Reduction over the resolved set |
+|---|---|
+| Read | Sum, with the per-member breakdown (skew is a bottleneck signal) |
+| Write / move | Dispatch by the policy **in the command**: `all`, `any`, `fill`; or pin one with `member=<address>` |
+
+`round_robin` needs memory between commands, so it is the service's cursor, sent
+as `member=` — the proxy keeps no intent (decision 18).
+
+## Who is authoritative
+
+The rule the co-operator set: **each local proxy manages its own copy, and a
+combined view of all proxies is offered to the app.**
+
+| Level | Authority | Contents |
+|---|---|---|
+| **Proxy** (one per computer, leaf or gateway) | Authoritative | Its components, faces, first-seen, and the paths that mention them |
+| **Gateway** | Merged copy of its leaves | The segment's view; the only one with an Internet Card |
+| **Plant service** | Merged copy of the gateways | The combined view apps and the agent consume |
+
+- No peer-to-peer DNS protocol between computers inside the game. A leaf asks its
+  gateway; the gateway asks the service or answers from its copy. Anything more
+  becomes Relay with a different name.
+- A path may span nodes: each proxy resolves the members it owns and reports the
+  rest as `unreachable_members`, so a partial view is always marked as partial.
+- Every member keeps `first_seen` (OpenComputers has no placement timestamp; see
+  [the registration flow](#first-seen-the-registration-flow)).
+
+## First seen: the registration flow
+
+1. Place the block. The proxy notices it — on `component_added`, or on its cheap
+   periodic scan — and records it as **unclaimed** with a `first_seen` and a
+   **driver**. An Adapter can expose signs, chests, tanks and machines as readily
+   as drawers, so the registration list is generic: what a component can *do*
+   comes from its driver's capability set, not from its block name
+   ([`drivers.md`](drivers.md)). A kind with no driver appears as
+   `driver=unknown` with its method dump one command away, instead of being
+   ignored.
+2. The operator connects the tablet first, as agreed, and opens the unclaimed
+   list, newest first.
+3. They give it a path (or several) and a cardinality, and its role when it
+   belongs to a line. Kind, address and node are already known.
+4. The component becomes `bound` and the path is usable from outside.
+
+The periodic scan is cheap because it is local (`component.list()`), so the list
+stays alive without touching the tick budget. **Reading inventories** is the
+expensive half and stays on demand, trickled across ticks.
+
+## Moving by path
+
+```text
+move from=hall1/ore_processing/entrada to=hall1/ore_processing/grinders
+     n=64 key=gregtech:meta_ore* policy=fill
+```
+
+1. Resolve both paths (and the transport's) on the owning proxy; `unknown_path`
+   if any fails.
+2. Read the source slots, keep the ones whose key matches the selector.
+3. Transfer **slot by slot** through the transposer, up to `n` units, honouring
+   `policy` when the target is a pool.
+4. Return what actually moved, per member: `moved=<n> slots=<k>`, or
+   `moved=0 reason=<why>` — never a cheerful `ok`.
+
+Honest limits: cost is per slot **examined**, not per item moved, so a narrow
+selector on a 40-slot chest costs 40 reads to move three stacks. Drawers group
+like items for free; crates do not. `n` is capped per command; the service loops.
+
+## Command surface
+
+| Command | Tier | What it does |
+|---|---|---|
+| `component.list` | read | Components on this proxy: address, kind, face, first_seen, paths |
+| `component.unclaimed` | read | Seen but not in any path, newest first |
+| `path.list` | read | Paths on this proxy with member counts and declared cardinality |
+| `path.query` | read | Path or wildcard → set of physical addresses, kinds, states |
+| `path.assign` | **write** | Adds or removes a member for a path; validates the address against `component.list()` |
+| `driver.list` | read | Registered drivers: kind, capabilities, source file |
+| `driver.dump` | read | `component.methods` + `component.doc` for one address — data, safe to paste |
+| `driver.reload` | **write** | Re-parses `/etc/drivers/*.lua` without a reboot; a broken file degrades that kind to `unknown` |
+| `move` | **write** | Bounded transfer by path (above) |
+| `gate.set` | **write** | Desired state of a line's gate, guarded by the cache |
+
+Errors are first-class and never guessed around: `unknown_path`,
+`unreachable_members`, `unbound_member`, `wrong_kind`, `cardinality_mismatch`,
+`policy_missing`.
 
 ## In-game verification checklist
 
-1. Address stability: note a screen/disk address, reboot the world (not just
-   the machine), re-log — same address? Break and re-place — new address?
-2. Prefix invocation: `component.invoke("<8 hex>", "get")` against a redstone
-   card — does the short form resolve on 1.7.5 and 1.8?
-3. Redstone Control probe (if installed): `component.list()` next to a port —
-   any kind names appear? Do ports emit events OC can receive?
-4. `component_added` fires for hot-plugged cards in a rack server?
+Verified facts used above (`component.list()` shape, address stability,
+`component_added`) are in `docs/opencomputers.md`. Still to prove:
+
+1. **Per-side inventory API**: do the Adapter's inventory methods take a side, and
+   what do they return for an invalid or empty side?
+2. **Transposer argument form**: does it accept `address:side` (and `:slot`), or
+   must the side be passed per method? This decides whether faces are free.
+3. **Inventory read shape**: one slot per call or a range — 40 slots at 40 calls
+   changes the budget of `move`.
+4. Path wildcards against a real proxy: `**/…` and `hall1/*/…` return what a hand
+   count says.
+5. Rename a path and confirm the saved line still points at the same address.
+6. Break and re-place a drawer: the old member goes `unbound`, the path keeps
+   resolving with the rest, nothing silently adopts the replacement.
 
 ## Sequencing
 
-1. Level 1 (local names) — small, self-contained, useful immediately for
-   configs and Terminal; ships with 0.4.x, no protocol work.
-2. Level 2 (component announcements in STATUS + INVOKE verb) — rides on
-   Relay, targeted with the 0.5 application server.
-3. Cross-segment resolution — only after the Linked Card transport is proven.
+1. **`tc.addr`** — physical addresses, faces, `component.list`, `first_seen`.
+2. **`tc.path`** — paths, wildcards, assign/query, cardinality.
+3. **Proxy + gateway wiring** — the merged copy and the two transports
+   ([`middleware.md`](middleware.md)).
+4. **`move` and `gate.set`** — last, because they depend on the probe answers.
 
-Cross-links: `docs/roadmap.md` F3/F4, `docs/redlink.md`, `docs/cluster.md`
-(STATUS, Relay), `docs/net.md` (framing).
+Cross-links: [`middleware.md`](middleware.md) (leaf, gateway, profiles),
+[`plant-service.md`](plant-service.md) (combined view, verbs),
+[`recipes.md`](recipes.md) (paths in lines),
+[`roadmap.md`](roadmap.md) (decisions 17-21), `docs/opencomputers.md`.

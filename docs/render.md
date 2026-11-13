@@ -1,7 +1,7 @@
 # Render pipeline and VRAM double buffering
 
-This document plans the renderer work for 0.4.x. It covers the current span
-diffing in `tc.gfx`, the packed framebuffer of the 0.4 Sessions phase, and the
+This document plans the renderer work for 0.5.x. It covers the current span
+diffing in `tc.gfx`, the packed framebuffer of the 0.5 Sessions phase, and the
 VRAM/bitblt double-buffer mode ("Flip") that OpenComputers 1.7.5+ offers.
 
 ## Current renderer (0.2.x–0.3.x)
@@ -19,7 +19,7 @@ Properties that must survive every redesign:
 - `gpu.setBackground`/`setForeground` take `true` for palette indices.
 - Palette writes are avoided unless the color changed (budget discipline).
 
-## Phase 1 — packed framebuffer (0.4.0 "Sessions")
+## Phase 1 — packed framebuffer (0.5.0 "Sessions")
 
 Sessions need many framebuffers (one per session) without blowing the memory
 budget, so the cell tables become packed strings: 2 bytes per cell (1 character
@@ -28,9 +28,9 @@ code + 1 attribute byte) instead of 3 Lua numbers per cell.
 - A 80x25 session costs ~4 KB as strings versus ~50 KB+ of boxed numbers.
 - The current dirty-span diff still works; it operates on the packed arrays.
 - Sessions only need `put`/`fill`/`clear`/`bar`/`view` — no new API surface.
-- Exit criterion (roadmap F3): a session framebuffer stays ≤ 64 KB.
+- Exit criterion (roadmap F4): a session framebuffer stays ≤ 64 KB.
 
-## Phase 2 — VRAM double buffering (0.4.x "Flip")
+## Phase 2 — VRAM double buffering (0.5.x "Flip")
 
 ### The OpenComputers buffer API (1.7.5 dev builds / 1.8)
 
@@ -136,11 +136,11 @@ frame into a VRAM buffer and flips it with a single bitblt.
    path fires vs span diffing over a 5-minute session.
 6. Repeat on a node with no GPU (headless): boot must be unaffected.
 
-## Sequencing inside 0.4
+## Sequencing inside 0.5
 
-- **0.4.0 "Sessions"** — packed framebuffer, sessions, display backends. No
+- **0.5.0 "Sessions"** — packed framebuffer, sessions, display backends. No
   VRAM work; renderer behavior observable from apps is unchanged.
-- **0.4.1 "Flip"** — VRAM double buffering per this document, behind the
+- **0.5.1 "Flip"** — VRAM double buffering per this document, behind the
   capability probe and the config switch. Ships only after the in-game
   checklist above.
 - The hybrid heuristic means neither mode is load-bearing alone: if VRAM

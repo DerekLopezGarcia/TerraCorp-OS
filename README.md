@@ -206,6 +206,9 @@ The harness uses in-memory components and is a smoke test, not a replacement
 for in-game testing. See [`docs/tests.md`](docs/tests.md) for the F0 protocol and
 [`docs/versioning.md`](docs/versioning.md) for publishing GitHub Releases.
 
+Where the plan currently stands — decisions, what is built, what is only
+designed, and what blocks what — is kept in [`docs/status.md`](docs/status.md).
+
 ## Design notes
 
 - The OS must remain useful on one offline node with 1 MB of storage.

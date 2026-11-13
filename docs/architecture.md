@@ -213,6 +213,12 @@ shortcut. `iconStyle = "accent"` draws the tile with the accent background.
 The kernel reads `role` from `/etc/terracorp.cfg`. `desktop` starts the UI and
 `cluster` service; `node` skips GPU setup and starts the headless runtime.
 
+The cluster is the in-game half of a two-layer plant: the nodes read components
+and hold gates; a **plant service** outside the game owns the recipe book, the
+planner, the history and the panel ([`plant-service.md`](plant-service.md)). The
+only bridge between them is the external link (`docs/external-link.md`), one
+polling computer at a time.
+
 | Module | Responsibility |
 |---|---|
 | `tc.net` | `TC1` text framing, validation, percent escaping, modem transport |

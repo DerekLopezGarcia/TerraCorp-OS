@@ -1,8 +1,8 @@
-# 0.4.0 Sessions — implementation plan
+# 0.5.0 Sessions — implementation plan
 
 The model, memory budget, and display backends are specified in
 `distributed.md`; the renderer work is planned in `render.md`. This document
-turns the 0.4.0 "Sessions" phase into a concrete module and release plan.
+turns the 0.5.0 "Sessions" phase into a concrete module and release plan.
 
 ## Module plan
 
@@ -40,6 +40,6 @@ turns the 0.4.0 "Sessions" phase into a concrete module and release plan.
 - Packed-cell diffing must keep span quality (chars+attributes in one byte
   limits to 256 colors — palette indices only; document the constraint).
 - Session focus stealing between players: one operator at a time is the
-  0.4 rule (`distributed.md`); the 0.5 terminal client must respect it.
-- Remote backend lands with 0.5, but the backend *interface* must be final
-  in 0.4.0 so 0.5 does not reopen session code.
+  0.5 rule (`distributed.md`); the 0.6 terminal client must respect it.
+- Remote backend lands with 0.6, but the backend *interface* must be final
+  in 0.5.0 so 0.6 does not reopen session code.

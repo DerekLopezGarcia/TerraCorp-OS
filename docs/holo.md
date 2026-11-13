@@ -1,7 +1,7 @@
 # Hologram status wall
 
 Using an OpenComputers hologram projector as the factory status wall — plant
-KPIs visible across the hall, updated by the cluster. Research for a 0.5.x
+KPIs visible across the hall, updated by the cluster. Research for a 0.8.x
 optional module (`tc/holo.lua`); nothing here is implemented.
 
 ## Verified API (community docs, pending in-game check)
@@ -77,9 +77,10 @@ Realistic layouts:
 
 ## Sequencing
 
-Only after 0.4 sessions ship: the wall is a consumer of telemetry and
-session-free, so it can be built any time after `tc.names` + telemetry caches
-exist — target 0.5.x alongside the terminal clients.
+Only after the plant readout (0.4) and sessions (0.5) ship: the wall is a
+consumer of telemetry and session-free, so it can be built any time after
+`tc.addr`/`tc.path` + telemetry caches exist — target 0.8.x with the logistics
+automation.
 
 Cross-links: `distributed.md` (data center), `telemetry.md` (sources),
 `long-distance.md` (alarm channel), `render.md` (retry/shadow discipline).

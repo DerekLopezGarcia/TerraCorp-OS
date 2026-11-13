@@ -8,11 +8,17 @@ two buffers. The operator's flow, verbatim from field operations:
 > buffers: select the input ingredients **by type and quantity**, then the
 > result appears on the other side, with a **stock limit**.
 
-So the recipe is **not declared — it is read from the buffers**. TerraCorp's
-job: inspect both buffers as inventories (item types + counts), let the
-operator pick which types to allow and how much to feed, and gate the feed
-while the result's stock is below its limit. Target: 0.5.x `tc/craft` plus a
-selection UI. Design; "verify" items need in-game probes.
+So the **gate loop needs no declared recipe**: it reads the buffers and feeds by
+delta. Declaring what a line produces belongs to the planning layer
+([`recipes.md`](recipes.md), 0.4.5) — and a real run of this loop is exactly what
+calibrates a declared recipe (input deltas against declared inputs). The two
+layers feed each other instead of duplicating a recipe database.
+
+TerraCorp's job here: inspect both buffers as inventories (item types + counts),
+let the operator pick which types to allow and how much to feed, and gate the
+feed while the result's stock is below its limit. Target: 0.8.x `tc/craft` plus a
+selection UI; the stock reader it depends on is 0.4.2 (F3 plant readout).
+Design; "verify" items need in-game probes.
 
 **Why this exists**: drawers ship a redstone upgrade that outputs 0–15 by
 fill fraction — too coarse for precise or large stores. The program
@@ -65,9 +71,13 @@ craft1.out = drawer C + crate 2
 
 ## Program contract
 
-### 1. Recipe selection (operator, via UI)
+### 1. Recipe selection (a setpoint, not a recipe)
 
-A small TerraCorp app (or Terminal commands) on the hall node:
+Selection says *which types may feed, how many, and up to which output limit*.
+It is normally made in the plant-service panel
+([`plant-service.md`](plant-service.md)) and arrives at the node as a run
+descriptor plus the line's desired state (0.4.6); the node also accepts it
+locally from the Terminal, so a hall without a bridge still runs a line.
 
 1. `read IN` — list every item type currently in the input buffer with its
    count (live re-read; the buffer is the recipe source of truth).
@@ -77,8 +87,8 @@ A small TerraCorp app (or Terminal commands) on the hall node:
 3. Operator selects the **result type** (picked from the OUT buffer once the
    first batch appears, or named by the operator) and the **stock limit**.
 
-The selection is persisted (`/etc/craft.tsv`, one line per run) so it
-survives reboots; changing selection = re-open the UI.
+The selection is persisted (`/etc/craft.tsv`, one line per run) so it survives
+reboots; changing selection means setting it again, from the panel or locally.
 
 ### 2. The control loop
 
@@ -96,6 +106,12 @@ every pass (≤ 1 Hz):
 - `fed_so_far` is derived from **input buffer deltas** (fresh readings every
   pass), never from an internal counter — a reboot reconciles automatically
   from the next delta.
+- The gate obeys the run descriptor and the last **desired state** sent from
+  outside, with a **local guard** the node evaluates against its cache each tick
+  (`max_resident`, `min_input`). That one comparison is what keeps a limit honest
+  between two polls; the service still decides what the limit is (0.4.6). A
+  desired state that contradicts the cache is **refused with a reason**, never
+  obeyed.
 - When `out_count` crosses the limit, the gate closes and the selection
   stays armed for the next run (or auto-resets, configurable).
 
@@ -131,14 +147,16 @@ container reads.
 
 ## Integration
 
+- **Plant service** ([`plant-service.md`](plant-service.md)): the panel holds the
+  selection, the plan and the alarms; it sends setpoints and reads back refusals.
+  `stock.snapshot`/`stock.delta` are how buffer levels reach it.
 - **Relay**: `stock` built-in task (named buffers, types + counts) and
   `craft limit` orders (set limit / reset run) from any terminal.
-- **Telemetry / UI**: buffer levels feed the dashboard and hologram wall
-  (`holo.md`) as bars; the Craft app on the master renders the same data for
-  selection when the operator is at the desk instead of the hall.
+- **Telemetry / UI**: buffer levels feed the panel and hologram wall
+  (`holo.md`) as bars.
 - **Names** (`names.md`): `craft1.in`, `craft1.out`.
-- Standalone rule: selection and the loop run with the master offline;
-  Relay only carries reports and remote orders.
+- Standalone rule: the loop runs with the master and the service offline;
+  selection can be set locally, and Relay only carries reports and orders.
 
 ## Verification checklist (crafting hall session)
 
@@ -159,12 +177,17 @@ container reads.
 
 ## Recommendation
 
-Three slices, each independently useful:
+Three slices, each independently useful, split across the two layers
+([`plant-service.md`](plant-service.md)):
 
-1. **Stock reader**: `stock` Relay task + dashboard tile (types + counts of
-   named buffers). Useful on day one even with zero automation.
-2. **Selection UI + gate loop**: one line, one run, end to end.
-3. **Scale by config**: more lines = more TSV rows, not more code.
+1. **Stock reader** (node, 0.4.2): exact types and counts of named buffers,
+   pushed out as snapshot and deltas. Useful on day one even with zero
+   automation.
+2. **Gate loop** (node, 0.4.6): one line, one run, end to end, driven by a
+   desired state and defended by local interlocks.
+3. **Selection and orders** (service, 0.4.5 + F7): the panel sets the run and
+   the plan, and more lines are more config rows, not more code.
 
-Cross-links: `distributed.md` (worker role), `telemetry.md`, `names.md`,
-`relay.md`, `long-distance.md` (alarm path), `holo.md` (wall bars).
+Cross-links: [`plant-service.md`](plant-service.md), [`recipes.md`](recipes.md),
+`distributed.md` (worker role), `telemetry.md`, `names.md`, `relay.md`,
+`long-distance.md` (alarm path), `holo.md` (wall bars).

@@ -1,13 +1,13 @@
-# Terminal protocol (0.5)
+# Terminal protocol (0.6)
 
 Message contract for remote terminals: the session runs on a core node, the
 terminal renders spans and sends input. The model, refresh policy, and memory
 budget live in `distributed.md`; this document fixes the verb-level contract
-so 0.4.0 can freeze the backend interface it depends on.
+so 0.5.0 can freeze the backend interface it depends on.
 
 ## Participants
 
-- **Host**: the core running the session (master in 0.4; in 0.5 any node).
+- **Host**: the core running the session (master in 0.5; in 0.6 any node).
 - **Terminal**: screen + keyboard + network card; a tablet may be a terminal
   (it cannot host sessions).
 
@@ -75,7 +75,7 @@ must ride direct cable/Linked Card, not relays; `maxPacketSize` 8192 default.
 Latency targets: key-echo round trip ≤ 250 ms on cable, ≤ 2 s over a Linked
 Card (measure in the verification session).
 
-## Session placement hook (0.5)
+## Session placement hook (0.6)
 
 `TWELCOME` may include `node` (the hosting node). A placement request is out
 of band (Relay job), never inline in the terminal handshake — the terminal
@@ -92,4 +92,4 @@ only ever talks to one host address.
 5. Tablet: token persistence across dimension change and reconnect delay.
 
 Cross-links: `distributed.md` (model), `long-distance.md` (transports),
-`sessions.md` (0.4.0 backend interface this builds on).
+`sessions.md` (0.5.0 backend interface this builds on).

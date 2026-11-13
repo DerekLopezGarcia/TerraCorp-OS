@@ -1,9 +1,10 @@
 # Plant telemetry (GregTech ↔ TerraCorp)
 
 Research for reading plant state (power, machines, tanks) into TerraCorp.
-Target phase: 0.4.x–0.5.x, feeding the dashboard, Relay state jobs, and the
-alarm channel. Open work called out in `distributed.md`: "verify which GTCE
-inventories/tanks the Adapter exposes before factory telemetry work".
+Target phase: **0.4.x (F3 plant readout)**, feeding the alarm registry, the
+stock readers and the alarm channel. Open work called out in `distributed.md`:
+"verify which GTCE inventories/tanks the Adapter exposes before factory
+telemetry work".
 
 ## The integration landscape (1.12.2)
 
@@ -13,6 +14,11 @@ inventories/tanks the Adapter exposes before factory telemetry work".
 | **Stock OC Adapter** | Exposes blocks of *integrated* mods as components. GregTech machines are not on the vanilla integration list — without a bridge, the Adapter sees nothing on a GT machine | Verify per machine in-game: `component.list()` next to an Adapter touching the target |
 | **inventory_controller / tank_controller upgrades** | Read item stacks (full NBT) and tank contents in *robot/inventory* contexts — not arbitrary external machines | Limited to what the Upgrade sits in; useful for logistics robots, not the plant |
 | **Redstone Card** | Read/write I/O on blocks that expose vanilla redstone | GT machines mostly do not; usable for diode-level status bits only |
+
+**Applied Energistics** is in the pack but is used as a manual crafting
+terminal, not as a store (decision 11 in `roadmap.md`). An ME network is not a
+stock source for F3 and no AE2 integration is planned; if one ever becomes a
+store, it enters here as one more read path, not as a new model.
 
 ## Candidate telemetry sources in Supersymmetry
 
@@ -29,7 +35,7 @@ inventories/tanks the Adapter exposes before factory telemetry work".
 ## Design sketch (pending verification)
 
 - `tc.telemetry` module: named probes (`power.matrix`, `machine.ebf1`) built
-  on top of `tc.names` (`docs/names.md`); each probe = (component address,
+  on top of the address/path registry (`docs/names.md`); each probe = (component address,
   kind, read method, scale) declared in config, not code.
 - Sampling discipline (per `distributed.md`): event-driven or ≥1 s polls;
   batch into one Relay state job; the dashboard reads cached values.
@@ -52,13 +58,18 @@ inventories/tanks the Adapter exposes before factory telemetry work".
    anything, is exposed?
 4. Comparator/redstone tap fallback: what strength does an induction matrix
    comparator output track, and is it linear in stored energy?
-5. Tick cost: poll the heaviest source at 1 Hz for 5 minutes, watch
+5. **Identifier format** for one item and one fluid (this one gates the recipe
+   book, [`recipes.md`](recipes.md)): registry name, damage/metadata, whether
+   NBT variants are distinguishable, and what a fluid tank reports — a name, a
+   numeric id, or only a label. Recipe keys must match this byte for byte.
+6. Tick cost: poll the heaviest source at 1 Hz for 5 minutes, watch
    `forge tps` / the TerraCorp TPS estimator.
 
 ## Recommendation
 
-Gate telemetry on the verification session: if the bridge works, `tc.telemetry`
-is a small config-driven module for 0.5.x; if not, keep telemetry at
-redstone-tap resolution and spend the effort on sessions first. Either way,
-the alarm-channel design (`long-distance.md`) is the part worth building early
-because it is independent of GregTech integration.
+Gate **precision** on the verification session: if the bridge works,
+`tc.telemetry` is a small config-driven module inside F3; if not, stocks stay
+coarse and the phase still ships, because alarms and energy history run on
+master energy and node presence alone. The alarm registry (0.4.1) is
+deliberately independent of GregTech integration, so it is built first, not
+last.

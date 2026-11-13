@@ -15,6 +15,12 @@ Status: **phase 1 and 2 implemented**, merged for 0.3.20. What exists today:
 The harness proves the state machine against a fake Internet Card. The in-game
 behaviour is still unproven; see [Unverified](#unverified).
 
+Deployment scope is **one machine** for now: the world host and the bridge on
+the same box, which is the bridge default (`127.0.0.1:8787`). The WAN path is
+parked until that setup exists, expected in a couple of weeks; its WireGuard
+peer is therefore not part of the current in-game test list. See
+[Deployment on one machine](#deployment-on-one-machine-current-target).
+
 ## Purpose
 
 Let a process outside the game read what a running TerraCorp computer sees and
@@ -26,7 +32,9 @@ frame carries code, and nothing is loaded from the bridge.
 
 Scope is one computer: the commands run inside the computer that received the
 frame. There is no verb that reaches another machine, the cluster, or the host
-running Minecraft.
+running Minecraft. A plant service may coordinate many computers
+([`plant-service.md`](plant-service.md)), but it does so by sending each one its
+own commands: the link itself has no notion of a cluster.
 
 ## What OpenComputers allows
 
@@ -111,6 +119,35 @@ know, and the existing peers never send these.
 A command that the current tier does not allow answers `LREP` with
 `state=error reason=needs_<tier>_control` and touches nothing.
 
+Proposed for 0.4 — the plant service verbs
+([`plant-service.md`](plant-service.md)), not implemented yet:
+
+| `cmd` | Tier | Arguments | Returns |
+|---|---|---|---|
+| `component.list` | read | — | Components on this proxy: address, kind, face, `first_seen`, paths |
+| `component.unclaimed` | read | — | Seen but not in any path, newest first |
+| `path.list` | read | — | Paths on this proxy: member count, cardinality, state |
+| `path.query` | read | `path` (wildcards) | The resolved set, or `unknown_path` / `unreachable_members` |
+| `path.assign` | write | `path`, `address`, `cardinality?` | Updated entry, validated against `component.list()` |
+| `stock.snapshot` | read | `paths?` | Full stock listing, sliced: `kind`, `key`, `count` |
+| `stock.delta` | read | `cursor` | Entries changed since the cursor plus the new one; `reason=resync` when it expired |
+| `move` | write | `from`, `to`, `n`, `key`, `member?`, `policy?` | `moved=<n> slots=<k>` per member, or `moved=0 reason=<why>` |
+| `line.list` | read | — | Line path → gate address and cached levels |
+| `gate.set` | write | `line`, `state` | Actual state, or `refused reason=<why>` |
+| `node.status` | read | — | Version, uptime, memory, energy, link health, cache age |
+
+Every one of these speaks **semantic paths**, never UUIDs ([`names.md`](names.md)).
+An external instruction has to be readable, reviewable and diffable; a frame full
+of 36-character addresses is none of those. The registry resolves a path to
+physical addresses at the target proxy — the caller never needs to know where a
+component lives.
+
+`gate.set` and `move` carry the same discipline: **desired state, never an
+action**. A retried frame must not invert a gate, and a reboot must restore the
+last setpoints without asking the bridge. The node reconciles each tick under its
+own interlocks, evaluates the optional guard against its cache, and reports the
+actual state plus the refusal reason.
+
 ### Control tiers
 
 `linkControl` decides how far a command can reach. The bridge does not enforce
@@ -169,7 +206,33 @@ as a secret.
 | Reply larger than the response limit | Dropped, logged, cursor kept |
 | Token mismatch | Frame rejected; the event is logged |
 
-## Deployment over a WAN (WireGuard)
+## Deployment on one machine (current target)
+
+The bridge already defaults to this: `--host 127.0.0.1`, port 8787, no tunnel,
+no certificate, no port forwarding.
+
+```text
+Java world ── POST 127.0.0.1:8787 ──► bridge.js
+```
+
+The Internet Card issues its request from the server process, so `127.0.0.1` is
+the machine running the world, not the computer inside it.
+
+1. `node tools/bridge/bridge.js --token <secret>` — add `--port` only if 8787 is
+   taken.
+2. `/etc/terracorp.cfg`: `linkSink = "http://127.0.0.1:8787"`, the same
+   `linkToken`, `linkInterval = 10`, and `linkControl = "off"` for the first run.
+3. Reboot the computer; `/var/log/tc.log` shows `external link armed`.
+4. `node tools/bridge/linkctl.js nodes`, `use <address>`, then
+   `queue status --wait`.
+
+Everything else in [the checklist](#checklist-for-a-new-server-machine) applies
+except the tunnel: there is no peer to ping and no private hostname to resolve.
+
+## Deployment over a WAN (WireGuard, parked)
+
+Parked: not the current target, and not needed while the bridge and the world
+share a machine. Read it when the bridge has to leave that machine.
 
 The computer is the client, so **the Minecraft host must reach the bridge**. A
 bridge on a home LAN behind NAT is unreachable from a server elsewhere, and no
@@ -230,17 +293,20 @@ A compromised peer should not be enough to queue commands.
 
 ## Checklist for a new server machine
 
-In order, on the machine that runs the world:
+In order, on the machine that runs the world. `<bridge-host>` is `127.0.0.1`
+while the bridge lives on that same machine, or the tunnel address (`10.8.0.1`)
+once it does not.
 
 1. OpenComputers loads and the computer boots TerraCorp from its own volume.
 2. The computer has an Internet Card; `component.list("internet")` returns an
    address.
 3. The server permits outbound HTTP/S. OpenComputers may also restrict hosts in
    its own config; confirm before assuming the bridge is at fault.
-4. The WireGuard peer is up on that host and `ping 10.8.0.1` answers.
-5. `bridge.js` runs with `--host 10.8.0.1` and a token; `/link/state` answers
+4. WAN only: the WireGuard peer is up on that host and `ping <bridge-host>`
+   answers.
+5. `bridge.js` runs bound to `<bridge-host>` with a token; `/link/state` answers
    with that token.
-6. `/etc/terracorp.cfg` has `linkSink = "http://10.8.0.1:8787"`, `linkToken`
+6. `/etc/terracorp.cfg` has `linkSink = "http://<bridge-host>:8787"`, `linkToken`
    equal to the bridge's, `linkInterval = 10`, and `linkControl` at the tier you
    want.
 7. Reboot the computer. `/var/log/tc.log` shows `external link armed`.
@@ -254,7 +320,8 @@ In order, on the machine that runs the world:
 - The operator owns the bridge; the token is the only gate the OS can enforce.
 - The token travels in the frame, so the link must be encrypted: WireGuard, or
   HTTPS with a certificate the Internet Card accepts. Plain HTTP over an open
-  network leaks the token.
+  network leaks the token. Loopback to a bridge on the same machine does not
+  leave the host, so plain `http://127.0.0.1` is correct there.
 - Logs contain node names, paths and addresses. Assume the bridge is as
   sensitive as the save.
 - The OS never stores the bridge's code. Only named commands run.
@@ -303,5 +370,6 @@ proven by it and need an in-game test before this leaves design:
 - Whether the pack's server permits an arbitrary outbound host, not just GitHub.
 - Whether a held handle survives a `screen_resized` rebind or a shutdown.
 - Whether WireGuard can be installed on the host that runs the world: containers
-  need `TUN` or the kernel module.
+  need `TUN` or the kernel module. Not needed on the same-machine path, so this
+  waits with the WAN deployment.
 - The GAIA window has no in-game test yet; only its own gate drives it.
