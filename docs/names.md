@@ -38,6 +38,9 @@ string is what makes plant configs unmaintainable.
 - `face` is which side of the block is being addressed. It matters because
   inventories are read and transposed **per side**, so the same block can behave
   as several endpoints. Kinds without sides (a filesystem, a CPU) carry `-`.
+  The face is **physical**: it stays put while the block and its Adapter or
+  Transposer do not move, but a rebuild can leave the same container on another
+  face. A saved `address:face` is only valid for the layout it was read from.
   The per-side inventory API and the `address:side` argument form are
   **pending in-game verification** (see the checklist); until then the face is
   part of the address but the operations pass it explicitly.

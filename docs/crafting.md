@@ -151,6 +151,10 @@ The name is the block's registry name, so the driver layer can key on it without
 asking the block itself. A face with nothing on it answers `nil` plus
 `"no inventory"`: the reader treats that as absent, not as a failed read.
 
+Re-read the matrix after every rebuild. The face numbers follow the physical
+sides, and moving a container to another side changes which number it answers
+on; the Transposer's own address also changes if it was re-placed.
+
 **Degradation rule**: a line without inventory reads runs in **coarse mode**
 (gate by total fill only, warning shown). The program must never pretend to
 know types or exact counts it did not read. Precision is opt-in per container,
