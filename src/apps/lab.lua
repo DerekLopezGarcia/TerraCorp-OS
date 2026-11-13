@@ -185,8 +185,9 @@ function lab:activeSession()
 end
 
 function lab:scrollRepl(ctx, amount)
-  local rows = self:replRows(ctx)
-  local maximum = math.max(0, #self:activeSession().transcript - rows)
+  -- Scroll counts logical lines; each one occupies at least one screen row, so
+  -- the last line must stay reachable.
+  local maximum = math.max(0, #self:activeSession().transcript - 1)
   self.replScroll = ctx.util.clamp((self.replScroll or 0) + amount, 0, maximum)
 end
 
@@ -274,27 +275,95 @@ function lab:moveSelection(ctx, code)
   return true
 end
 
--- Draw the selected span of one line if `index` falls inside it.
-function lab:paintSelection(ctx, line, index, y)
+-- Wrap one displayed line at the pane width. Character wrapping, not word
+-- wrapping: a table row or a stack trace keeps its own layout.
+local function wrapLine(ctx, text, width)
+  if text == "" or width < 1 then
+    return { text }
+  end
+
+  local pieces = {}
+  local position, count = 1, ctx.text.width(text)
+  while position <= count do
+    local piece = ctx.text.slice(text, position, position + width - 1)
+    pieces[#pieces + 1] = piece
+    position = position + ctx.text.width(piece)
+  end
+  return pieces
+end
+
+-- Visual rows that fill `rows` from the end of `lines`, skipping `scroll`
+-- logical lines. Each entry is one screen row: { text, index, start }.
+function lab:visualRows(ctx, lines, rows, scroll)
+  local collected = {}
+  local filled = 0
+  local index = #lines - (scroll or 0)
+
+  while index >= 1 and filled < rows do
+    local pieces = wrapLine(ctx, shown(lines[index]), ctx.w)
+    for offset = #pieces, 1, -1 do
+      table.insert(collected, 1, {
+        text = pieces[offset],
+        index = index,
+        start = (offset - 1) * ctx.w,
+      })
+    end
+    filled = filled + #pieces
+    index = index - 1
+  end
+
+  return collected
+end
+
+-- Draw the selected span of one screen row if its logical line is selected.
+-- `row.start` is the first column of the row inside the logical line, so a
+-- wrapped row paints only its own intersection with the selection.
+function lab:paintSelection(ctx, row, y)
   if not self:selectionActive() then
     return
   end
 
   local from, to = self:orderedSelection()
+  local index = row.index
   if index < from.line or index > to.line then
     return
   end
 
-  line = shown(line)
+  local rowWidth = ctx.text.width(row.text)
   local startCol = index == from.line and from.col or 0
-  local endCol = index == to.line and to.col or ctx.text.width(line)
-  if endCol <= startCol then
+  local endCol = index == to.line and to.col or math.huge
+  local first = math.max(startCol, row.start)
+  local last = math.min(endCol, row.start + rowWidth)
+  if last <= first then
     return
   end
 
-  local span = ctx.text.slice(line, startCol + 1, endCol)
+  local span = ctx.text.slice(row.text, first - row.start + 1, last - row.start)
   if span ~= "" then
-    ctx.view:put(1 + startCol, y, span, ctx.colors.deep, ctx.colors.accent)
+    ctx.view:put(1 + first, y, span, ctx.colors.deep, ctx.colors.accent)
+  end
+end
+
+-- Draw a transcript or output pane with wrapping, newest lines at the bottom.
+function lab:drawPaneText(ctx, lines, top, rows, scroll)
+  local visual = self:visualRows(ctx, lines, rows, scroll)
+  local from = math.max(1, #visual - rows + 1)
+
+  for position = from, #visual do
+    local row = visual[position]
+    local line = lines[row.index]
+    local fg = ctx.colors.text
+    if line:sub(1, 3) == "===" then
+      fg = ctx.colors.accent
+    elseif line:sub(1, 1) == "!" then
+      fg = ctx.colors.danger
+    elseif line:sub(1, 1) == ">" or line:sub(1, 3) == "..." then
+      fg = ctx.colors.dim
+    end
+
+    local y = top + (position - from)
+    ctx.view:put(1, y, row.text, fg, ctx.colors.deep)
+    self:paintSelection(ctx, row, y)
   end
 end
 
@@ -703,8 +772,7 @@ function lab:run(ctx)
 end
 
 function lab:scrollOutput(ctx, amount)
-  local rows = self:visibleRows(ctx)
-  local maximum = math.max(0, #self.output - rows)
+  local maximum = math.max(0, #self.output - 1)
   self.outScroll = ctx.util.clamp((self.outScroll or 0) + amount, 0, maximum)
 end
 
@@ -788,26 +856,8 @@ function lab:drawOutput(ctx, top)
     return
   end
 
-  self.outScroll = ctx.util.clamp(self.outScroll or 0, 0, math.max(0, #self.output - rows))
-  local last = #self.output - self.outScroll
-  local first = math.max(1, last - rows + 1)
-
-  for offset = 0, rows - 1 do
-    local line = self.output[first + offset]
-    if not line then
-      break
-    end
-    local fg = c.text
-    if line:sub(1, 3) == "===" then
-      fg = c.accent
-    elseif line:sub(1, 1) == "!" then
-      fg = c.danger
-    elseif line:sub(1, 3) == "..." then
-      fg = c.dim
-    end
-    v:put(1, top + offset, ctx.text.truncate(shown(line), ctx.w), fg, c.deep)
-    self:paintSelection(ctx, line, first + offset, top + offset)
-  end
+  self.outScroll = ctx.util.clamp(self.outScroll or 0, 0, math.max(0, #self.output - 1))
+  self:drawPaneText(ctx, self.output, top, rows, self.outScroll)
 end
 
 function lab:drawRepl(ctx, top)
@@ -827,26 +877,8 @@ function lab:drawRepl(ctx, top)
       end
     end
   else
-    self.replScroll = ctx.util.clamp(self.replScroll or 0, 0, math.max(0, #transcript - rows))
-    local last = #transcript - self.replScroll
-    local first = math.max(1, last - rows + 1)
-
-    for offset = 0, rows - 1 do
-      local line = transcript[first + offset]
-      if not line then
-        break
-      end
-      local fg = c.text
-      if line:sub(1, 3) == "===" then
-        fg = c.accent
-      elseif line:sub(1, 1) == "!" then
-        fg = c.danger
-      elseif line:sub(1, 1) == ">" then
-        fg = c.dim
-      end
-      v:put(1, top + offset, ctx.text.truncate(shown(line), ctx.w), fg, c.deep)
-      self:paintSelection(ctx, line, first + offset, top + offset)
-    end
+    self.replScroll = ctx.util.clamp(self.replScroll or 0, 0, math.max(0, #transcript - 1))
+    self:drawPaneText(ctx, transcript, top, rows, self.replScroll)
   end
 
   -- Input cell: the last line sits on h-1 and extra lines grow upwards. The

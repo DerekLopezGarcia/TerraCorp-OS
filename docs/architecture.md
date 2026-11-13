@@ -247,7 +247,11 @@ session.
   expression, such as a bare call.
 - Results are shown with strings quoted and tables keyed by sorted key, elided
   at depth two and ten entries, so one result stays inside the transcript
-  budget. Numbers, booleans and nil print as themselves.
+  budget. A top-level table puts one entry per line. Numbers, booleans and nil
+  print as themselves.
+- The transcript and the output pane wrap long lines at the pane width instead
+  of clipping them, so a component listing or a long string is readable in
+  full. The input cell still clips horizontally to keep the caret visible.
 - Arrow up and down walk the submitted lines. `Reset` drops every name in the
   active session.
 - Sessions are named environments: `:new work` starts one, `:use main` switches

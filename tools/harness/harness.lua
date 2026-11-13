@@ -1214,6 +1214,17 @@ elseif scenario == "lab_repl" then
   ev("key_down", "screen-1", nil, 0x2F, "tester") -- V
   ev("key_up", "screen-1", nil, 0x1D, "tester")
   idle(2)
+elseif scenario == "lab_wrap" then
+  -- A result wider than the pane must wrap inside it instead of running off
+  -- the right edge. 200 Zs are wider than any supported window.
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Terminal
+  idle(1)
+  typeText("lua")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  typeText('= string.rep("Z", 200)')
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
 elseif scenario == "console_paste" then
   -- A pasted line lands in the Terminal input and can be read before Enter.
   ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Terminal
@@ -1743,6 +1754,24 @@ if STRICT then
     if not screen:find("lua> ", 1, true) then
       errors = errors + 1
       print("FAIL: the interpreter did not show its prompt")
+    end
+  end
+  if scenario == "lab_wrap" then
+    local total, paintedRows = 0, 0
+    for _, row in ipairs(rows) do
+      local _, count = row:gsub("Z", "Z")
+      total = total + count
+      if count > 0 then
+        paintedRows = paintedRows + 1
+      end
+    end
+    if total < 200 then
+      errors = errors + 1
+      print("FAIL: a result wider than the pane was cut off")
+    end
+    if paintedRows < 3 then
+      errors = errors + 1
+      print("FAIL: a result wider than the pane was not wrapped")
     end
   end
   if scenario == "lab_editor" then

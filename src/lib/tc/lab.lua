@@ -37,7 +37,9 @@ local MAX_SHOW_SCAN = 64
 
 -- REPL results are shown the way an operator inspects a component: strings
 -- quoted, tables keyed and elided, everything else tostring. Keys are sorted
--- so the same value prints the same way twice.
+-- so the same value prints the same way twice. A table at the top level puts
+-- one entry per line: a component listing is wider than any screen and must
+-- stay readable in a transcript that only wraps, never scrolls sideways.
 local function displayValue(value, depth)
   local kind = type(value)
   if kind == "string" then
@@ -63,14 +65,23 @@ local function displayValue(value, depth)
     return tostring(a) < tostring(b)
   end)
 
+  if #keys == 0 then
+    return "{}"
+  end
+
   local parts = {}
+  local indent = depth == 0 and "  " or ""
   for index = 1, math.min(#keys, MAX_SHOW_ENTRIES) do
     local key = keys[index]
-    parts[#parts + 1] = "[" .. displayValue(key, depth + 1) .. "]="
+    parts[#parts + 1] = indent .. "[" .. displayValue(key, depth + 1) .. "]="
       .. displayValue(value[key], depth + 1)
   end
   if #keys > MAX_SHOW_ENTRIES then
-    parts[#parts + 1] = "..."
+    parts[#parts + 1] = indent .. "..."
+  end
+
+  if depth == 0 then
+    return "{\n" .. table.concat(parts, "\n") .. "\n}"
   end
   return "{" .. table.concat(parts, ", ") .. "}"
 end
@@ -651,11 +662,15 @@ function repl:submit(input)
       ok, failure = false, packed[2]
     elseif expression then
       for index = 2, packed.n do
+        -- A table result is several lines; each one is a transcript row and
+        -- keeps its own length cap.
         local text = displayValue(packed[index])
-        if #text > MAX_LINE_CHARS then
-          text = text:sub(1, MAX_LINE_CHARS - 1) .. "…"
+        for line in (text .. "\n"):gmatch("(.-)\n") do
+          if #line > MAX_LINE_CHARS then
+            line = line:sub(1, MAX_LINE_CHARS - 1) .. "…"
+          end
+          pushLine(self.buffer, line)
         end
-        pushLine(self.buffer, text)
       end
     end
   else

@@ -69,6 +69,10 @@ interpreter tries the line as an expression first, like OpenOS, so a bare call
 prints. `= { answer = 42 }` must show `["answer"]=42`, which covers the sorted
 table display and its elision.
 
+`lab_wrap` submits `= string.rep("Z", 200)` and requires all 200 characters on
+screen across at least three rows: a result wider than the pane must wrap, not
+run off the right edge.
+
 The same scenario covers the later fixes: `Shift+Enter` keeps two lines in one
 record, a held `Shift` keeps adding lines across two Enters (the modifier is
 only released by `key_up`), an open `= 300 +` waits for the next line instead
