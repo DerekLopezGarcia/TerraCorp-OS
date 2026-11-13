@@ -122,9 +122,34 @@ the drawer upgrade's 0–15 signal cannot identify types or give exact counts:
 
 | Sensor | Role | To verify |
 |---|---|---|
-| **Adapter on drawer / GT crate / chest** | `inventory` component: per-slot reads with item type + count (OC's inventory_controller precedent returns full NBT). This is the sensor of record | Does the Adapter expose **Storage Drawers** and **GregTech crates**? Drawers are not on OC's vanilla integration list; GT crates depend on the gtce2oc/Adapter question in `telemetry.md` |
+| **Adapter on chest / GT crate** | `inventory` component: per-slot reads with item type + count (OC's inventory_controller precedent returns full NBT). Sensor of record where it works | The Adapter does **not** expose a Storage Drawer (verified in-game 2026-11-14); chests, GT crates and machines still to confirm |
+| **Transposer** | Reader **and** pusher: `getInventoryName(side)` / `getInventorySize(side)` per face, then per-slot reads. It **does** see drawers and pipes (below) | The stack shape (`name`, `damage`, `size`, `label`, `tag`) and whether `transferItem` respects per-type limits |
 | Drawer redstone upgrade (0–15) | Emergency fallback only: gate on total fill when adapter reads are unavailable, with a persistent "types unverified" warning | Fill fraction basis (per slot? per capacity?) |
-| Transposer (optional) | Push-mode feeding if the passive feed + gate cannot respect per-type quantities | Insertion into the circuit's entry point |
+
+Transposer faces read in-game on 2026-11-14 (six faces, one Transposer):
+
+| Face | `getInventoryName` | `getInventorySize` |
+|---|---|---|
+| 0 | `minecraft:hopper` | 5 |
+| 1 | `minecraft:chest` | 27 |
+| 2 | `gregtech:machine` | 90 |
+| 3 | `storagedrawers:basicdrawers` | 2 |
+| 4 | `nil` (`no inventory`) | — |
+| 5 | `gregtech:item_pipe_small` | 1 |
+
+Two consequences:
+
+- **Drawers are visible to the Transposer** even though the Adapter does not
+  expose them; the "drawers are not a sensor" conclusion only held for the
+  Adapter. Per-slot reads on that face are still to confirm.
+- **A pipe answers like a one-slot inventory.** It must be classified as
+  transport and never counted as a stock member: otherwise every pipe adds a
+  phantom slot and the item in transit inflates the count. Classify by kind
+  (descriptor), never by `size == 1` — a real one-slot container exists.
+
+The name is the block's registry name, so the driver layer can key on it without
+asking the block itself. A face with nothing on it answers `nil` plus
+`"no inventory"`: the reader treats that as absent, not as a failed read.
 
 **Degradation rule**: a line without inventory reads runs in **coarse mode**
 (gate by total fill only, warning shown). The program must never pretend to

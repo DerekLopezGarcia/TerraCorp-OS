@@ -487,6 +487,15 @@ clean 30-minute log.
 See [`names.md`](names.md#adapter-faces-are-derived-not-minted) for what this
 means for `tc.addr` and the registry.
 
+0.3.x Transposer face matrix (in-game 2026-11-14): the six faces of one
+Transposer answered `getInventoryName` / `getInventorySize` with
+`minecraft:hopper` 5, `minecraft:chest` 27, `gregtech:machine` 90,
+`storagedrawers:basicdrawers` 2, `nil` "no inventory", and
+`gregtech:item_pipe_small` 1. The Transposer sees drawers the Adapter does not,
+and reports pipes as one-slot inventories; both are recorded in
+[`crafting.md`](crafting.md#the-sensing-requirement-the-load-bearing-dependency)
+and [`drivers.md`](drivers.md#closed-capability-vocabulary).
+
 Post-release work under development: an interrupted install could leave the
 EEPROM pointed at a half-written disk (the boot address is now set after a
 complete copy), re-preparing an already prepared floppy rewrote it (same

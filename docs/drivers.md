@@ -34,6 +34,12 @@ That table is the contract outward: a component with `inventory` can be a stock
 member, one with `redstone` can be a gate, one with `text` can be a wall. The
 service never learns the block's name — only which capabilities it has.
 
+A face that reports an inventory is not necessarily stock. GregTech item pipes
+answer `getInventorySize` with `1` (in-game 2026-11-14); their descriptor
+declares `transfer`, never `inventory`, so the stock reader skips them. The
+classification is the descriptor, not the slot count: real one-slot containers
+exist and guessing from the number would misclassify them.
+
 ## Descriptor shape
 
 Placeholders below; the real method names come from the probe (`driver.dump`),

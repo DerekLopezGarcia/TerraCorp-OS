@@ -65,10 +65,13 @@ discovery.
   the repo carries.
 - **Probe answers are arriving**: an Adapter face is a derived address (the same
   kind on the same face survives a re-place; a new kind or a new Adapter does
-  not), a Storage Drawer is not exposed at all, and a native OpenComputers
-  component keeps its own placement id. Recorded in
-  [`names.md`](names.md#adapter-faces-are-derived-not-minted) and
-  [`tests.md`](tests.md#results-log).
+  not), a Storage Drawer is not exposed by the Adapter at all, and a native
+  OpenComputers component keeps its own placement id. A Transposer does see
+  drawers and reports GregTech item pipes as one-slot inventories, which must be
+  classified as transport, not stock. Recorded in
+  [`names.md`](names.md#adapter-faces-are-derived-not-minted),
+  [`crafting.md`](crafting.md#the-sensing-requirement-the-load-bearing-dependency)
+  and [`tests.md`](tests.md#results-log).
 - **In-game verification of 0.3.x is still pending** — rack, Relay, waves, Vault
   and the external link were never exercised in a live world.
 
