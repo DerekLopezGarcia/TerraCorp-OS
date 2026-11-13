@@ -30,8 +30,11 @@ string is what makes plant configs unmaintainable.
 - `node-address` is the computer that can actually **see** the component: the one
   whose bus it hangs from. A rack server's internals are `Visibility.Neighbors`,
   so this can never be "some computer on the network" — it is the owner.
-- `component-address` is what `component.list()` reports, stable across reboots
-  and **different after a block is broken and re-placed**.
+- `component-address` is what `component.list()` reports, stable across reboots.
+  How long it survives a block edit depends on what exposes it: a **native
+  OpenComputers component** carries its own address, assigned when the block is
+  placed, so breaking and re-placing it always produces a new one; a block seen
+  **through an Adapter** follows the adapter's rule instead (next section).
 - `face` is which side of the block is being addressed. It matters because
   inventories are read and transposed **per side**, so the same block can behave
   as several endpoints. Kinds without sides (a filesystem, a CPU) carry `-`.
@@ -41,6 +44,35 @@ string is what makes plant configs unmaintainable.
 
 The registry also keeps a short **node alias** (`hall1-oc`) so logs and the
 combined view can print `hall1-oc/9f3c…:north` instead of two UUIDs.
+
+### Adapter faces are derived, not minted
+
+Verified by hand in-game on 2026-11-14 (0.3.22, `census()` between edits):
+
+| Edit | Address |
+|---|---|
+| Break and re-place the same crate on the same face | unchanged |
+| Change that face to another container kind | new |
+| Remove and re-place the Adapter | every face regenerates |
+| Put a Storage Drawer on a free face | no component at all |
+
+So an Adapter face behaves like `f(adapter instance, face, exposed kind)`, not
+like a placement token. Four consequences for the registry:
+
+- A block edit that keeps the kind and the face keeps routing: the stored
+  address is still the live one, so no path goes unbound.
+- A different kind on that face is a different component. The old config line
+  answers `wrong_kind`; the registry never adopts the replacement because they
+  share a face.
+- Replacing the Adapter invalidates every face it exposed at once, because the
+  derivation is keyed to the adapter's own address. They are dropped together
+  and the next sweep registers the new ones.
+- A kind the Adapter does not expose (a Storage Drawer) has no address at all:
+  silence is the expected answer, not a failed read.
+
+This was observed on one Adapter in one session; a second Adapter should confirm
+the same derivation before the registry treats a face address as surviving
+block edits by design rather than by luck.
 
 ## Semantic path
 
@@ -169,8 +201,10 @@ Verified facts used above (`component.list()` shape, address stability,
 4. Path wildcards against a real proxy: `**/…` and `hall1/*/…` return what a hand
    count says.
 5. Rename a path and confirm the saved line still points at the same address.
-6. Break and re-place a drawer: the old member goes `unbound`, the path keeps
-   resolving with the rest, nothing silently adopts the replacement.
+6. Re-place a block on an Adapter face, then a native OpenComputers component:
+   the face address stays the same for the same kind, the native id always
+   changes. **Verified in-game on 2026-11-14** for one Adapter; a second adapter
+   is still worth checking.
 
 ## Sequencing
 

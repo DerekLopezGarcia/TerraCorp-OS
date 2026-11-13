@@ -467,6 +467,19 @@ by most free space, and KB units in the space error. Still pending: second
 node, update waves with two nodes, Vault in-game, RAID block probe, and the
 clean 30-minute log.
 
+0.3.22 address volatility verified by hand in-game on 2026-11-14 (0.3.22,
+`census()` between edits, one Adapter on a crate):
+
+- Breaking and re-placing the same crate on the same face kept its address.
+- Changing that face to another container kind produced a new address.
+- Removing and re-placing the Adapter regenerated every face.
+- A Storage Drawer on a free face did not appear at all.
+- A native OpenComputers component is the other case: its address is its own
+  placement id, so breaking and re-placing it always changes it.
+
+See [`names.md`](names.md#adapter-faces-are-derived-not-minted) for what this
+means for `tc.addr` and the registry.
+
 Post-release work under development: an interrupted install could leave the
 EEPROM pointed at a half-written disk (the boot address is now set after a
 complete copy), re-preparing an already prepared floppy rewrote it (same
