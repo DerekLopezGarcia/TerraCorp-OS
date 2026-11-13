@@ -23,7 +23,7 @@ src/                  boot volume
   init.lua            entry point; finds the volume and loads the kernel
   boot/kernel.lua     VFS, module loader, services, event loop
   lib/tc/*.lua        core libraries, display, UI, updater
-  apps/*.lua          system, files, terminal, settings, notes, update, nodes, vault, gaia
+  apps/*.lua          system, files, terminal, settings, notes, update, nodes, vault, gaia, lab
 eeprom/init.lua       optional boot manager
 tools/install.lua     OpenOS installer
 tools/fetch.lua       OpenOS repository downloader
@@ -45,6 +45,8 @@ npm run test:icon-order
 npm run test:dashboard-tick
 npm run test:refresh-rate
 npm run test:drag-metric
+npm run test:lab
+npm run test:files-scroll
 npm run test:updater
 npm run test:updater-legacy
 npm run test:updater-rollback

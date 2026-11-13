@@ -517,6 +517,11 @@ local nodesScenario = rawget(_G, "SCENARIO") == "nodes"
 local savedIconOrder = rawget(_G, "SCENARIO") == "icon_order_saved"
 local savedIconSlot = rawget(_G, "SCENARIO") == "icon_slot_saved"
 local savedUpdateIcon = rawget(_G, "SCENARIO") == "icon_update"
+local labScenario = rawget(_G, "SCENARIO") == "lab"
+local labErrorScenario = rawget(_G, "SCENARIO") == "lab_error"
+local labEditorScenario = rawget(_G, "SCENARIO") == "lab_editor"
+local luaCommandScenario = rawget(_G, "SCENARIO") == "lua_command"
+local filesScrollScenario = rawget(_G, "SCENARIO") == "files_scroll"
 local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet
   or fakeUpdateRecover or fakeBootUpdate or fakeBootUpdateMaster
 local mockedReleaseVersion
@@ -583,6 +588,21 @@ if savedUpdateIcon then
   written["/etc/terracorp.cfg"] = 'return {\n'
     .. '  iconLayout = "dashboard@1,console@2,settings@3,notes@4,files@5,about@6",\n'
     .. '}\n'
+end
+if labScenario or labErrorScenario or labEditorScenario or luaCommandScenario then
+  -- The Lab loads this scratch file at open; Run executes it and appends the
+  -- output to /var/log/lab.log. `lua` in the Terminal runs the same file.
+  written["/var/lab/script.lua"] = labErrorScenario
+    and 'print("lab ok")\nerror("boom")\n'
+    or 'local total = 0\nfor index = 1, 4 do total = total + index end\nprint("lab ok", total)\n'
+end
+if filesScrollScenario then
+  -- A file taller than the preview pane proves scrolling reaches its end.
+  local body = {}
+  for index = 1, 160 do
+    body[#body + 1] = string.format("scroll line %03d", index)
+  end
+  written["/scroll.txt"] = table.concat(body, "\n") .. "\n"
 end
 local nodesFloppy = nodesScenario and newVolume(512 * 1024) or nil
 local modemPackets = 0
@@ -817,7 +837,7 @@ local function iconColumns()
   return math.max(1, fit)
 end
 
-local ICON_APPS = 8
+local ICON_APPS = 10
 
 local function iconRowsFor(tile)
   local desktopTop = 3
@@ -1060,6 +1080,45 @@ elseif scenario == "vault" then
   idle(1)
   typeText("r") -- refresh
   idle(1)
+elseif scenario == "lab" or scenario == "lab_error" then
+  -- F10 opens Lab with /var/lab/script.lua loaded. Type at the end of the
+  -- script, then click [ Run ]: it saves, executes, and switches to Output.
+  local wx, wy, winWidth = windowRect()
+  ev("key_down", "screen-1", nil, 0x44, "tester") -- F10 opens Lab
+  idle(1)
+  typeText(" -- probe")
+  idle(1)
+  ev("touch", "screen-1", wx + winWidth - 8, wy + 2, 0, "tester")
+  ev("drop", "screen-1", wx + winWidth - 8, wy + 2, 0, "tester")
+  idle(2)
+elseif scenario == "lab_editor" then
+  -- Typing lands in the Script tab; the seeded script and the new text must be
+  -- visible in the editor before any run.
+  ev("key_down", "screen-1", nil, 0x44, "tester") -- F10 opens Lab
+  idle(1)
+  typeText(" -- probe")
+  idle(2)
+elseif scenario == "lua_command" then
+  -- Terminal `lua` runs /var/lab/script.lua without opening the Lab app.
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Terminal
+  idle(1)
+  typeText("lua")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+elseif scenario == "files_scroll" then
+  -- Files previews /scroll.txt, then Tab hands the arrow keys to the preview so
+  -- PgDn reaches the last line of a file taller than the pane.
+  local wx, wy = windowRect()
+  ev("key_down", "screen-1", nil, 0x3C, "tester") -- F2 opens Files
+  idle(1)
+  ev("touch", "screen-1", wx + 3, wy + 10, 0, "tester") -- seventh row: scroll.txt
+  ev("drop", "screen-1", wx + 3, wy + 10, 0, "tester")
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x0F, "tester") -- Tab: focus the preview
+  for _ = 1, 10 do
+    ev("key_down", "screen-1", nil, 0xD1, "tester") -- PgDn
+  end
+  idle(2)
 elseif scenario == "boot_update" or scenario == "boot_update_master" then
   idle(2)
 elseif scenario == "updater" or scenario == "updater_legacy" or scenario == "updater_recover" then
@@ -1319,7 +1378,7 @@ if STRICT then
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
     if not preferences:find(
-      'iconOrder = "files,dashboard,console,settings,notes,update,nodes,vault,gaia"',
+      'iconOrder = "files,dashboard,console,settings,notes,update,nodes,vault,gaia,lab"',
       1,
       true
     ) then
@@ -1327,7 +1386,7 @@ if STRICT then
       print("FAIL: the desktop icon order was not saved")
     end
     if not preferences:find(
-      'iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,gaia@9"',
+      'iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,gaia@9,lab@10"',
       1,
       true
     ) then
@@ -1363,7 +1422,7 @@ if STRICT then
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
     if not preferences:find(
-      'iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,gaia@9,files@32"',
+      'iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,gaia@9,lab@10,files@32"',
       1,
       true
     ) then
@@ -1420,6 +1479,70 @@ if STRICT then
     if not screen:find("Enter read", 1, true) then
       errors = errors + 1
       print("FAIL: the Vault app did not show its action hints")
+    end
+  end
+  if scenario == "lab" or scenario == "lab_error" then
+    local journal = written["/var/log/lab.log"] or ""
+    if not journal:find("=== ", 1, true) then
+      errors = errors + 1
+      print("FAIL: Lab did not write a run header to /var/log/lab.log")
+    end
+    if not journal:find("lab ok", 1, true) then
+      errors = errors + 1
+      print("FAIL: Lab did not capture print output")
+    end
+    if not screen:find("lab ok", 1, true) then
+      errors = errors + 1
+      print("FAIL: Lab did not render the run output")
+    end
+    local script = readReal("/var/lab/script.lua") or ""
+    if not script:find("-- probe", 1, true) then
+      errors = errors + 1
+      print("FAIL: Lab did not save the edited script to /var/lab/script.lua")
+    end
+  end
+  if scenario == "lab" and not screen:find("run 1 · ok", 1, true) then
+    errors = errors + 1
+    print("FAIL: Lab did not report a successful run")
+  end
+  if scenario == "lab_error" then
+    if not (written["/var/log/lab.log"] or ""):find("boom", 1, true) then
+      errors = errors + 1
+      print("FAIL: Lab did not log the script error")
+    end
+    if not screen:find("run 1 · error", 1, true) then
+      errors = errors + 1
+      print("FAIL: Lab did not report the failed run")
+    end
+  end
+  if scenario == "files_scroll" then
+    if not screen:find("scroll.txt", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Files preview did not show the selected file")
+    end
+    if not screen:find("scroll line 160", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Files preview did not scroll to the end of the file")
+    end
+  end
+  if scenario == "lua_command" then
+    if not (written["/var/log/lab.log"] or ""):find("lab ok", 1, true) then
+      errors = errors + 1
+      print("FAIL: the lua command did not run the scratch script")
+    end
+    if not screen:find("lab ok  10", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Terminal did not show the script output")
+    end
+  end
+  if scenario == "lab_editor" then
+    if not screen:find("local total = 0", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Lab editor did not load the script")
+    end
+    if not screen:find("-- probe", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Lab editor did not render typed text")
     end
   end
   if (scenario == "updater" or scenario == "updater_legacy") then

@@ -11,7 +11,7 @@ local MODULE_ROOTS = {
   apps = "/apps/",
 }
 
-local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes", "vault", "gaia" }
+local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes", "vault", "gaia", "lab" }
 
 local function packCall(fn, ...)
   local result = table.pack(pcall(fn, ...))
@@ -526,6 +526,9 @@ function kernel.start(boot)
     gfxModule = gfxModule,
     vfs = vfs,
     vfsModule = vfsModule,
+    -- Apps and Lab scripts load core modules through the kernel's loader, so
+    -- they share the cached instances instead of re-reading the boot volume.
+    require = requireModule,
     mounts = {},
     volume = volume,
     volumeAddress = boot.address,

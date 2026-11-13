@@ -3,6 +3,7 @@ src/apps/console.lua
 src/apps/dashboard.lua
 src/apps/files.lua
 src/apps/gaia.lua
+src/apps/lab.lua
 src/apps/nodes.lua
 src/apps/notes.lua
 src/apps/settings.lua
@@ -18,6 +19,7 @@ src/lib/tc/config.lua
 src/lib/tc/gfx.lua
 src/lib/tc/jobs.lua
 src/lib/tc/keys.lua
+src/lib/tc/lab.lua
 src/lib/tc/link.lua
 src/lib/tc/log.lua
 src/lib/tc/net.lua

@@ -57,10 +57,10 @@ discovery.
 
 ## What exists today
 
-- **0.3.x is built and tagged** up to `v0.3.20`: `tc.net`, netboot provisioning,
-  node registry, Relay, waves, Vault, the desktop shell with nine apps, the GAIA
-  app and the external-link bridge.
-- **Harness green**: `npm run check` (46 files, manifest synced) plus the suites
+- **0.3.x is built and tagged** up to `v0.3.21`: `tc.net`, netboot provisioning,
+  node registry, Relay, waves, Vault, the desktop shell with ten apps, the GAIA
+  app and the external-link bridge, and the Lab Lua scratchpad.
+- **Harness green**: `npm run check` (48 files, manifest synced) plus the suites
   the repo carries.
 - **In-game verification of 0.3.x is still pending** — rack, Relay, waves, Vault
   and the external link were never exercised in a live world.

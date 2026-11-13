@@ -30,13 +30,14 @@ function vfs.new(volume)
 
   local self = { volume = volume }
 
-  function self.read(path)
+  -- Read a file in 4 KB chunks, handing each chunk to `sink`. Returns true, or
+  -- nil and the driver's reason.
+  local function stream(path, sink)
     local handle, reason = packCall(volume.open, path, "r")
     if not handle then
       return nil, reason
     end
 
-    local chunks = {}
     while true do
       local data, why = packCall(volume.read, handle, 4096)
       -- Stop on an empty string as well as nil to avoid a driver-induced loop.
@@ -45,13 +46,42 @@ function vfs.new(volume)
         if why then
           return nil, why
         end
-        break
+        return true
       end
-      chunks[#chunks + 1] = data
+      sink(data)
     end
+  end
 
-    packCall(volume.close, handle)
+  function self.read(path)
+    local chunks = {}
+    local ok, reason = stream(path, function(data)
+      chunks[#chunks + 1] = data
+    end)
+    if not ok then
+      return nil, reason
+    end
     return table.concat(chunks)
+  end
+
+  -- Read only the end of a file. The Lab log and the Files preview use this so
+  -- a long log can be read without holding the whole body in memory.
+  function self.readTail(path, limit)
+    limit = math.max(1, math.floor(tonumber(limit) or 4096))
+    local tail = ""
+    local ok, reason = stream(path, function(data)
+      tail = tail .. data
+      -- Keep the buffer bounded: trim back to one window when it doubles.
+      if #tail > limit * 2 then
+        tail = tail:sub(-limit)
+      end
+    end)
+    if not ok then
+      return nil, reason
+    end
+    if #tail > limit then
+      tail = tail:sub(-limit)
+    end
+    return tail
   end
 
   local function writeMode(path, data, mode)

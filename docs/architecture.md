@@ -92,10 +92,11 @@ The desktop is drawn under the windows. It contains a responsive full-screen ico
 grid and a one-row taskbar; windows are drawn over the grid.
 
 - Every app declares a 3-cell `icon` code (`SYS`, `FIL`, `TRM`, `SET`, `NTS`,
-  `UPD`, `NOD`) and a 9x5 `iconArt` pictogram. The desktop tile is 9 cells wide
-  and 5 rows tall, with the `short` label on the row below. `npm run check`
-  rejects an app without a registered ID, a 3-cell code, a label, or five 9-cell
-  art rows, so an app cannot ship without a visible desktop icon.
+  `UPD`, `NOD`, `VLT`, `GAI`, `LAB`) and a 9x5 `iconArt` pictogram. The desktop
+  tile is 9 cells wide and 5 rows tall, with the `short` label on the row below.
+  `npm run check` rejects an app without a registered ID, a 3-cell code, a
+  label, or five 9-cell art rows, so an app cannot ship without a visible
+  desktop icon.
 - The grid covers every column that fits the screen width and every row that
   fits above the taskbar. All cells are drop slots, including empty ones. Tiles
   use no vertical gap so three rows fit on a 40x16 Tier 1 screen.
@@ -115,7 +116,7 @@ grid and a one-row taskbar; windows are drawn over the grid.
   background (System uses this). The art is drawn in the inverse color, so the
   tile is highlighted without an inset box.
 - Tile height shrinks from five rows to three, two, or one when the screen
-  cannot fit every app. The UI chooses the largest height that fits all nine
+  cannot fit every app. The UI chooses the largest height that fits all ten
   apps, then draws the app's 3-cell `icon` code instead of the 9x5 art so nothing
   is clipped; the label stays on the row below.
 - An open window is indicated by the accent-colored icon label; the tile itself
@@ -199,6 +200,8 @@ return app
 The context includes `ui`, `kernel`, `theme`, `colors`, `glyphs`, `log`,
 `config`, `version`, `util`, `text`, `win`, geometry, and `view`. Do not cache
 `ctx.view` between calls. Register an app ID in `APP_IDS` in the kernel.
+`kernel.require(id)` returns the kernel's cached module instance, so an app can
+load a core module (`tc.lab`) without reading it from the boot volume again.
 
 `title` is the window title and taskbar label. `short` is the desktop icon
 label. `iconArt` is the 9x5 desktop pictogram: five strings of exactly nine
@@ -207,6 +210,26 @@ when the tile must shrink below five rows; keep it as the compact fallback.
 `order` sets the F1-F10 shortcut and the initial grid position. Saved
 `iconLayout` positions override the initial grid position but never the
 shortcut. `iconStyle = "accent"` draws the tile with the accent background.
+
+## Lab and script execution
+
+The Lab app (`/apps/lab.lua`) edits `/var/lab/script.lua` and runs it against
+the live OS. `tc.lab` compiles the buffer with `load(source, "=/var/lab/script.lua",
+"t", env)` in a fresh environment per run: the standard libraries, `print`
+(captured), `kernel`, `vfs`, `component`, `computer`, `log`, `config`, `text`,
+`util`, `theme`, `version`, `ui`, and `kernel.require`. It is a test tool, not a
+sandbox boundary: a script can reach anything the desktop can.
+
+Every run is appended to `/var/log/lab.log` (rotated at 64 KB, newest half
+kept), with a `=== time · path · ok|error · ms` header, the captured lines, and
+an `!` error line. The Output tab shows the same record, seeded from the log at
+open, and the Terminal command `lua [file]` runs a script by path. Ctrl+R runs,
+Ctrl+S saves, and Ctrl+L empties the log. Files previews the log like any other
+text file.
+
+Scripts run on the desktop event loop. There is no preemption and no
+instruction budget, so a runaway loop blocks the node until it reboots; keep
+test scripts bounded.
 
 ## Cluster
 

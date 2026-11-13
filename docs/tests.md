@@ -26,6 +26,8 @@ npm run test:updater-rollback
 npm run test:updater-recover
 npm run test:boot-update
 npm run test:notes
+npm run test:lab
+npm run test:files-scroll
 npm run test:nodes
 npm run test:cluster
 npm run test:faults
@@ -34,6 +36,27 @@ npm run test:screens
 
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
+
+## 0.3.21 Lab and Files scrolling checks
+
+`npm run test:lab` opens Lab with a seeded `/var/lab/script.lua` at 160x50,
+types `-- probe` into the editor, clicks `[ Run ]`, and requires:
+
+1. `/var/lab/script.lua` contains the typed comment, so the editor saved the
+   buffer before running it.
+2. `/var/log/lab.log` has a `=== ` run header and the script's `print` output.
+3. The Output tab renders that output and the footer reports `run 1 · ok`.
+
+The second scenario, `lab_error`, seeds a script that prints `lab ok` and then
+calls `error("boom")`; the run must log `! line 2: boom` and report
+`run 1 · error`. `lab_editor` checks that the Script tab loads the file and
+renders typed text with line numbers. The fourth, `lua_command`, types `lua` in
+the Terminal and requires the same script to run and print through
+`/var/log/lab.log`.
+
+`npm run test:files-scroll` opens Files over a 160-line `/scroll.txt`, tabs
+focus into the preview, pages down, and requires `scroll line 160` on screen. A
+preview that only draws its first page cannot pass.
 
 ## 0.3.0 rack and netboot checks
 
@@ -319,7 +342,7 @@ Manual in-game checks add what the harness cannot prove:
 2. Reboot and time startup until the desktop appears.
 3. Read `/var/log/tc.log` from TerraCorp's boot volume. Record the `gpu` line's
    resolution/free-memory values and the uptime on `First render OK`.
-4. Run a 30-minute session. Open all nine apps by icon and by F1-F9; verify the
+4. Run a 30-minute session. Open all ten apps by icon and by F1-F10; verify the
    desktop selection, Enter-to-open, and taskbar chips. Drag two icons to swap
    their cells, restart, and confirm the order remains. In System, verify uptime
    advances once per second and readings refresh every two seconds. In Update,

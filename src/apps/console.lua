@@ -34,7 +34,9 @@ function console.create(ctx)
 end
 
 function console:push(text, kind)
-  self.lines[#self.lines + 1] = { text = text, kind = kind or "out" }
+  -- Tabs would occupy one cell each; expand them so printed tables (Lua's
+  -- print separates arguments with a tab) and cat output stay aligned.
+  self.lines[#self.lines + 1] = { text = tostring(text):gsub("\t", "  "), kind = kind or "out" }
   if #self.lines > 400 then
     table.remove(self.lines, 1)
   end
@@ -133,6 +135,7 @@ function console:command(ctx, line)
       "cd <path>      change directory",
       "pwd            print working directory",
       "cat <file>     print file contents",
+      "lua [file]     run a Lua script (default /var/lab/script.lua)",
       "echo <text>    print text",
       "clear          clear the terminal",
       "uptime         show session uptime",
@@ -223,6 +226,32 @@ function console:command(ctx, line)
       end
       self:push(textLine)
     end
+    return
+  end
+
+  if name == "lua" then
+    local path = rest ~= "" and self:resolve(ctx, rest) or "/var/lab/script.lua"
+    local source, reason = vfs.read(path)
+    if not source then
+      self:push("lua: " .. tostring(reason), "err")
+      return
+    end
+    if not kernel.require then
+      self:push("lua: the module loader is unavailable", "err")
+      return
+    end
+
+    self:push("lua " .. path, "accent")
+    local runner = kernel.require("tc.lab").new(kernel)
+    local result = runner:execute(source, path)
+    for _, line in ipairs(result.lines) do
+      self:push(line, line:sub(1, 1) == "!" and "err" or "out")
+    end
+    self:push(string.format(
+      "%s · %d ms · /var/log/lab.log",
+      result.ok and "ok" or "error",
+      math.floor(result.duration)
+    ), result.ok and "dim" or "err")
     return
   end
 

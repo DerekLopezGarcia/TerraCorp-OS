@@ -13,7 +13,7 @@ presented as fact.
 | Field | Value | Source |
 |---|---|---|
 | Product | TerraCorp OS | `src/lib/tc/version.lua` |
-| Version | 0.3.20 "Stash", API 1 | `src/lib/tc/version.lua` |
+| Version | 0.3.21 "Bench", API 1 | `src/lib/tc/version.lua` |
 | Vendor string | TerraCorp Industrial Systems | `src/lib/tc/version.lua` |
 | License | MIT | `LICENSE` |
 | Host | OpenComputers, Minecraft 1.12.2 + Forge, Supersymmetry pack | `README.md` |
@@ -75,10 +75,10 @@ Module resolution is fixed: `tc.*` maps to `/lib/tc/*.lua` and `apps.*` to
 
 ### Apps
 
-Nine app ids are registered: `dashboard`, `files`, `console`, `settings`,
-`notes`, `update`, `nodes`, `vault`, `gaia`. (`src/boot/kernel.lua`)
+Ten app ids are registered: `dashboard`, `files`, `console`, `settings`,
+`notes`, `update`, `nodes`, `vault`, `gaia`, `lab`. (`src/boot/kernel.lua`)
 
-`README.md` and `AGENTS.md` list the same nine ids.
+`README.md` and `AGENTS.md` list the same ten ids.
 
 Every app must expose a desktop icon: a registered id, a 3-cell `icon` code, a
 `short` label and a 9x5 `iconArt` pictogram. `npm run check` fails otherwise.
@@ -92,6 +92,8 @@ All state lives on the boot volume. Nothing is stored outside it.
 |---|---|---|
 | `/etc/terracorp.cfg` | Settings, theme, icon layout | `src/lib/tc/config.lua` |
 | `/var/log/tc.log` | System log; truncated when it grows too large | `src/boot/kernel.lua` |
+| `/var/log/lab.log` | Lab run log, including printed output and errors | `src/lib/tc/lab.lua` |
+| `/var/lab/script.lua` | Lab scratch script | `src/apps/lab.lua` |
 | `/var/notes.txt` | Notes scratchpad | `src/apps/notes.lua` |
 | `/var/nodes.tsv` | Node registry | `src/lib/tc/registry.lua` |
 | `/var/jobs.tsv` | Job journal | `src/lib/tc/jobs.lua` |

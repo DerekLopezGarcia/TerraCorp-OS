@@ -4,8 +4,8 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.3.20 Stash**. The prototype boots into a desktop shell with
-nine apps, persists settings, notes, and the desktop icon layout, and logs
+Current version: **0.3.21 Bench**. The prototype boots into a desktop shell with
+ten apps, persists settings, notes, and the desktop icon layout, and logs
 errors. The Nodes app provisions rack servers over a wired network and keeps a
 node registry. Local simulations cover the OpenComputers API contract; in-game
 testing is tracked in [`docs/tests.md`](docs/tests.md).
@@ -16,10 +16,14 @@ testing is tracked in [`docs/tests.md`](docs/tests.md).
   movable/minimizable windows.
 - **System:** node, memory, power, devices, storage, and system log. Its desktop
   monitor icon uses an accent-filled tile to stand out from the other apps.
-- **Files:** browse the boot volume, view sizes, and preview text files.
-- **Terminal:** built-in shell (`ls`, `cd`, `cat`, `log`, `open`, `theme`, etc.).
+- **Files:** browse the boot volume, view sizes, and preview text files with a
+  scrollable pager.
+- **Terminal:** built-in shell (`ls`, `cd`, `cat`, `lua`, `log`, `open`,
+  `theme`, etc.).
 - **Settings:** accent color, character set, clock format, boot splash, and log level.
 - **Notes:** a persistent multi-line scratchpad stored at `/var/notes.txt`.
+- **Lab:** write and run Lua against the live OS; output and errors are kept at
+  `/var/log/lab.log`.
 - **Update:** version details, a SYSTEM section (memory, storage, screen,
   devices, boot volume, address), and a GitHub Releases updater.
 - **Nodes:** discover rack servers on a wired network, prepare a floppy
@@ -132,7 +136,7 @@ wiring, provisioning procedure, protocol, and failure modes.
   smoothly, like a dragged window. The new layout is saved on release and
   restored after a reboot or update. With no window focused, the arrow keys move
   the selection, Home/End jump to the ends, and Enter opens the selected app.
-  F1-F9 open the nine apps directly; Esc minimizes the focused window.
+  F1-F10 open the ten apps directly; Esc minimizes the focused window.
 - **Taskbar:** click a window chip to focus it; clicking the focused chip
   minimizes it.
 - **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.
@@ -165,7 +169,7 @@ src/                  boot-volume contents
   boot/kernel.lua     filesystem, services, module loader, event loop
   boot/netboot.lua    floppy netboot installer
   lib/tc/             core libraries, graphics, UI, updater, and cluster
-  apps/               system, files, terminal, settings, notes, update, nodes, vault, gaia
+  apps/               system, files, terminal, settings, notes, update, nodes, vault, gaia, lab
 eeprom/init.lua       optional boot manager (not required for normal installs)
 tools/                OpenOS installer, downloader, and manifest
 tools/harness/        local Node.js simulation and tests
