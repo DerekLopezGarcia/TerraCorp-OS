@@ -53,6 +53,8 @@ jobs:
           npm run test:updater-recover
           npm run test:boot-update
           npm run test:notes
+          npm run test:lab
+          npm run test:files-scroll
           npm run test:install
           npm run test:fetch
           npm run test:link
