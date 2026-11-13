@@ -238,8 +238,12 @@ scratchpad and a notebook, and the two do not mix — a script run stays fresh o
 purpose, or a script could start working because of state left by an earlier
 session.
 
-- Enter evaluates. A line that leaves a block open (`for`, `if`, `function`)
-  switches the prompt to `... ` and keeps accumulating until the block closes.
+- Enter evaluates the whole input cell. When the cell leaves a block open
+  (`for`, `if`, `function`), the cell keeps its text, adds a new line and the
+  prompt switches to `...  `, so the block being written stays on screen.
+- History stores whole cells: a two-line block is one entry, and Up recalls it
+  as a block. While a recalled entry is unedited, Up and Down move between
+  entries; as soon as the operator types, they move inside the cell again.
 - Like the OpenOS interpreter, a line is tried as `return <line>` first and as a
   statement second, so `component.list()` prints its table while `a = 1` still
   assigns. `=expr` skips the statement fallback and is the explicit form; the

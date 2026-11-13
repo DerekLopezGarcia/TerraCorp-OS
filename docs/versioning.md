@@ -52,13 +52,13 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.3.27 Grab, published as v0.3.27 on 2026-11-14. That is
+The current build is 0.3.28 Flow, published as v0.3.28 on 2026-11-14. That is
 also the latest stable release, so an up-to-date installation has nothing to
-fetch. Versions through 0.3.26 update to it in-game as usual: no manifest or
-paths changed shape, and no files were added. 0.3.27 lets the mouse press and
-drag a selection in the Lab panes and in the script editor; `Ctrl+C` copies it
-to the OS clipboard and `Ctrl+V` pastes it into the input, alongside the
-existing `Shift+arrows` selection.
+fetch. Versions through 0.3.27 update to it in-game as usual: no manifest or
+paths changed shape, and no files were added. 0.3.28 keeps an open block in the
+interpreter cell when Enter is pressed, so the lines already written stay on
+screen, and treats a multi-line cell as one history entry when browsing with
+Up/Down.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

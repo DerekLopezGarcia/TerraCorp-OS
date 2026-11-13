@@ -497,6 +497,7 @@ function lab:cellBackspace(ctx)
     table.remove(self.replCell, self.replRow)
     self.replRow = self.replRow - 1
   end
+  self.replHistoryIndex = nil
 end
 
 function lab:cellDelete(ctx)
@@ -508,6 +509,7 @@ function lab:cellDelete(ctx)
     self.replCell[self.replRow] = line .. self.replCell[self.replRow + 1]
     table.remove(self.replCell, self.replRow + 1)
   end
+  self.replHistoryIndex = nil
 end
 
 -- Pasted text keeps its own line breaks: it already carries the layout the
@@ -555,19 +557,23 @@ end
 
 function lab:submitRepl(ctx)
   local source = self:cellSource()
+  local result = self:activeSession():submit(source)
+  if not result then
+    self:cellReset()
+    return
+  end
+  if result.incomplete then
+    -- Keep the block visible in the cell and continue it on a new line. The
+    -- source stays whole, so the next Enter compiles all of it again.
+    self:cellNewline(ctx)
+    self.replStatus = "block open · Enter closes it · Shift+Enter newline"
+    return
+  end
+
   self:cellReset()
   self:clearSelection()
   self.replHistoryIndex = nil
   self.replDraft = ""
-
-  local result = self:activeSession():submit(source)
-  if not result then
-    return
-  end
-  if result.incomplete then
-    self.replStatus = "block open: keep typing, Enter closes it"
-    return
-  end
 
   -- The command may have moved the cursor to another session.
   local session = self:activeSession()
@@ -638,14 +644,19 @@ function lab:handleRepl(ctx, char, code, shifted, ctrlHeld)
   elseif code == 0xCF then
     self.replCol = ctx.text.width(self.replCell[self.replRow])
   elseif code == 0xC8 then
-    if self.replRow > 1 then
+    if self.replHistoryIndex ~= nil then
+      -- Browsing history recalls a whole entry, not the lines of one.
+      self:recallRepl(ctx, 1)
+    elseif self.replRow > 1 then
       self.replRow = self.replRow - 1
       self.replCol = math.min(self.replCol, ctx.text.width(self.replCell[self.replRow]))
     else
       self:recallRepl(ctx, 1)
     end
   elseif code == 0xD0 then
-    if self.replRow < #self.replCell then
+    if self.replHistoryIndex ~= nil then
+      self:recallRepl(ctx, -1)
+    elseif self.replRow < #self.replCell then
       self.replRow = self.replRow + 1
       self.replCol = math.min(self.replCol, ctx.text.width(self.replCell[self.replRow]))
     else

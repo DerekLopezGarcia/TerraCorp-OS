@@ -1,6 +1,6 @@
 {
   "name": "terracorp-os",
-  "version": "0.3.27",
+  "version": "0.3.28",
   "private": true,
   "description": "TerraCorp OS: industrial desktop operating system for OpenComputers in the Supersymmetry modpack",
   "license": "MIT",
@@ -24,7 +24,7 @@
     "sim:files-scroll": "node tools/harness/simulate.js files_scroll",
     "test:notes": "node tools/harness/simulate.js notes --strict",
     "test:nodes": "node tools/harness/simulate.js nodes --strict",
-    "test:lab": "node tools/harness/simulate.js lab --strict && node tools/harness/simulate.js lab_error --strict && node tools/harness/simulate.js lab_editor --strict && node tools/harness/simulate.js lua_command --strict && node tools/harness/simulate.js lab_repl --strict && node tools/harness/simulate.js lab_mouse_select --strict && node tools/harness/simulate.js lab_wrap --strict && node tools/harness/simulate.js console_paste --strict",
+    "test:lab": "node tools/harness/simulate.js lab --strict && node tools/harness/simulate.js lab_error --strict && node tools/harness/simulate.js lab_editor --strict && node tools/harness/simulate.js lua_command --strict && node tools/harness/simulate.js lab_repl --strict && node tools/harness/simulate.js lab_continue --strict && node tools/harness/simulate.js lab_history --strict && node tools/harness/simulate.js lab_mouse_select --strict && node tools/harness/simulate.js lab_wrap --strict && node tools/harness/simulate.js console_paste --strict",
     "test:files-scroll": "node tools/harness/simulate.js files_scroll --strict",
     "test:cluster": "node tools/harness/test-cluster.js",
     "test:desktop": "node tools/harness/simulate.js desktop --strict",

@@ -1215,6 +1215,41 @@ elseif scenario == "lab_repl" then
   ev("key_down", "screen-1", nil, 0x2F, "tester") -- V
   ev("key_up", "screen-1", nil, 0x1D, "tester")
   idle(2)
+elseif scenario == "lab_continue" then
+  -- Enter on an open block keeps the text in the cell and starts a new line,
+  -- instead of clearing it and leaving the block invisible.
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Terminal
+  idle(1)
+  typeText("lua")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  typeText("function snake()")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText("return 1")
+  idle(2)
+elseif scenario == "lab_history" then
+  -- A pasted or typed multi-line entry is one history item: Up recalls the
+  -- whole block, and the next Up goes to the entry before it.
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Terminal
+  idle(1)
+  typeText("lua")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  typeText("x = 1")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText("y = 2")
+  ev("key_down", "screen-1", nil, 0x2A, "tester") -- Shift
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  ev("key_up", "screen-1", nil, 0x2A, "tester")
+  typeText("z = 3")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  ev("key_down", "screen-1", nil, 0xC8, "tester") -- Up: recall the two-line entry
+  idle(1)
+  ev("key_down", "screen-1", nil, 0xC8, "tester") -- Up: previous entry
+  idle(2)
 elseif scenario == "lab_mouse_select" then
   -- Drag over the three script lines with the mouse, copy, switch to the Lua
   -- tab and run the pasted code: select code without touching Shift.
@@ -1780,6 +1815,22 @@ if STRICT then
     if not screen:find("lua> ", 1, true) then
       errors = errors + 1
       print("FAIL: the interpreter did not show its prompt")
+    end
+  end
+  if scenario == "lab_continue" then
+    if not screen:find("...  function snake()", 1, true) then
+      errors = errors + 1
+      print("FAIL: Enter on an open block did not keep the first line visible")
+    end
+    if not screen:find(".. return 1", 1, true) then
+      errors = errors + 1
+      print("FAIL: the block did not continue on a new line")
+    end
+  end
+  if scenario == "lab_history" then
+    if not screen:find("lua> x = 1", 1, true) then
+      errors = errors + 1
+      print("FAIL: the second Up did not recall the entry before the block")
     end
   end
   if scenario == "lab_mouse_select" then

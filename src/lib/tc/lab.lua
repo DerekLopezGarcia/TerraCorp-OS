@@ -494,8 +494,19 @@ function repl:reset()
 end
 
 --- Prompt for the next line; a `... ` prompt means a block is still open.
+-- Both prompts are five cells so the input text starts at the same column on
+-- the first line and on the continuation rows.
 function repl:prompt()
-  return #self.pending > 0 and "... " or "lua> "
+  return #self.pending > 0 and "...  " or "lua> "
+end
+
+--- Split a cell into lines, for the continuation prompt and its status.
+function repl:sourceLines(source)
+  local lines = {}
+  for line in (source .. "\n"):gmatch("(.-)\n") do
+    lines[#lines + 1] = line
+  end
+  return lines
 end
 
 --- Drop the transcript of the pane. The environment is untouched.
@@ -602,9 +613,11 @@ function repl:command(source)
   return result
 end
 
---- Evaluate `input`, continuing the block in flight when there is one.
--- Returns nil for a blank line outside a block, `{ incomplete = true }` while a
--- block is unfinished, or a run record shaped like `lab:execute`.
+--- Evaluate the input cell's whole source.
+-- The app keeps the text on screen, so a block typed across several lines is
+-- compiled as one chunk every time. Returns nil for an empty cell, `{ incomplete
+-- = true }` while a block is still open, or a run record shaped like
+-- `lab:execute`.
 function repl:submit(input)
   input = input or ""
   if #self.pending == 0 and input:match("^%s*$") then
@@ -615,8 +628,7 @@ function repl:submit(input)
     return self:command(input)
   end
 
-  self.pending[#self.pending + 1] = input
-  local source = table.concat(self.pending, "\n")
+  local source = input
   local started = uptime()
 
   -- OpenOS's interpreter tries the line as an expression first and falls back
@@ -632,6 +644,7 @@ function repl:submit(input)
     chunk, compileError = load("return " .. body, "=" .. REPL_PATH, "t", self.env)
     expression = chunk ~= nil
     if not chunk and tostring(compileError):find("<eof>", 1, true) then
+      self.pending = self:sourceLines(source)
       return { incomplete = true }
     end
   else
@@ -644,6 +657,7 @@ function repl:submit(input)
       if not asStatement
         and (tostring(statementError):find("<eof>", 1, true)
           or tostring(expressionError):find("<eof>", 1, true)) then
+        self.pending = self:sourceLines(source)
         return { incomplete = true }
       end
     end

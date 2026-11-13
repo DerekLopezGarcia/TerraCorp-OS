@@ -78,6 +78,14 @@ with `Ctrl+C`, switches to the Lua tab, pastes with `Ctrl+V` and runs the cell.
 The log must contain the dragged `for` line and the `lab ok  10` output, so the
 mouse selection, the clipboard and the paste path are all covered.
 
+`lab_continue` types `function snake()`, presses Enter and types `return 1`.
+The screen must show `...  function snake()` over `  .. return 1`: an open
+block keeps its text in the cell and continues on a new line.
+
+`lab_history` submits `x = 1`, then a two-line `y = 2` / `z = 3` entry. Two Ups
+must land on `lua> x = 1`: the first recalls the block as one entry, the second
+moves to the entry before it.
+
 The same scenario covers the later fixes: `Shift+Enter` keeps two lines in one
 record, a held `Shift` keeps adding lines across two Enters (the modifier is
 only released by `key_up`), an open `= 300 +` waits for the next line instead
