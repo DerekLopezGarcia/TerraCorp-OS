@@ -141,7 +141,9 @@ The UI keeps a z-ordered window list, focus, drag state, and the icon selection.
 | `touch` | Desktop icon, taskbar chip, window controls/title bar, or focused app. An icon press is remembered until `drop`. |
 | `drag` / `drop` | Move a window, drag the pressed icon across the full-screen grid, or forward to an app. A drop without movement opens the pressed icon; a drop that moves or swaps icons saves the layout. |
 | `scroll` | Forward to app under pointer |
-| `key_down` | Global Esc/F1-F9; arrows/Home/End/Enter when no window is focused; otherwise the focused app |
+| `key_down` | Global Esc/F1-F10; arrows/Home/End/Enter when no window is focused; otherwise the focused app |
+| `key_up` | Forwarded to the focused app so it can drop a modifier it was tracking |
+| `clipboard` | The Minecraft clipboard, forwarded to the focused app as `paste`; apps decide what to do with it |
 | `screen_resized` | Rebind GPU and resize UI |
 | `interrupted` | Ignored so Ctrl+Alt+C does not terminate the OS |
 
@@ -256,6 +258,28 @@ session.
 - Every submission is appended to the same log with a `=== time · repl@name ·
   ok|error · ms` header, the submitted lines with a `>` prefix, and the
   captured output.
+- A cell can hold several lines: `Shift+Enter` (or `Ctrl+Enter`) splits the line
+  at the caret and keeps the indentation, and plain `Enter` runs the whole cell
+  as one chunk.
+- The Lab's `component` is the base API plus OpenOS's `component.gpu` sugar: a
+  real method always wins, anything else is resolved as a component kind to the
+  primary proxy and cached until the next run. `component.primary(kind)` is the
+  explicit form and `component.refresh()` drops that cache.
+
+### Clipboard
+
+`clipboard(keyboard, value, player)` is queued by OpenComputers when the player
+presses Insert or the middle mouse button (see `docs/opencomputers.md`). The
+desktop forwards it to the focused app as `paste`:
+
+- The Lab inserts it at the caret, keeping the line breaks: it is how a script
+  gets into the game without typing it. The Terminal flattens newlines into
+  spaces so a pasted command can be read back before Enter.
+- The other direction only exists inside the OS. `Shift+arrows` walk a selection
+  over the Lab pane text, `Ctrl+C` copies it to a clipboard held on `tc.lab`,
+  and `Ctrl+V` pastes that into the input. OpenComputers never reads text back
+  from a computer, so there is no way to put something on the Minecraft
+  clipboard; getting text out of the game needs a transport, not a key.
 
 The Terminal command `lua` opens that tab; `lua <file>` runs a script by path
 without opening the app. Bare `lua` used to run `/var/lab/script.lua`, which is

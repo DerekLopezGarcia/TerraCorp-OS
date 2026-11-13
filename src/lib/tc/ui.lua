@@ -1286,6 +1286,22 @@ function ui:onTaskbarClick(x)
   end
 end
 
+function ui:onKeyUp(char, code)
+  -- Releasing a modifier matters: the apps track Ctrl and Shift themselves,
+  -- and a key that was let go must not stay "held" for the next one.
+  self:forward(self.focus, "key_up", char, code)
+end
+
+function ui:onPaste(text)
+  -- OpenComputers queues `clipboard(keyboard, value, player)` when the player
+  -- presses Insert or the middle mouse button. The focused app decides what to
+  -- do with the text; the desktop only routes it.
+  if type(text) ~= "string" or text == "" then
+    return
+  end
+  self:forward(self.focus, "paste", text)
+end
+
 function ui:onKey(char, code)
   -- OpenComputers supplies `char` as a numeric code point (zero when the key
   -- has no text). Apps receive UTF-8 strings instead of the raw event value.
@@ -1363,6 +1379,10 @@ function ui:dispatch(name, a, b, c, d, e)
     self:onScroll(b, c, d)
   elseif name == "key_down" then
     self:onKey(b, c)
+  elseif name == "key_up" then
+    self:onKeyUp(b, c)
+  elseif name == "clipboard" then
+    self:onPaste(b)
   elseif name == "screen_resized" then
     -- Call the kernel method with `:` so `self` is the kernel instance.
     self.kernel:rebindScreen()

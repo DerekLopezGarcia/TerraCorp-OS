@@ -64,6 +64,16 @@ empty (`type(count)` is `nil`), switching back restored `count` (`count + 1` is
 `7`), `:list` marked the active session, every record reached
 `/var/log/lab.log` under its session name, and the prompt came back.
 
+The same scenario covers the later fixes: `Shift+Enter` keeps two lines in one
+record, an open `= 300 +` waits for the next line instead of failing on the
+leading `=` (and must never report `unexpected symbol near '='`), a `clipboard`
+signal pastes text into the cell, `component.gpu` resolves to the primary
+component, and `Shift+Home` + `Ctrl+C` + `Ctrl+V` round-trips a selected line
+back into the input (`lua> > z = 12` on screen).
+
+`console_paste` opens the Terminal, sends a `clipboard` signal with
+`echo pegado`, and requires the line to appear in the input and to run on Enter.
+
 `npm run test:files-scroll` opens Files over a 160-line `/scroll.txt`, tabs
 focus into the preview, pages down, and requires `scroll line 160` on screen. A
 preview that only draws its first page cannot pass.

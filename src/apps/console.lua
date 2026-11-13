@@ -558,6 +558,14 @@ function console:handle(ctx, name, a, b, c)
     return true
   end
 
+  if name == "paste" then
+    -- A pasted block becomes one editable line: newlines would run it before
+    -- the operator could read it back.
+    local text = tostring(a or ""):gsub("\r\n", " "):gsub("[\r\n]+", " "):gsub("\t", "  ")
+    self.input = self.input .. text
+    return true
+  end
+
   if name ~= "key" then
     return false
   end

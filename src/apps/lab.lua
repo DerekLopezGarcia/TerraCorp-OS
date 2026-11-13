@@ -34,9 +34,13 @@ local AUTOSAVE_EDITS = 10
 
 local KEY_CTRL_LEFT = 0x1D
 local KEY_CTRL_RIGHT = 0x9D
+local KEY_SHIFT_LEFT = 0x2A
+local KEY_SHIFT_RIGHT = 0x36
 local KEY_L = 0x26
 local KEY_R = 0x13
 local KEY_S = 0x1F
+local KEY_C = 0x2E
+local KEY_V = 0x2F
 
 local STARTER = table.concat({
   "-- Lab: this script runs inside TerraCorp OS. print() is captured.",
@@ -69,12 +73,16 @@ function lab.create(ctx)
   self.runner = ctx.kernel.require("tc.lab").new(ctx.kernel)
   self.session = self.runner:repl()
   self.sessionName = self.session.name
-  self.replInput = ""
-  self.replCaret = 0
+  self.replCell = { "" }
+  self.replRow = 1
+  self.replCol = 0
+  self.replCellTop = 1
   self.replScroll = 0
   self.replHistoryIndex = nil
   self.replDraft = ""
   self.replStatus = nil
+  self.selAnchor = nil
+  self.selCursor = nil
   self:adoptRequestedTab(ctx)
 
   local vfs = ctx.kernel.vfs
@@ -139,20 +147,26 @@ function lab:adoptRequestedTab(ctx)
   end
 end
 
+-- The input cell grows with the text: Shift+Enter adds a line, so a table or a
+-- function can be written the way it would be in a file. Enter runs the cell.
+function lab:replCellRows(ctx)
+  local limit = math.max(1, ctx.h - 4)
+  return math.max(1, math.min(#self.replCell, limit))
+end
+
 function lab:replRows(ctx)
-  -- Rows 3..h-2 hold the transcript; the input takes h-1 and the footer h.
-  return math.max(1, ctx.h - 4)
+  -- Rows 3..h-2 belong to the pane; the input cell sits above the footer.
+  return math.max(1, ctx.h - 3 - self:replCellRows(ctx))
 end
 
 -- `:new`, `:use` and `:drop` move the active session from inside the pane, so
--- every read goes through here and a switch resets the input and the scroll.
+-- every read goes through here and a switch resets the cell and the scroll.
 function lab:activeSession()
   local session = self.runner:repl()
   if session.name ~= self.sessionName then
     self.sessionName = session.name
     self.session = session
-    self.replInput = ""
-    self.replCaret = 0
+    self:cellReset()
     self.replScroll = 0
     self.replHistoryIndex = nil
     self.replDraft = ""
@@ -167,13 +181,279 @@ function lab:scrollRepl(ctx, amount)
   self.replScroll = ctx.util.clamp((self.replScroll or 0) + amount, 0, maximum)
 end
 
+--------------------------------------------------------------------------------
+-- Selection
+--
+-- Shift+arrows walk a cursor over the pane text and Ctrl+C copies that span to
+-- the OS clipboard, which Ctrl+V pastes into the input. OpenComputers has no
+-- clipboard API to write to, so this stays inside TerraCorp: getting text out
+-- of the game is a different problem (the mod only sends clipboard text in).
+--------------------------------------------------------------------------------
+
+-- The pane text that can be selected, by tab.
+function lab:transcriptFor(tab)
+  if tab == "output" then
+    return self.output
+  elseif tab == "repl" then
+    return self:activeSession().transcript
+  end
+  return nil
+end
+
+function lab:clearSelection()
+  self.selAnchor = nil
+  self.selCursor = nil
+end
+
+function lab:selectionActive()
+  return self.selAnchor ~= nil and self.selCursor ~= nil
+end
+
+function lab:orderedSelection()
+  local anchor, cursor = self.selAnchor, self.selCursor
+  if anchor.line < cursor.line or (anchor.line == cursor.line and anchor.col <= cursor.col) then
+    return anchor, cursor
+  end
+  return cursor, anchor
+end
+
+function lab:moveSelection(ctx, code)
+  local lines = self:transcriptFor(self.tab)
+  if not lines or #lines == 0 then
+    return false
+  end
+
+  if not self:selectionActive() then
+    self.selAnchor = { line = #lines, col = ctx.text.width(lines[#lines]) }
+    self.selCursor = { line = #lines, col = ctx.text.width(lines[#lines]) }
+  end
+
+  local cursor = self.selCursor
+  local width = ctx.text.width(lines[cursor.line] or "")
+
+  if code == 0xCD then
+    cursor.col = cursor.col + 1
+    if cursor.col > width and cursor.line < #lines then
+      cursor.line = cursor.line + 1
+      cursor.col = 0
+    else
+      cursor.col = math.min(cursor.col, width)
+    end
+  elseif code == 0xCB then
+    cursor.col = cursor.col - 1
+    if cursor.col < 0 and cursor.line > 1 then
+      cursor.line = cursor.line - 1
+      cursor.col = ctx.text.width(lines[cursor.line] or "")
+    else
+      cursor.col = math.max(0, cursor.col)
+    end
+  elseif code == 0xD0 then
+    cursor.line = math.min(#lines, cursor.line + 1)
+    cursor.col = math.min(cursor.col, ctx.text.width(lines[cursor.line] or ""))
+  elseif code == 0xC8 then
+    cursor.line = math.max(1, cursor.line - 1)
+    cursor.col = math.min(cursor.col, ctx.text.width(lines[cursor.line] or ""))
+  elseif code == 0xC7 then
+    cursor.col = 0
+  elseif code == 0xCF then
+    cursor.col = width
+  else
+    return false
+  end
+
+  return true
+end
+
+-- Draw the selected span of one line if `index` falls inside it.
+function lab:paintSelection(ctx, line, index, y)
+  if not self:selectionActive() then
+    return
+  end
+
+  local from, to = self:orderedSelection()
+  if index < from.line or index > to.line then
+    return
+  end
+
+  local startCol = index == from.line and from.col or 0
+  local endCol = index == to.line and to.col or ctx.text.width(line)
+  if endCol <= startCol then
+    return
+  end
+
+  local span = ctx.text.slice(line, startCol + 1, endCol)
+  if span ~= "" then
+    ctx.view:put(1 + startCol, y, span, ctx.colors.deep, ctx.colors.accent)
+  end
+end
+
+function lab:copySelection(ctx)
+  local lines = self:transcriptFor(self.tab)
+  local message
+
+  if not lines then
+    message = "nothing to select in this tab"
+  elseif not self:selectionActive() then
+    message = "Shift+arrows select, then Ctrl+C"
+  else
+    local from, to = self:orderedSelection()
+    local parts = {}
+    for index = from.line, to.line do
+      local line = lines[index] or ""
+      local startCol = index == from.line and from.col or 0
+      local endCol = index == to.line and to.col or ctx.text.width(line)
+      parts[#parts + 1] = ctx.text.slice(line, startCol + 1, endCol)
+    end
+    local text = table.concat(parts, "\n")
+    local count = self.runner:copy(text)
+    message = string.format("copied %d %s", count, count == 1 and "char" or "chars")
+  end
+
+  self.status = message
+  self.replStatus = message
+end
+
+function lab:pasteClipboard(ctx)
+  local text = self.runner:clipped()
+  if text == "" then
+    self.status = "clipboard empty: select with Shift+arrows and Ctrl+C"
+    self.replStatus = self.status
+    return
+  end
+
+  if self.tab == "repl" then
+    self:cellPaste(ctx, text)
+  elseif self.tab == "script" then
+    self:scriptPaste(ctx, text)
+  end
+end
+
+function lab:cellReset()
+  self.replCell = { "" }
+  self.replRow = 1
+  self.replCol = 0
+  self.replCellTop = 1
+end
+
+function lab:cellSource()
+  return table.concat(self.replCell, "\n")
+end
+
+function lab:cellSet(ctx, text)
+  self.replCell = ctx.util.split(tostring(text or ""), "\n")
+  if #self.replCell == 0 then
+    self.replCell = { "" }
+  end
+  self.replRow = #self.replCell
+  self.replCol = ctx.text.width(self.replCell[self.replRow])
+  self.replCellTop = math.max(1, self.replRow - (ctx.h - 5))
+end
+
+function lab:cellInsert(ctx, value)
+  local line = self.replCell[self.replRow]
+  self.replCell[self.replRow] = ctx.text.slice(line, 1, self.replCol)
+    .. value
+    .. ctx.text.slice(line, self.replCol + 1)
+  self.replCol = self.replCol + 1
+  self.replHistoryIndex = nil
+end
+
+-- Split the line at the caret and keep the indentation, opening a block one
+-- level deeper when the line ends in `{`, `(` or `then`.
+function lab:cellNewline(ctx)
+  local line = self.replCell[self.replRow]
+  local before = ctx.text.slice(line, 1, self.replCol)
+  local after = ctx.text.slice(line, self.replCol + 1)
+
+  local indent = before:match("^( *)") or ""
+  if before:match("[%(%[{]%s*$") or before:match("%f[%a](then|do|else|repeat)%s*$") then
+    indent = indent .. "  "
+  end
+
+  self.replCell[self.replRow] = before
+  table.insert(self.replCell, self.replRow + 1, indent .. after)
+  self.replRow = self.replRow + 1
+  self.replCol = #indent
+  self.replHistoryIndex = nil
+end
+
+function lab:cellBackspace(ctx)
+  if self.replCol > 0 then
+    local line = self.replCell[self.replRow]
+    self.replCell[self.replRow] = ctx.text.slice(line, 1, self.replCol - 1)
+      .. ctx.text.slice(line, self.replCol + 1)
+    self.replCol = self.replCol - 1
+  elseif self.replRow > 1 then
+    local previous = self.replCell[self.replRow - 1]
+    self.replCol = ctx.text.width(previous)
+    self.replCell[self.replRow - 1] = previous .. self.replCell[self.replRow]
+    table.remove(self.replCell, self.replRow)
+    self.replRow = self.replRow - 1
+  end
+end
+
+function lab:cellDelete(ctx)
+  local line = self.replCell[self.replRow]
+  if self.replCol < ctx.text.width(line) then
+    self.replCell[self.replRow] = ctx.text.slice(line, 1, self.replCol)
+      .. ctx.text.slice(line, self.replCol + 2)
+  elseif self.replRow < #self.replCell then
+    self.replCell[self.replRow] = line .. self.replCell[self.replRow + 1]
+    table.remove(self.replCell, self.replRow + 1)
+  end
+end
+
+-- Pasted text keeps its own line breaks: it already carries the layout the
+-- author wrote, so no auto-indent here.
+function lab:cellPaste(ctx, text)
+  text = tostring(text or ""):gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("\t", "  ")
+  local lines = ctx.util.split(text, "\n")
+
+  for index, line in ipairs(lines) do
+    if index > 1 then
+      local current = self.replCell[self.replRow]
+      self.replCell[self.replRow] = ctx.text.slice(current, 1, self.replCol)
+      table.insert(self.replCell, self.replRow + 1, ctx.text.slice(current, self.replCol + 1))
+      self.replRow = self.replRow + 1
+      self.replCol = 0
+    end
+    if line ~= "" then
+      local current = self.replCell[self.replRow]
+      self.replCell[self.replRow] = ctx.text.slice(current, 1, self.replCol)
+        .. line
+        .. ctx.text.slice(current, self.replCol + 1)
+      self.replCol = self.replCol + ctx.text.width(line)
+    end
+  end
+
+  self.replHistoryIndex = nil
+end
+
+function lab:scriptPaste(ctx, text)
+  text = tostring(text or ""):gsub("\r\n", "\n"):gsub("\r", "\n"):gsub("\t", "  ")
+  local lines = ctx.util.split(text, "\n")
+  local line = self.lines[self.row]
+  local before = ctx.text.slice(line, 1, self.col)
+  local after = ctx.text.slice(line, self.col + 1)
+
+  self.lines[self.row] = before .. lines[1]
+  for index = 2, #lines do
+    table.insert(self.lines, self.row + index - 1, lines[index])
+  end
+  self.row = self.row + #lines - 1
+  self.lines[self.row] = self.lines[self.row] .. after
+  self.col = ctx.text.width(self.lines[self.row])
+  self:changed(ctx)
+end
+
 function lab:submitRepl(ctx)
-  local result = self:activeSession():submit(self.replInput)
-  self.replInput = ""
-  self.replCaret = 0
+  local source = self:cellSource()
+  self:cellReset()
+  self:clearSelection()
   self.replHistoryIndex = nil
   self.replDraft = ""
 
+  local result = self:activeSession():submit(source)
   if not result then
     return
   end
@@ -197,14 +477,13 @@ end
 function lab:resetRepl(ctx)
   local session = self:activeSession()
   session:reset()
-  self.replInput = ""
-  self.replCaret = 0
+  self:cellReset()
   self.replScroll = 0
   self.replHistoryIndex = nil
   self.replStatus = session.name .. " · every name dropped"
 end
 
--- Up walks back through submitted lines, Down returns toward the draft.
+-- Up walks back through submitted cells, Down returns toward the draft.
 function lab:recallRepl(ctx, direction)
   local history = self:activeSession().history
   if #history == 0 then
@@ -213,52 +492,64 @@ function lab:recallRepl(ctx, direction)
 
   local index = self.replHistoryIndex
   if not index then
-    self.replDraft = self.replInput
+    self.replDraft = self:cellSource()
     index = 0
   end
 
   index = ctx.util.clamp(index + direction, 0, #history)
   self.replHistoryIndex = index
-  self.replInput = index == 0 and self.replDraft or history[#history - index + 1]
-  self.replCaret = ctx.text.width(self.replInput)
+  self:cellSet(ctx, index == 0 and self.replDraft or history[#history - index + 1])
 end
 
-function lab:handleRepl(ctx, char, code)
+function lab:handleRepl(ctx, char, code, shifted, ctrlHeld)
   if code == 0x1C then
-    self:submitRepl(ctx)
+    if shifted or ctrlHeld then
+      self:cellNewline(ctx)
+    else
+      self:submitRepl(ctx)
+    end
   elseif code == 0x0E then
-    if self.replCaret > 0 then
-      self.replInput = ctx.text.slice(self.replInput, 1, self.replCaret - 1)
-        .. ctx.text.slice(self.replInput, self.replCaret + 1)
-      self.replCaret = self.replCaret - 1
-    end
+    self:cellBackspace(ctx)
   elseif code == 0xD3 then
-    if self.replCaret < ctx.text.width(self.replInput) then
-      self.replInput = ctx.text.slice(self.replInput, 1, self.replCaret)
-        .. ctx.text.slice(self.replInput, self.replCaret + 2)
-    end
+    self:cellDelete(ctx)
   elseif code == 0xCB then
-    self.replCaret = math.max(0, self.replCaret - 1)
+    if self.replCol > 0 then
+      self.replCol = self.replCol - 1
+    elseif self.replRow > 1 then
+      self.replRow = self.replRow - 1
+      self.replCol = ctx.text.width(self.replCell[self.replRow])
+    end
   elseif code == 0xCD then
-    self.replCaret = math.min(ctx.text.width(self.replInput), self.replCaret + 1)
+    if self.replCol < ctx.text.width(self.replCell[self.replRow]) then
+      self.replCol = self.replCol + 1
+    elseif self.replRow < #self.replCell then
+      self.replRow = self.replRow + 1
+      self.replCol = 0
+    end
   elseif code == 0xC7 then
-    self.replCaret = 0
+    self.replCol = 0
   elseif code == 0xCF then
-    self.replCaret = ctx.text.width(self.replInput)
+    self.replCol = ctx.text.width(self.replCell[self.replRow])
   elseif code == 0xC8 then
-    self:recallRepl(ctx, 1)
+    if self.replRow > 1 then
+      self.replRow = self.replRow - 1
+      self.replCol = math.min(self.replCol, ctx.text.width(self.replCell[self.replRow]))
+    else
+      self:recallRepl(ctx, 1)
+    end
   elseif code == 0xD0 then
-    self:recallRepl(ctx, -1)
+    if self.replRow < #self.replCell then
+      self.replRow = self.replRow + 1
+      self.replCol = math.min(self.replCol, ctx.text.width(self.replCell[self.replRow]))
+    else
+      self:recallRepl(ctx, -1)
+    end
   elseif code == 0xC9 then
     self:scrollRepl(ctx, self:replRows(ctx))
   elseif code == 0xD1 then
     self:scrollRepl(ctx, -self:replRows(ctx))
   elseif char and #char > 0 and not char:match("^%c$") then
-    self.replInput = ctx.text.slice(self.replInput, 1, self.replCaret)
-      .. char
-      .. ctx.text.slice(self.replInput, self.replCaret + 1)
-    self.replCaret = self.replCaret + 1
-    self.replHistoryIndex = nil
+    self:cellInsert(ctx, char)
   else
     return false
   end
@@ -384,6 +675,7 @@ function lab:run(ctx)
 
   self.tab = "output"
   self.outScroll = 0
+  self:clearSelection()
   self.status = string.format(
     "run %d · %s · %d ms",
     self.runs,
@@ -496,6 +788,7 @@ function lab:drawOutput(ctx, top)
       fg = c.dim
     end
     v:put(1, top + offset, ctx.text.truncate((line:gsub("\t", "  ")), ctx.w), fg, c.deep)
+    self:paintSelection(ctx, line, first + offset, top + offset)
   end
 end
 
@@ -503,12 +796,18 @@ function lab:drawRepl(ctx, top)
   local c = ctx.colors
   local v = ctx.view
   local rows = self:replRows(ctx)
+  local cellRows = self:replCellRows(ctx)
   local session = self:activeSession()
   local transcript = session.transcript
 
   if #transcript == 0 then
     v:put(1, top, session.name .. " · type Lua, or :help for sessions.", c.dim, c.deep)
-    v:put(1, top + 1, "Assignments persist between lines; `local` does not.", c.dim, c.deep)
+    if rows > 1 then
+      v:put(1, top + 1, "Shift+Enter adds a line; Enter runs the cell.", c.dim, c.deep)
+      if rows > 2 then
+        v:put(1, top + 2, "Assignments persist; `local` does not.", c.dim, c.deep)
+      end
+    end
   else
     self.replScroll = ctx.util.clamp(self.replScroll or 0, 0, math.max(0, #transcript - rows))
     local last = #transcript - self.replScroll
@@ -528,26 +827,50 @@ function lab:drawRepl(ctx, top)
         fg = c.dim
       end
       v:put(1, top + offset, ctx.text.truncate((line:gsub("\t", "  ")), ctx.w), fg, c.deep)
+      self:paintSelection(ctx, line, first + offset, top + offset)
     end
   end
 
-  -- Input line: the prompt tells a fresh line from a block still open.
+  -- Input cell: the last line sits on h-1 and extra lines grow upwards. The
+  -- prompt tells a fresh cell from a block the interpreter is still waiting on.
   local prompt = session:prompt()
-  local y = ctx.h - 1
-  local available = math.max(1, ctx.w - ctx.text.width(prompt) - 1)
-  local start = 0
-  if self.replCaret >= available then
-    start = self.replCaret - available + 1
+  local promptWidth = ctx.text.width(prompt)
+  local inputTop = (ctx.h - 1) - cellRows + 1
+
+  if self.replRow < self.replCellTop then
+    self.replCellTop = self.replRow
+  elseif self.replRow >= self.replCellTop + cellRows then
+    self.replCellTop = self.replRow - cellRows + 1
   end
 
-  v:fill(1, y, ctx.w, 1, " ", c.text, c.panel)
-  v:put(1, y, prompt, c.accent, c.panel)
-  v:put(1 + ctx.text.width(prompt), y, ctx.text.slice(self.replInput, start + 1, start + available),
-    c.text, c.panel)
+  for offset = 0, cellRows - 1 do
+    local index = self.replCellTop + offset
+    local line = self.replCell[index]
+    if not line then
+      break
+    end
 
-  local caretX = 1 + ctx.text.width(prompt) + (self.replCaret - start)
-  local glyph = ctx.text.charAt(self.replInput, self.replCaret + 1) or " "
-  v:put(caretX, y, glyph, c.deep, c.accent)
+    local y = inputTop + offset
+    v:fill(1, y, ctx.w, 1, " ", c.text, c.panel)
+    if index == 1 then
+      v:put(1, y, prompt, c.accent, c.panel)
+    else
+      v:put(1, y, "  .. ", c.dim, c.panel)
+    end
+
+    local available = math.max(1, ctx.w - promptWidth - 1)
+    local start = 0
+    if index == self.replRow and self.replCol >= available then
+      start = self.replCol - available + 1
+    end
+    v:put(1 + promptWidth, y, ctx.text.slice(line, start + 1, start + available), c.text, c.panel)
+
+    if index == self.replRow then
+      local caretX = 1 + promptWidth + (self.replCol - start)
+      local glyph = ctx.text.charAt(line, self.replCol + 1) or " "
+      v:put(caretX, y, glyph, c.deep, c.accent)
+    end
+  end
 end
 
 function lab:drawFooter(ctx)
@@ -576,8 +899,8 @@ function lab:drawFooter(ctx)
       or "Tab: script"
   elseif self.tab == "repl" then
     hint = #self:activeSession().pending > 0
-      and "Enter continues the block · Ctrl+L clears the pane"
-      or "Enter run · arrows history · Reset drops every name"
+      and "Enter continues the block · Shift+Enter newline"
+      or "Enter run · Shift+Enter newline · :help"
   else
     hint = "Tab: lua · Ctrl+R run · Ctrl+S save"
   end
@@ -630,15 +953,18 @@ function lab:touch(ctx, x, y)
         self.tab = hit.action:sub(5)
         self.outScroll = 0
         self.replScroll = 0
+        self:clearSelection()
       end
       return true
     end
   end
 
-  if self.tab == "repl" and y == ctx.h - 1 then
-    -- Clicking the input places the caret where the pointer landed.
-    local prompt = ctx.text.width(self:activeSession():prompt())
-    self.replCaret = ctx.util.clamp(x - prompt, 0, ctx.text.width(self.replInput))
+  if self.tab == "repl" and y >= ctx.h - self:replCellRows(ctx) and y <= ctx.h - 1 then
+    -- Clicking the input places the caret on the cell line the pointer landed.
+    local promptWidth = ctx.text.width(self:activeSession():prompt())
+    local index = self.replCellTop + (y - ((ctx.h - 1) - self:replCellRows(ctx) + 1))
+    self.replRow = ctx.util.clamp(index, 1, #self.replCell)
+    self.replCol = ctx.util.clamp(x - promptWidth, 0, ctx.text.width(self.replCell[self.replRow]))
     return true
   end
 
@@ -671,20 +997,49 @@ function lab:handle(ctx, name, a, b, c)
     return false
   end
 
+  if name == "key_up" then
+    -- A modifier that was let go must not stay held for the next key.
+    if b == KEY_CTRL_LEFT or b == KEY_CTRL_RIGHT then
+      self.ctrl = false
+    elseif b == KEY_SHIFT_LEFT or b == KEY_SHIFT_RIGHT then
+      self.shift = false
+    end
+    return true
+  end
+
+  if name == "paste" then
+    if self.tab == "repl" then
+      self:cellPaste(ctx, a)
+    elseif self.tab == "script" then
+      self:scriptPaste(ctx, a)
+    end
+    return true
+  end
+
   if name ~= "key" then
     return false
   end
 
   local char, code = a, b
 
-  -- Ctrl arrives as its own event, so remember it for the next key.
+  -- Ctrl and Shift arrive as their own events, so remember them for the next
+  -- key. Shift+Enter is how the interpreter gets a second line.
   if code == KEY_CTRL_LEFT or code == KEY_CTRL_RIGHT then
     self.ctrl = true
     return true
   end
 
-  if self.ctrl then
-    self.ctrl = false
+  if code == KEY_SHIFT_LEFT or code == KEY_SHIFT_RIGHT then
+    self.shift = true
+    return true
+  end
+
+  local ctrlHeld = self.ctrl == true
+  local shifted = self.shift == true
+  self.ctrl = false
+  self.shift = false
+
+  if ctrlHeld then
     if code == KEY_R then
       if self.tab == "repl" then
         self:submitRepl(ctx)
@@ -698,12 +1053,32 @@ function lab:handle(ctx, name, a, b, c)
     elseif code == KEY_L then
       self.runner:clear()
       self.runner:clearSessionTranscripts()
+      self:clearSelection()
       self.output = {}
       self.outScroll = 0
       self.replScroll = 0
       self.status = "Log cleared"
       self.replStatus = "Log cleared"
       return true
+    elseif code == KEY_C then
+      self:copySelection(ctx)
+      return true
+    elseif code == KEY_V then
+      self:pasteClipboard(ctx)
+      return true
+    end
+  end
+
+  -- Shift+arrows select over the pane text instead of scrolling it.
+  if shifted and (code == 0xCB or code == 0xCD or code == 0xC8 or code == 0xD0
+      or code == 0xC7 or code == 0xCF) then
+    if self:moveSelection(ctx, code) then
+      return true
+    end
+  elseif not shifted and code then
+    -- Any other key drops the selection, so the pane scrolls normally again.
+    if code ~= 0x0F then
+      self:clearSelection()
     end
   end
 
@@ -717,11 +1092,12 @@ function lab:handle(ctx, name, a, b, c)
     end
     self.outScroll = 0
     self.replScroll = 0
+    self:clearSelection()
     return true
   end
 
   if self.tab == "repl" then
-    return self:handleRepl(ctx, char, code)
+    return self:handleRepl(ctx, char, code, shifted, ctrlHeld)
   end
 
   if self.tab == "output" then

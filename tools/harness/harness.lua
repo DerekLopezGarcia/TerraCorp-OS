@@ -1146,6 +1146,53 @@ elseif scenario == "lab_repl" then
   idle(1)
   typeText(":list")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  -- OpenOS sugar: `component.gpu` is the primary component of that kind.
+  typeText("= type(component.gpu)")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  -- Shift+Enter opens a second line instead of running: both lines have to
+  -- land in one record, which is what tells the cell apart from two submits.
+  typeText("a = 1")
+  ev("key_down", "screen-1", nil, 0x2A, "tester") -- Shift
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText("b = a + 1")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  typeText("= b * 100")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  -- `= expr` left open: the prompt must wait for the rest instead of failing
+  -- on the leading `=`.
+  typeText("= 300 +")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText("4")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  -- OpenComputers hands pasted text to the computer as a `clipboard` signal.
+  ev("clipboard", "keyboard-1", "z = 12", "tester")
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  -- Shift+Home selects the last line, Ctrl+C copies it, Ctrl+V pastes it back
+  -- into the input cell: the OS clipboard round trip.
+  ev("key_down", "screen-1", nil, 0x2A, "tester") -- Shift
+  ev("key_down", "screen-1", nil, 0xC7, "tester") -- Home
+  ev("key_down", "screen-1", nil, 0x1D, "tester") -- Ctrl
+  ev("key_down", "screen-1", nil, 0x2E, "tester") -- C
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x1D, "tester") -- Ctrl
+  ev("key_down", "screen-1", nil, 0x2F, "tester") -- V
+  idle(2)
+elseif scenario == "console_paste" then
+  -- A pasted line lands in the Terminal input and can be read before Enter.
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Terminal
+  idle(1)
+  ev("clipboard", "keyboard-1", "echo pegado", "tester")
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(2)
 elseif scenario == "files_scroll" then
   -- Files previews /scroll.txt, then Tab hands the arrow keys to the preview so
@@ -1557,6 +1604,16 @@ if STRICT then
       print("FAIL: Lab did not report the failed run")
     end
   end
+  if scenario == "console_paste" then
+    if not screen:find("echo pegado", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Terminal did not show the pasted command")
+    end
+    if not screen:find("pegado", 1, true) then
+      errors = errors + 1
+      print("FAIL: the pasted command did not run")
+    end
+  end
   if scenario == "files_scroll" then
     if not screen:find("scroll.txt", 1, true) then
       errors = errors + 1
@@ -1606,6 +1663,34 @@ if STRICT then
     if not journal:find("sessions: main*", 1, true) then
       errors = errors + 1
       print("FAIL: the session list did not mark the active session")
+    end
+    if not journal:find("\ntable\n", 1, true) then
+      errors = errors + 1
+      print("FAIL: `component.gpu` did not resolve to the primary component")
+    end
+    if not journal:find("> a = 1\n> b = a + 1", 1, true) then
+      errors = errors + 1
+      print("FAIL: Shift+Enter did not keep the second line in the same cell")
+    end
+    if not journal:find("\n200\n", 1, true) then
+      errors = errors + 1
+      print("FAIL: the cell did not evaluate as one chunk")
+    end
+    if not journal:find("\n304\n", 1, true) then
+      errors = errors + 1
+      print("FAIL: an open `= expr` did not continue on the next line")
+    end
+    if journal:find("unexpected symbol near '='", 1, true) then
+      errors = errors + 1
+      print("FAIL: the interpreter reported the leading `=` of an open expression")
+    end
+    if not journal:find("> z = 12", 1, true) then
+      errors = errors + 1
+      print("FAIL: a clipboard signal did not paste into the input cell")
+    end
+    if not screen:find("lua> > z = 12", 1, true) then
+      errors = errors + 1
+      print("FAIL: the OS clipboard did not round trip from selection to input")
     end
     if not screen:find("lua> ", 1, true) then
       errors = errors + 1

@@ -20,8 +20,20 @@ implementation. Re-verify them if the target version changes.
 
 `computer.pullSignal(timeout)` returns signal values directly and may return
 `nil` on timeout. Relevant events include `key_down`, `key_up`, `touch`,
-`drag`, `drop`, `scroll`, `screen_resized`, `component_added`,
+`drag`, `drop`, `scroll`, `clipboard`, `screen_resized`, `component_added`,
 `component_removed`, `modem_message`, `interrupted`, and `shutdown`.
+
+`key_up` carries the same fields as `key_down`. It is the only way to know a
+modifier was released instead of assuming the next key still has it held.
+
+`clipboard(keyboardAddress, value, playerName)` is queued by the keyboard when
+the player pastes from the Minecraft clipboard: **Insert** by default (the mod's
+`clipboardPaste` key binding) or the **middle mouse button**. Verified against
+`li/cil/oc/client/KeyBindings.scala` and `client/gui/traits/InputBuffer.scala`
+on `master-MC1.12`, and against the signal list in the OpenComputers wiki. The
+text length is capped by the mod's config. There is **no** way back: the mod
+never reads text out of a computer, so a program cannot put anything on the
+Minecraft clipboard.
 
 The keyboard signal is `key_down(keyboardAddress, char, code, playerName)`.
 `char` is a numeric Unicode code point, or zero when no printable character is
@@ -51,6 +63,12 @@ Verified scan-code subset:
 - `component.proxy(address)` returns a method table and is preferred for
   repeated component operations.
 - `component.invoke(address, method, ...)` is used during minimal boot.
+- `component.<kind>` (`component.gpu`, `component.screen`, …) is **not** part of
+  the base API: it is sugar from OpenOS's `lib/component.lua`, which resolves the
+  primary component of that kind through a metatable. TerraCorp does not load
+  OpenOS, so the Lab rebuilds that door on top of the base table (see
+  `docs/architecture.md`); the kernel itself always calls `component.list` and
+  `component.proxy` explicitly.
 - `computer.energy()` returns stored/maximum energy and may fail on nodes
   without an energy component; call it under `pcall`.
 - `computer.totalMemory()` / `freeMemory()` and filesystem `spaceUsed()` /

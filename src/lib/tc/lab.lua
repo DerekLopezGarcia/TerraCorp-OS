@@ -122,6 +122,49 @@ local function pushLine(buffer, line)
   buffer[#buffer + 1] = line
 end
 
+-- OpenOS hands programs `component.gpu` as a shortcut to the primary component
+-- of that kind. TerraCorp does not load OpenOS, so the Lab builds that door on
+-- top of the base API: a real method always wins, anything else is looked up
+-- as a component kind and cached until the next run.
+local function componentAccess()
+  local cache = {}
+  local access = {}
+
+  for key, value in pairs(component) do
+    access[key] = value
+  end
+
+  access.primary = function(kind)
+    local cached = cache[kind]
+    if cached ~= nil then
+      return cached or nil
+    end
+
+    for address in component.list(kind) do
+      local ok, proxy = pcall(component.proxy, address)
+      if ok and proxy then
+        cache[kind] = proxy
+        return proxy
+      end
+    end
+
+    cache[kind] = false
+    return nil
+  end
+
+  access.refresh = function()
+    for key in pairs(cache) do
+      cache[key] = nil
+    end
+  end
+
+  return setmetatable(access, {
+    __index = function(self, key)
+      return self.primary(key)
+    end,
+  })
+end
+
 -- Build a fresh environment per run so one script cannot leave globals behind
 -- for the next one. `output` receives captured `print` lines.
 function lab:environment(output)
@@ -131,7 +174,7 @@ function lab:environment(output)
   env._G = env
   env.kernel = kernel
   env.vfs = kernel.vfs
-  env.component = component
+  env.component = componentAccess()
   env.computer = computer
   env.log = kernel.log
   env.config = kernel.config
@@ -364,6 +407,18 @@ function lab:sessionList()
   return "sessions: " .. table.concat(names, "  ")
 end
 
+-- One clipboard for the whole OS, held on the module so it survives closing a
+-- window. OpenComputers has no clipboard API to write to: the mod only hands
+-- text *to* the computer (`clipboard` signal), never reads it back out.
+function lab:copy(text)
+  lab.clipboard = text or ""
+  return #lab.clipboard
+end
+
+function lab:clipped()
+  return lab.clipboard or ""
+end
+
 --- Drop every pane transcript. The environments stay as they are.
 function lab:clearSessionTranscripts()
   local registry = self:sessions()
@@ -511,20 +566,37 @@ function repl:submit(input)
   local expression = false
 
   if not chunk then
-    -- `=expr` is the classic "print this value" form. A bare expression such
-    -- as `1 + 1` is not a statement, so it goes through the same door instead
-    -- of failing with a syntax error.
-    local body = source:match("^%s*=(.*)$") or source
-    local asExpression = load("return " .. body, "=" .. REPL_PATH, "t", self.env)
-    if asExpression then
-      chunk, expression = asExpression, true
-    elseif tostring(compileError):find("<eof>", 1, true) then
-      -- An open block: keep the buffer and wait for the rest of it.
-      return { incomplete = true }
+    local body = source:gsub("^%s*=", "", 1)
+    if body ~= source then
+      -- `=expr`: whether the block is still open is answered by the
+      -- expression's own error, not by the statement error, which always
+      -- complains about the leading `=` and never mentions `<eof>`.
+      local attempt, attemptError = load("return" .. body, "=" .. REPL_PATH, "t", self.env)
+      if attempt then
+        chunk, expression = attempt, true
+      elseif tostring(attemptError):find("<eof>", 1, true) then
+        return { incomplete = true }
+      else
+        compileError = attemptError
+      end
+    else
+      -- A bare expression such as `1 + 1` is not a statement, so it goes
+      -- through the same door instead of failing with a syntax error.
+      local attempt = load("return " .. source, "=" .. REPL_PATH, "t", self.env)
+      if attempt then
+        chunk, expression = attempt, true
+      elseif tostring(compileError):find("<eof>", 1, true) then
+        -- An open block: keep the buffer and wait for the rest of it.
+        return { incomplete = true }
+      end
     end
   end
 
   clearBuffer(self.buffer)
+  if self.env.component and self.env.component.refresh then
+    -- A component may have been placed or broken since the last cell.
+    self.env.component.refresh()
+  end
   local ok, failure = true, nil
 
   if chunk then
