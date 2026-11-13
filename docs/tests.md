@@ -65,11 +65,14 @@ empty (`type(count)` is `nil`), switching back restored `count` (`count + 1` is
 `/var/log/lab.log` under its session name, and the prompt came back.
 
 The same scenario covers the later fixes: `Shift+Enter` keeps two lines in one
-record, an open `= 300 +` waits for the next line instead of failing on the
-leading `=` (and must never report `unexpected symbol near '='`), a `clipboard`
+record, a held `Shift` keeps adding lines across two Enters (the modifier is
+only released by `key_up`), an open `= 300 +` waits for the next line instead
+of failing on the leading `=`, `=type(component.gpu)` works without a space
+after `=` (it used to compile as the name `returncomponent`), a `clipboard`
 signal pastes text into the cell, `component.gpu` resolves to the primary
-component, and `Shift+Home` + `Ctrl+C` + `Ctrl+V` round-trips a selected line
-back into the input (`lua> > z = 12` on screen).
+component, and `Shift+Home`, a second shifted `Up`, `Ctrl+C` and `Ctrl+V`
+round-trip a two-line span into the input (`lua> === ...` over `  .. > z = 12`
+on screen).
 
 `console_paste` opens the Terminal, sends a `clipboard` signal with
 `echo pegado`, and requires the line to appear in the input and to run on Enter.

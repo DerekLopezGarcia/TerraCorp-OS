@@ -52,14 +52,13 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.3.23 Quill, published as v0.3.23 on 2026-11-13. That is
+The current build is 0.3.24 Scratch, published as v0.3.24 on 2026-11-13. That is
 also the latest stable release, so an up-to-date installation has nothing to
-fetch. Versions through 0.3.22 update to it in-game as usual: no manifest or
-paths changed shape, and no files were added. 0.3.23 adds clipboard paste to the
-Lab and the Terminal (Insert or the middle mouse button), Shift+arrows selection
-with Ctrl+C/Ctrl+V inside the Lab, the OpenOS `component.<kind>` sugar in the
-Lab, `key_up` handling for modifiers, and a fix for an `=expr` left open across
-lines.
+fetch. Versions through 0.3.23 update to it in-game as usual: no manifest or
+paths changed shape, and no files were added. 0.3.24 fixes the interpreter's
+`=expr` without a space after `=` (it compiled as `returncomponent`), keeps
+Ctrl/Shift held until `key_up` so a second `Shift+Enter` or `Shift+arrow` still
+counts, and aligns selection columns with the tab-expanded text on screen.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

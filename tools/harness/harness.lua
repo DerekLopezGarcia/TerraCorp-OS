@@ -1148,16 +1148,30 @@ elseif scenario == "lab_repl" then
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(1)
   -- OpenOS sugar: `component.gpu` is the primary component of that kind.
-  typeText("= type(component.gpu)")
+  -- No space after `=`: that is the form that used to compile as the name
+  -- `returncomponent` and fail with "attempt to index a nil value".
+  typeText("=type(component.gpu)")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(2)
   -- Shift+Enter opens a second line instead of running: both lines have to
   -- land in one record, which is what tells the cell apart from two submits.
   typeText("a = 1")
-  ev("key_down", "screen-1", nil, 0x2A, "tester") -- Shift
+  ev("key_down", "screen-1", nil, 0x2A, "tester") -- Shift down
   ev("key_down", "screen-1", nil, 0x1C, "tester")
+  ev("key_up", "screen-1", nil, 0x2A, "tester") -- release Shift
   idle(1)
   typeText("b = a + 1")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  -- Held modifiers must survive several keys: OpenComputers sends Shift once,
+  -- not with every Enter. Two Enters in a row therefore add two lines.
+  typeText("m = 5")
+  ev("key_down", "screen-1", nil, 0x2A, "tester") -- Shift down, held
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  typeText("n = m + 1")
+  ev("key_down", "screen-1", nil, 0x1C, "tester") -- still held: newline, not submit
+  ev("key_up", "screen-1", nil, 0x2A, "tester") -- release Shift
+  typeText("print(n * 10)")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(2)
   typeText("= b * 100")
@@ -1176,15 +1190,20 @@ elseif scenario == "lab_repl" then
   idle(1)
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(2)
-  -- Shift+Home selects the last line, Ctrl+C copies it, Ctrl+V pastes it back
-  -- into the input cell: the OS clipboard round trip.
-  ev("key_down", "screen-1", nil, 0x2A, "tester") -- Shift
+  -- Shift+Home selects the last transcript line, Shift+Up extends it (Shift is
+  -- still held), Ctrl+C copies that span, Ctrl+V pastes it back into the input
+  -- cell: the OS clipboard round trip across two lines.
+  ev("key_down", "screen-1", nil, 0x2A, "tester") -- Shift down
   ev("key_down", "screen-1", nil, 0xC7, "tester") -- Home
+  ev("key_down", "screen-1", nil, 0xC8, "tester") -- Up: extend (held)
+  ev("key_up", "screen-1", nil, 0x2A, "tester") -- release Shift
   ev("key_down", "screen-1", nil, 0x1D, "tester") -- Ctrl
   ev("key_down", "screen-1", nil, 0x2E, "tester") -- C
+  ev("key_up", "screen-1", nil, 0x1D, "tester")
   idle(1)
   ev("key_down", "screen-1", nil, 0x1D, "tester") -- Ctrl
   ev("key_down", "screen-1", nil, 0x2F, "tester") -- V
+  ev("key_up", "screen-1", nil, 0x1D, "tester")
   idle(2)
 elseif scenario == "console_paste" then
   -- A pasted line lands in the Terminal input and can be read before Enter.
@@ -1676,6 +1695,14 @@ if STRICT then
       errors = errors + 1
       print("FAIL: the cell did not evaluate as one chunk")
     end
+    if not journal:find("> m = 5\n> n = m + 1\n> print(n * 10)", 1, true) then
+      errors = errors + 1
+      print("FAIL: a held Shift did not keep both Enters on new lines")
+    end
+    if not journal:find("\n60\n", 1, true) then
+      errors = errors + 1
+      print("FAIL: the three-line cell did not run as one chunk")
+    end
     if not journal:find("\n304\n", 1, true) then
       errors = errors + 1
       print("FAIL: an open `= expr` did not continue on the next line")
@@ -1688,7 +1715,11 @@ if STRICT then
       errors = errors + 1
       print("FAIL: a clipboard signal did not paste into the input cell")
     end
-    if not screen:find("lua> > z = 12", 1, true) then
+    if not screen:find("lua> === ", 1, true) then
+      errors = errors + 1
+      print("FAIL: the copied span did not start on the line above the last")
+    end
+    if not screen:find(".. > z = 12", 1, true) then
       errors = errors + 1
       print("FAIL: the OS clipboard did not round trip from selection to input")
     end

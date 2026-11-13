@@ -280,6 +280,11 @@ desktop forwards it to the focused app as `paste`:
   and `Ctrl+V` pastes that into the input. OpenComputers never reads text back
   from a computer, so there is no way to put something on the Minecraft
   clipboard; getting text out of the game needs a transport, not a key.
+- `Ctrl` and `Shift` arrive as their own key events and are held until `key_up`
+  is routed back to the app; the mod does not resend them for every key. A held
+  `Shift` therefore extends a selection across several arrows and opens several
+  `Shift+Enter` lines. Typing a printable key clears a Ctrl that never reported
+  its release; `blur` clears both.
 
 The Terminal command `lua` opens that tab; `lua <file>` runs a script by path
 without opening the app. Bare `lua` used to run `/var/lab/script.lua`, which is

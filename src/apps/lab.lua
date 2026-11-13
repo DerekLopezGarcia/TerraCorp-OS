@@ -42,6 +42,13 @@ local KEY_S = 0x1F
 local KEY_C = 0x2E
 local KEY_V = 0x2F
 
+-- Tabs are one cell in the buffer but two on screen; every column count and
+-- every slice must use the same text the operator sees, or a selection lands
+-- one cell off.
+local function shown(line)
+  return (tostring(line or ""):gsub("\t", "  "))
+end
+
 local STARTER = table.concat({
   "-- Lab: this script runs inside TerraCorp OS. print() is captured.",
   'print("node " .. kernel.hostname .. " · " .. version.product)',
@@ -171,6 +178,8 @@ function lab:activeSession()
     self.replHistoryIndex = nil
     self.replDraft = ""
     self.replStatus = nil
+    -- Selection indices point into the old session's transcript.
+    self:clearSelection()
   end
   return self.session
 end
@@ -224,12 +233,13 @@ function lab:moveSelection(ctx, code)
   end
 
   if not self:selectionActive() then
-    self.selAnchor = { line = #lines, col = ctx.text.width(lines[#lines]) }
-    self.selCursor = { line = #lines, col = ctx.text.width(lines[#lines]) }
+    local last = shown(lines[#lines])
+    self.selAnchor = { line = #lines, col = ctx.text.width(last) }
+    self.selCursor = { line = #lines, col = ctx.text.width(last) }
   end
 
   local cursor = self.selCursor
-  local width = ctx.text.width(lines[cursor.line] or "")
+  local width = ctx.text.width(shown(lines[cursor.line] or ""))
 
   if code == 0xCD then
     cursor.col = cursor.col + 1
@@ -243,16 +253,16 @@ function lab:moveSelection(ctx, code)
     cursor.col = cursor.col - 1
     if cursor.col < 0 and cursor.line > 1 then
       cursor.line = cursor.line - 1
-      cursor.col = ctx.text.width(lines[cursor.line] or "")
+      cursor.col = ctx.text.width(shown(lines[cursor.line] or ""))
     else
       cursor.col = math.max(0, cursor.col)
     end
   elseif code == 0xD0 then
     cursor.line = math.min(#lines, cursor.line + 1)
-    cursor.col = math.min(cursor.col, ctx.text.width(lines[cursor.line] or ""))
+    cursor.col = math.min(cursor.col, ctx.text.width(shown(lines[cursor.line] or "")))
   elseif code == 0xC8 then
     cursor.line = math.max(1, cursor.line - 1)
-    cursor.col = math.min(cursor.col, ctx.text.width(lines[cursor.line] or ""))
+    cursor.col = math.min(cursor.col, ctx.text.width(shown(lines[cursor.line] or "")))
   elseif code == 0xC7 then
     cursor.col = 0
   elseif code == 0xCF then
@@ -275,6 +285,7 @@ function lab:paintSelection(ctx, line, index, y)
     return
   end
 
+  line = shown(line)
   local startCol = index == from.line and from.col or 0
   local endCol = index == to.line and to.col or ctx.text.width(line)
   if endCol <= startCol then
@@ -294,19 +305,23 @@ function lab:copySelection(ctx)
   if not lines then
     message = "nothing to select in this tab"
   elseif not self:selectionActive() then
-    message = "Shift+arrows select, then Ctrl+C"
+    message = "no selection: hold Shift and use the arrows, then Ctrl+C"
   else
     local from, to = self:orderedSelection()
     local parts = {}
     for index = from.line, to.line do
-      local line = lines[index] or ""
+      local line = shown(lines[index] or "")
       local startCol = index == from.line and from.col or 0
       local endCol = index == to.line and to.col or ctx.text.width(line)
-      parts[#parts + 1] = ctx.text.slice(line, startCol + 1, endCol)
+      if endCol > startCol then
+        parts[#parts + 1] = ctx.text.slice(line, startCol + 1, endCol)
+      else
+        parts[#parts + 1] = ""
+      end
     end
     local text = table.concat(parts, "\n")
     local count = self.runner:copy(text)
-    message = string.format("copied %d %s", count, count == 1 and "char" or "chars")
+    message = string.format("copied %d %s to the OS clipboard", count, count == 1 and "char" or "chars")
   end
 
   self.status = message
@@ -316,7 +331,7 @@ end
 function lab:pasteClipboard(ctx)
   local text = self.runner:clipped()
   if text == "" then
-    self.status = "clipboard empty: select with Shift+arrows and Ctrl+C"
+    self.status = "OS clipboard empty · Insert pastes from Minecraft"
     self.replStatus = self.status
     return
   end
@@ -325,6 +340,9 @@ function lab:pasteClipboard(ctx)
     self:cellPaste(ctx, text)
   elseif self.tab == "script" then
     self:scriptPaste(ctx, text)
+  else
+    self.status = "switch to Lua or Script to paste"
+    self.replStatus = self.status
   end
 end
 
@@ -787,7 +805,7 @@ function lab:drawOutput(ctx, top)
     elseif line:sub(1, 3) == "..." then
       fg = c.dim
     end
-    v:put(1, top + offset, ctx.text.truncate((line:gsub("\t", "  ")), ctx.w), fg, c.deep)
+    v:put(1, top + offset, ctx.text.truncate(shown(line), ctx.w), fg, c.deep)
     self:paintSelection(ctx, line, first + offset, top + offset)
   end
 end
@@ -826,7 +844,7 @@ function lab:drawRepl(ctx, top)
       elseif line:sub(1, 1) == ">" then
         fg = c.dim
       end
-      v:put(1, top + offset, ctx.text.truncate((line:gsub("\t", "  ")), ctx.w), fg, c.deep)
+      v:put(1, top + offset, ctx.text.truncate(shown(line), ctx.w), fg, c.deep)
       self:paintSelection(ctx, line, first + offset, top + offset)
     end
   end
@@ -1012,6 +1030,9 @@ function lab:handle(ctx, name, a, b, c)
       self:cellPaste(ctx, a)
     elseif self.tab == "script" then
       self:scriptPaste(ctx, a)
+    else
+      self.status = "switch to Lua or Script to paste"
+      self.replStatus = self.status
     end
     return true
   end
@@ -1022,8 +1043,10 @@ function lab:handle(ctx, name, a, b, c)
 
   local char, code = a, b
 
-  -- Ctrl and Shift arrive as their own events, so remember them for the next
-  -- key. Shift+Enter is how the interpreter gets a second line.
+  -- Ctrl and Shift arrive as their own events and stay held until key_up.
+  -- OpenComputers does not resend them, so clearing the flag after the first
+  -- key would drop a modifier the player is still pressing: the second
+  -- Shift+Enter would submit, and the second Shift+arrow would stop selecting.
   if code == KEY_CTRL_LEFT or code == KEY_CTRL_RIGHT then
     self.ctrl = true
     return true
@@ -1034,10 +1057,16 @@ function lab:handle(ctx, name, a, b, c)
     return true
   end
 
-  local ctrlHeld = self.ctrl == true
+  -- A printable key is never a Ctrl chord in OpenComputers (chords arrive with
+  -- no text), so clear a Ctrl that never reported its release. Shift is not
+  -- cleared: it legitimately stays down while the operator types capitals.
+  if char ~= nil then
+    self.ctrl = false
+  end
+
+  -- A chord key arrives without text; a printable key is never a shortcut.
+  local ctrlHeld = self.ctrl == true and char == nil
   local shifted = self.shift == true
-  self.ctrl = false
-  self.shift = false
 
   if ctrlHeld then
     if code == KEY_R then
@@ -1184,6 +1213,10 @@ function lab:handle(ctx, name, a, b, c)
 end
 
 function lab:blur(ctx)
+  -- Key releases are only routed to the focused app, so leaving the window
+  -- must not carry a held modifier into the next app.
+  self.ctrl = false
+  self.shift = false
   if self.dirty then
     self:save(ctx)
   end

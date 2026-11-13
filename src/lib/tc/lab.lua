@@ -571,7 +571,9 @@ function repl:submit(input)
       -- `=expr`: whether the block is still open is answered by the
       -- expression's own error, not by the statement error, which always
       -- complains about the leading `=` and never mentions `<eof>`.
-      local attempt, attemptError = load("return" .. body, "=" .. REPL_PATH, "t", self.env)
+      -- The space after `return` is required: `=component.gpu` would otherwise
+      -- compile as the identifier `returncomponent`.
+      local attempt, attemptError = load("return " .. body, "=" .. REPL_PATH, "t", self.env)
       if attempt then
         chunk, expression = attempt, true
       elseif tostring(attemptError):find("<eof>", 1, true) then
