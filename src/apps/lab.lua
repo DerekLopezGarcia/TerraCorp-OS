@@ -1,10 +1,15 @@
--- Lab: a Lua scratchpad that runs scripts against the running OS.
+-- Lab: a Lua scratchpad that runs scripts against the running OS, plus a
+-- persistent interpreter.
 --
 -- The script lives at /var/lab/script.lua and every run is appended to
 -- /var/log/lab.log, so Files and the Terminal can read the output back.
 -- Scripts use the live kernel: kernel, vfs, component, computer, and the OS
 -- libraries are available. There is no preemption, so a runaway loop blocks
 -- the node until it reboots.
+--
+-- The Lua tab is the same environment, kept alive: a name assigned on one line
+-- is visible on the next. A script run stays fresh every time on purpose; do
+-- not merge the two, or a script can start working because of leftover state.
 
 local lab = {}
 lab.__index = lab
@@ -62,6 +67,15 @@ function lab.create(ctx)
   self.status = nil
 
   self.runner = ctx.kernel.require("tc.lab").new(ctx.kernel)
+  self.session = self.runner:repl()
+  self.sessionName = self.session.name
+  self.replInput = ""
+  self.replCaret = 0
+  self.replScroll = 0
+  self.replHistoryIndex = nil
+  self.replDraft = ""
+  self.replStatus = nil
+  self:adoptRequestedTab(ctx)
 
   local vfs = ctx.kernel.vfs
   vfs.ensureDir("/var/lab")
@@ -99,6 +113,156 @@ function lab.create(ctx)
   end
 
   return self
+end
+
+--------------------------------------------------------------------------------
+-- Interpreter
+--------------------------------------------------------------------------------
+
+-- The Terminal's `lua` asks for the interpreter tab through the module, so it
+-- works whether the window was closed or already open: the tab is adopted on
+-- the next draw and the request is cleared.
+function lab:adoptRequestedTab(ctx)
+  if not ctx.kernel.require then
+    return
+  end
+  local module = ctx.kernel.require("tc.lab")
+  local wanted = module and module.openTab
+  if not wanted then
+    return
+  end
+  module.openTab = nil
+  if self.tab ~= wanted then
+    self.tab = wanted
+    self.outScroll = 0
+    self.replScroll = 0
+  end
+end
+
+function lab:replRows(ctx)
+  -- Rows 3..h-2 hold the transcript; the input takes h-1 and the footer h.
+  return math.max(1, ctx.h - 4)
+end
+
+-- `:new`, `:use` and `:drop` move the active session from inside the pane, so
+-- every read goes through here and a switch resets the input and the scroll.
+function lab:activeSession()
+  local session = self.runner:repl()
+  if session.name ~= self.sessionName then
+    self.sessionName = session.name
+    self.session = session
+    self.replInput = ""
+    self.replCaret = 0
+    self.replScroll = 0
+    self.replHistoryIndex = nil
+    self.replDraft = ""
+    self.replStatus = nil
+  end
+  return self.session
+end
+
+function lab:scrollRepl(ctx, amount)
+  local rows = self:replRows(ctx)
+  local maximum = math.max(0, #self:activeSession().transcript - rows)
+  self.replScroll = ctx.util.clamp((self.replScroll or 0) + amount, 0, maximum)
+end
+
+function lab:submitRepl(ctx)
+  local result = self:activeSession():submit(self.replInput)
+  self.replInput = ""
+  self.replCaret = 0
+  self.replHistoryIndex = nil
+  self.replDraft = ""
+
+  if not result then
+    return
+  end
+  if result.incomplete then
+    self.replStatus = "block open: keep typing, Enter closes it"
+    return
+  end
+
+  -- The command may have moved the cursor to another session.
+  local session = self:activeSession()
+  self.replScroll = 0
+  self.replStatus = string.format(
+    "%s · lua %d · %s · %d ms",
+    session.name,
+    session.submissions,
+    result.ok and "ok" or "error",
+    math.floor(result.duration)
+  )
+end
+
+function lab:resetRepl(ctx)
+  local session = self:activeSession()
+  session:reset()
+  self.replInput = ""
+  self.replCaret = 0
+  self.replScroll = 0
+  self.replHistoryIndex = nil
+  self.replStatus = session.name .. " · every name dropped"
+end
+
+-- Up walks back through submitted lines, Down returns toward the draft.
+function lab:recallRepl(ctx, direction)
+  local history = self:activeSession().history
+  if #history == 0 then
+    return
+  end
+
+  local index = self.replHistoryIndex
+  if not index then
+    self.replDraft = self.replInput
+    index = 0
+  end
+
+  index = ctx.util.clamp(index + direction, 0, #history)
+  self.replHistoryIndex = index
+  self.replInput = index == 0 and self.replDraft or history[#history - index + 1]
+  self.replCaret = ctx.text.width(self.replInput)
+end
+
+function lab:handleRepl(ctx, char, code)
+  if code == 0x1C then
+    self:submitRepl(ctx)
+  elseif code == 0x0E then
+    if self.replCaret > 0 then
+      self.replInput = ctx.text.slice(self.replInput, 1, self.replCaret - 1)
+        .. ctx.text.slice(self.replInput, self.replCaret + 1)
+      self.replCaret = self.replCaret - 1
+    end
+  elseif code == 0xD3 then
+    if self.replCaret < ctx.text.width(self.replInput) then
+      self.replInput = ctx.text.slice(self.replInput, 1, self.replCaret)
+        .. ctx.text.slice(self.replInput, self.replCaret + 2)
+    end
+  elseif code == 0xCB then
+    self.replCaret = math.max(0, self.replCaret - 1)
+  elseif code == 0xCD then
+    self.replCaret = math.min(ctx.text.width(self.replInput), self.replCaret + 1)
+  elseif code == 0xC7 then
+    self.replCaret = 0
+  elseif code == 0xCF then
+    self.replCaret = ctx.text.width(self.replInput)
+  elseif code == 0xC8 then
+    self:recallRepl(ctx, 1)
+  elseif code == 0xD0 then
+    self:recallRepl(ctx, -1)
+  elseif code == 0xC9 then
+    self:scrollRepl(ctx, self:replRows(ctx))
+  elseif code == 0xD1 then
+    self:scrollRepl(ctx, -self:replRows(ctx))
+  elseif char and #char > 0 and not char:match("^%c$") then
+    self.replInput = ctx.text.slice(self.replInput, 1, self.replCaret)
+      .. char
+      .. ctx.text.slice(self.replInput, self.replCaret + 1)
+    self.replCaret = self.replCaret + 1
+    self.replHistoryIndex = nil
+  else
+    return false
+  end
+  return true
 end
 
 --------------------------------------------------------------------------------
@@ -245,6 +409,7 @@ function lab:drawTabs(ctx)
 
   for _, item in ipairs({
     { id = "script", label = " Script " },
+    { id = "repl", label = " Lua " },
     { id = "output", label = " Output " },
   }) do
     local active = self.tab == item.id
@@ -258,12 +423,20 @@ function lab:drawTabs(ctx)
     x = x + width + 1
   end
 
-  local runLabel = "[ Run ]"
-  local runWidth = ctx.text.width(runLabel)
-  local runX = ctx.w - runWidth + 1
-  if runX > x + 1 then
-    v:put(runX, 1, runLabel, c.onAccent, c.ok)
-    self.hits[#self.hits + 1] = { x = runX, y = 1, w = runWidth, action = "run" }
+  -- The interpreter has no Run button: Enter submits. It offers the one
+  -- action a transcript cannot: throwing the environment away.
+  local action
+  if self.tab == "repl" then
+    action = { label = "[ Reset ]", hit = "repl-reset", bg = c.warn }
+  else
+    action = { label = "[ Run ]", hit = "run", bg = c.ok }
+  end
+
+  local actionWidth = ctx.text.width(action.label)
+  local actionX = ctx.w - actionWidth + 1
+  if actionX > x + 1 then
+    v:put(actionX, 1, action.label, c.onAccent, action.bg)
+    self.hits[#self.hits + 1] = { x = actionX, y = 1, w = actionWidth, action = action.hit }
   end
 end
 
@@ -326,14 +499,72 @@ function lab:drawOutput(ctx, top)
   end
 end
 
+function lab:drawRepl(ctx, top)
+  local c = ctx.colors
+  local v = ctx.view
+  local rows = self:replRows(ctx)
+  local session = self:activeSession()
+  local transcript = session.transcript
+
+  if #transcript == 0 then
+    v:put(1, top, session.name .. " · type Lua, or :help for sessions.", c.dim, c.deep)
+    v:put(1, top + 1, "Assignments persist between lines; `local` does not.", c.dim, c.deep)
+  else
+    self.replScroll = ctx.util.clamp(self.replScroll or 0, 0, math.max(0, #transcript - rows))
+    local last = #transcript - self.replScroll
+    local first = math.max(1, last - rows + 1)
+
+    for offset = 0, rows - 1 do
+      local line = transcript[first + offset]
+      if not line then
+        break
+      end
+      local fg = c.text
+      if line:sub(1, 3) == "===" then
+        fg = c.accent
+      elseif line:sub(1, 1) == "!" then
+        fg = c.danger
+      elseif line:sub(1, 1) == ">" then
+        fg = c.dim
+      end
+      v:put(1, top + offset, ctx.text.truncate((line:gsub("\t", "  ")), ctx.w), fg, c.deep)
+    end
+  end
+
+  -- Input line: the prompt tells a fresh line from a block still open.
+  local prompt = session:prompt()
+  local y = ctx.h - 1
+  local available = math.max(1, ctx.w - ctx.text.width(prompt) - 1)
+  local start = 0
+  if self.replCaret >= available then
+    start = self.replCaret - available + 1
+  end
+
+  v:fill(1, y, ctx.w, 1, " ", c.text, c.panel)
+  v:put(1, y, prompt, c.accent, c.panel)
+  v:put(1 + ctx.text.width(prompt), y, ctx.text.slice(self.replInput, start + 1, start + available),
+    c.text, c.panel)
+
+  local caretX = 1 + ctx.text.width(prompt) + (self.replCaret - start)
+  local glyph = ctx.text.charAt(self.replInput, self.replCaret + 1) or " "
+  v:put(caretX, y, glyph, c.deep, c.accent)
+end
+
 function lab:drawFooter(ctx)
   local c = ctx.colors
   local v = ctx.view
   local y = ctx.h
 
-  local status = self.dirty and "Unsaved · Ctrl+S saves" or (self.status or "")
+  local status
+  if self.tab == "repl" then
+    -- The editor's unsaved marker has nothing to say about the interpreter.
+    local session = self:activeSession()
+    status = self.replStatus or (session.name .. " · ready")
+  else
+    status = self.dirty and "Unsaved · Ctrl+S saves" or (self.status or "")
+  end
   status = ctx.text.truncate(status, ctx.w)
-  v:put(1, y, status, self.dirty and c.warn or c.dim, c.deep)
+  v:put(1, y, status, self.dirty and self.tab ~= "repl" and c.warn or c.dim, c.deep)
 
   local hint
   if self.tab == "output" then
@@ -343,8 +574,12 @@ function lab:drawFooter(ctx)
     hint = #self.output > rows
       and string.format("Tab: script · %d-%d/%d · PgUp/PgDn", first, math.max(first, last), #self.output)
       or "Tab: script"
+  elseif self.tab == "repl" then
+    hint = #self:activeSession().pending > 0
+      and "Enter continues the block · Ctrl+L clears the pane"
+      or "Enter run · arrows history · Reset drops every name"
   else
-    hint = "Tab: output · Ctrl+R run · Ctrl+L clear"
+    hint = "Tab: lua · Ctrl+R run · Ctrl+S save"
   end
 
   if ctx.w >= ctx.text.width(hint) + ctx.text.width(status) + 3 then
@@ -359,6 +594,7 @@ function lab:draw(ctx)
 
   v:clear(" ", c.text, c.deep)
   self.hits = {}
+  self:adoptRequestedTab(ctx)
 
   if ctx.h < 4 then
     v:put(1, 1, "Window too small", c.warn, c.deep)
@@ -370,6 +606,8 @@ function lab:draw(ctx)
 
   if self.tab == "output" then
     self:drawOutput(ctx, 3)
+  elseif self.tab == "repl" then
+    self:drawRepl(ctx, 3)
   else
     self:drawScript(ctx, 3)
   end
@@ -386,12 +624,22 @@ function lab:touch(ctx, x, y)
     if y == hit.y and x >= hit.x and x < hit.x + hit.w then
       if hit.action == "run" then
         self:run(ctx)
+      elseif hit.action == "repl-reset" then
+        self:resetRepl(ctx)
       else
         self.tab = hit.action:sub(5)
         self.outScroll = 0
+        self.replScroll = 0
       end
       return true
     end
+  end
+
+  if self.tab == "repl" and y == ctx.h - 1 then
+    -- Clicking the input places the caret where the pointer landed.
+    local prompt = ctx.text.width(self:activeSession():prompt())
+    self.replCaret = ctx.util.clamp(x - prompt, 0, ctx.text.width(self.replInput))
+    return true
   end
 
   if self.tab == "script" and y >= 3 and y < ctx.h then
@@ -416,6 +664,9 @@ function lab:handle(ctx, name, a, b, c)
     if self.tab == "output" then
       self:scrollOutput(ctx, (c and c > 0) and 1 or -1)
       return true
+    elseif self.tab == "repl" then
+      self:scrollRepl(ctx, (c and c > 0) and 1 or -1)
+      return true
     end
     return false
   end
@@ -435,24 +686,42 @@ function lab:handle(ctx, name, a, b, c)
   if self.ctrl then
     self.ctrl = false
     if code == KEY_R then
-      self:run(ctx)
+      if self.tab == "repl" then
+        self:submitRepl(ctx)
+      else
+        self:run(ctx)
+      end
       return true
     elseif code == KEY_S then
       self:save(ctx)
       return true
     elseif code == KEY_L then
       self.runner:clear()
+      self.runner:clearSessionTranscripts()
       self.output = {}
       self.outScroll = 0
+      self.replScroll = 0
       self.status = "Log cleared"
+      self.replStatus = "Log cleared"
       return true
     end
   end
 
   if code == 0x0F then
-    self.tab = (self.tab == "script") and "output" or "script"
+    if self.tab == "script" then
+      self.tab = "repl"
+    elseif self.tab == "repl" then
+      self.tab = "output"
+    else
+      self.tab = "script"
+    end
     self.outScroll = 0
+    self.replScroll = 0
     return true
+  end
+
+  if self.tab == "repl" then
+    return self:handleRepl(ctx, char, code)
   end
 
   if self.tab == "output" then

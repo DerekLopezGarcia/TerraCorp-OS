@@ -521,6 +521,7 @@ local labScenario = rawget(_G, "SCENARIO") == "lab"
 local labErrorScenario = rawget(_G, "SCENARIO") == "lab_error"
 local labEditorScenario = rawget(_G, "SCENARIO") == "lab_editor"
 local luaCommandScenario = rawget(_G, "SCENARIO") == "lua_command"
+local labReplScenario = rawget(_G, "SCENARIO") == "lab_repl"
 local filesScrollScenario = rawget(_G, "SCENARIO") == "files_scroll"
 local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet
   or fakeUpdateRecover or fakeBootUpdate or fakeBootUpdateMaster
@@ -1099,10 +1100,51 @@ elseif scenario == "lab_editor" then
   typeText(" -- probe")
   idle(2)
 elseif scenario == "lua_command" then
-  -- Terminal `lua` runs /var/lab/script.lua without opening the Lab app.
+  -- Terminal `lua <file>` runs that script without opening the Lab app.
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Terminal
+  idle(1)
+  typeText("lua /var/lab/script.lua")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+elseif scenario == "lab_repl" then
+  -- Bare `lua` opens the interpreter tab. The third line reads a name the
+  -- second one assigned, which is the point: the environment persists.
   ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Terminal
   idle(1)
   typeText("lua")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  typeText("count = 6")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText("= count * 7")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  -- A block spans lines: the prompt turns into `... ` until `end` closes it.
+  typeText("for i = 1, 3 do")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText("print(i * 2)")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText("end")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  -- A named session gets its own environment: `count` must not exist there,
+  -- and switching back must find it again.
+  typeText(":new work")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText("= type(count)")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText(":use main")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText("= count + 1")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  typeText(":list")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(2)
 elseif scenario == "files_scroll" then
@@ -1533,6 +1575,41 @@ if STRICT then
     if not screen:find("lab ok  10", 1, true) then
       errors = errors + 1
       print("FAIL: the Terminal did not show the script output")
+    end
+  end
+  if scenario == "lab_repl" then
+    local journal = written["/var/log/lab.log"] or ""
+    if not journal:find("count = 6", 1, true) then
+      errors = errors + 1
+      print("FAIL: the interpreter did not log the submitted line")
+    end
+    if not journal:find("\n42\n", 1, true) then
+      errors = errors + 1
+      print("FAIL: the interpreter did not evaluate a name assigned on an earlier line")
+    end
+    if not (journal:find("\n4\n", 1, true) and journal:find("\n6\n", 1, true)) then
+      errors = errors + 1
+      print("FAIL: the interpreter did not run a block typed across several lines")
+    end
+    if not journal:find("repl@work", 1, true) then
+      errors = errors + 1
+      print("FAIL: a submission was not recorded under its session name")
+    end
+    if not journal:find("\nnil\n", 1, true) then
+      errors = errors + 1
+      print("FAIL: a new session did not start with a clean environment")
+    end
+    if not journal:find("\n7\n", 1, true) then
+      errors = errors + 1
+      print("FAIL: switching back did not restore the earlier session's names")
+    end
+    if not journal:find("sessions: main*", 1, true) then
+      errors = errors + 1
+      print("FAIL: the session list did not mark the active session")
+    end
+    if not screen:find("lua> ", 1, true) then
+      errors = errors + 1
+      print("FAIL: the interpreter did not show its prompt")
     end
   end
   if scenario == "lab_editor" then

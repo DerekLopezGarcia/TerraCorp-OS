@@ -52,10 +52,12 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.3.21 Bench, published as v0.3.21 on 2026-11-13. That is
-also the latest stable release, so an up-to-date installation has nothing to
-fetch. Versions through 0.3.20 update to it in-game as usual: no manifest or
-paths changed shape.
+The current build is 0.3.22 Notebook, published as v0.3.22 on 2026-11-13. That
+is also the latest stable release, so an up-to-date installation has nothing to
+fetch. Versions through 0.3.21 update to it in-game as usual: no manifest or
+paths changed shape. 0.3.22 changes the Terminal's `lua` command — bare `lua`
+opens the interpreter instead of running `/var/lab/script.lua` — and adds
+`src/apps/lab.lua` features and a harness scenario, but no new files.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

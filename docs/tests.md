@@ -50,9 +50,19 @@ types `-- probe` into the editor, clicks `[ Run ]`, and requires:
 The second scenario, `lab_error`, seeds a script that prints `lab ok` and then
 calls `error("boom")`; the run must log `! line 2: boom` and report
 `run 1 · error`. `lab_editor` checks that the Script tab loads the file and
-renders typed text with line numbers. The fourth, `lua_command`, types `lua` in
-the Terminal and requires the same script to run and print through
-`/var/log/lab.log`.
+renders typed text with line numbers. `lua_command` types `lua
+/var/lab/script.lua` in the Terminal and requires the same script to run and
+print through `/var/log/lab.log`.
+
+`lab_repl` types bare `lua` in the Terminal and requires the Lab to open on the
+interpreter tab. It then assigns `count = 6` on one line, evaluates
+`= count * 7` on the next, and types a `for` block across three lines. It then
+switches to a second session (`:new work`) and back (`:use main`). Passing means
+the environment survived between submissions (the `42` can only come from the
+earlier line), a block stayed open until `end` closed it, a new session started
+empty (`type(count)` is `nil`), switching back restored `count` (`count + 1` is
+`7`), `:list` marked the active session, every record reached
+`/var/log/lab.log` under its session name, and the prompt came back.
 
 `npm run test:files-scroll` opens Files over a 160-line `/scroll.txt`, tabs
 focus into the preview, pages down, and requires `scroll line 160` on screen. A

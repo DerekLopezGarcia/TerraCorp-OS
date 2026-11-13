@@ -213,8 +213,9 @@ shortcut. `iconStyle = "accent"` draws the tile with the accent background.
 
 ## Lab and script execution
 
-The Lab app (`/apps/lab.lua`) edits `/var/lab/script.lua` and runs it against
-the live OS. `tc.lab` compiles the buffer with `load(source, "=/var/lab/script.lua",
+The Lab app (`/apps/lab.lua`) has three tabs. It edits `/var/lab/script.lua` and
+runs it against the live OS. `tc.lab` compiles the buffer with
+`load(source, "=/var/lab/script.lua",
 "t", env)` in a fresh environment per run: the standard libraries, `print`
 (captured), `kernel`, `vfs`, `component`, `computer`, `log`, `config`, `text`,
 `util`, `theme`, `version`, `ui`, and `kernel.require`. It is a test tool, not a
@@ -223,13 +224,46 @@ sandbox boundary: a script can reach anything the desktop can.
 Every run is appended to `/var/log/lab.log` (rotated at 64 KB, newest half
 kept), with a `=== time · path · ok|error · ms` header, the captured lines, and
 an `!` error line. The Output tab shows the same record, seeded from the log at
-open, and the Terminal command `lua [file]` runs a script by path. Ctrl+R runs,
-Ctrl+S saves, and Ctrl+L empties the log. Files previews the log like any other
-text file.
+open. Ctrl+R runs, Ctrl+S saves, and Ctrl+L empties the log and the panes.
+Files previews the log like any other text file.
 
-Scripts run on the desktop event loop. There is no preemption and no
-instruction budget, so a runaway loop blocks the node until it reboots; keep
-test scripts bounded.
+### The interpreter
+
+The Lua tab is a second consumer of the same environment builder, with the
+opposite lifecycle: one environment stays alive for every line, so a name
+assigned on one line is there on the next. That is the difference between a
+scratchpad and a notebook, and the two do not mix — a script run stays fresh on
+purpose, or a script could start working because of state left by an earlier
+session.
+
+- Enter evaluates. A line that leaves a block open (`for`, `if`, `function`)
+  switches the prompt to `... ` and keeps accumulating until the block closes.
+- `=expr` prints the values of an expression, and a bare expression such as
+  `1 + 1` goes through the same door instead of failing as a statement.
+- Arrow up and down walk the submitted lines. `Reset` drops every name in the
+  active session.
+- Sessions are named environments: `:new work` starts one, `:use main` switches
+  back, `:list` names them with the active one marked `*`, `:drop` forgets one
+  (the last cannot go), `:reset` and `:clear` act on the current session, and
+  `:help` lists them. Each session keeps its own names, history and transcript.
+- State is memory, not a file: Lua state is closures, coroutines and userdata,
+  so it cannot be written to disk and reloaded, and nothing is replayed on
+  boot. What survives is the log, which names the session in every header
+  (`repl@work`); a session's environment lives until `:reset` or the reboot.
+- The registry hangs off the `tc.lab` module, which the kernel caches, so
+  closing the window keeps every session. `Ctrl+L` empties all transcripts
+  without touching an environment.
+- Every submission is appended to the same log with a `=== time · repl@name ·
+  ok|error · ms` header, the submitted lines with a `>` prefix, and the
+  captured output.
+
+The Terminal command `lua` opens that tab; `lua <file>` runs a script by path
+without opening the app. Bare `lua` used to run `/var/lab/script.lua`, which is
+now the editor's buffer only.
+
+Scripts and interpreted lines run on the desktop event loop. There is no
+preemption and no instruction budget, so a runaway loop blocks the node until it
+reboots; keep test code bounded.
 
 ## Cluster
 

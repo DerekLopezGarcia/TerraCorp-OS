@@ -22,7 +22,8 @@ testing is tracked in [`docs/tests.md`](docs/tests.md).
   `theme`, etc.).
 - **Settings:** accent color, character set, clock format, boot splash, and log level.
 - **Notes:** a persistent multi-line scratchpad stored at `/var/notes.txt`.
-- **Lab:** write and run Lua against the live OS; output and errors are kept at
+- **Lab:** write and run Lua against the live OS, or keep an interpreter session
+  whose names survive between lines; output and errors are kept at
   `/var/log/lab.log`.
 - **Update:** version details, a SYSTEM section (memory, storage, screen,
   devices, boot volume, address), and a GitHub Releases updater.

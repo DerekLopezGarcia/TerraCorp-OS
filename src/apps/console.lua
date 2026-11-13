@@ -135,7 +135,8 @@ function console:command(ctx, line)
       "cd <path>      change directory",
       "pwd            print working directory",
       "cat <file>     print file contents",
-      "lua [file]     run a Lua script (default /var/lab/script.lua)",
+      "lua            open the Lua interpreter (Lab)",
+      "lua <file>     run a Lua script",
       "echo <text>    print text",
       "clear          clear the terminal",
       "uptime         show session uptime",
@@ -230,14 +231,24 @@ function console:command(ctx, line)
   end
 
   if name == "lua" then
-    local path = rest ~= "" and self:resolve(ctx, rest) or "/var/lab/script.lua"
+    if not kernel.require then
+      self:push("lua: the module loader is unavailable", "err")
+      return
+    end
+
+    -- Bare `lua` is the interpreter, as in any other shell. The Lab owns it
+    -- because a session needs a scrollable pane and an editable prompt.
+    if rest == "" then
+      kernel.require("tc.lab").openTab = "repl"
+      ctx.ui:open("lab")
+      self:push("lua: interpreter in the Lab · Enter evaluates · Reset drops names", "accent")
+      return
+    end
+
+    local path = self:resolve(ctx, rest)
     local source, reason = vfs.read(path)
     if not source then
       self:push("lua: " .. tostring(reason), "err")
-      return
-    end
-    if not kernel.require then
-      self:push("lua: the module loader is unavailable", "err")
       return
     end
 

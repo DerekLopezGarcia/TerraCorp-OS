@@ -14,11 +14,20 @@ lab.__index = lab
 lab.SCRIPT = "/var/lab/script.lua"
 lab.LOG = "/var/log/lab.log"
 
+-- The interpreter answers to a name that appears in its own error messages.
+local REPL_PATH = "/var/lab/repl.lua"
+
+-- The Terminal sets this to "repl" so `lua` opens the app on the interpreter.
+-- The app clears it once it has switched tabs.
+lab.openTab = nil
+
 local MAX_LOG_BYTES = 65536
 local MAX_RUN_LINES = 200
 local MAX_RUN_BYTES = 24576
 local MAX_LINE_CHARS = 400
-local TAIL_BYTES = 16384
+local MAX_TAIL_BYTES = 16384
+local MAX_TRANSCRIPT_LINES = 400
+local MAX_HISTORY = 50
 
 -- Standard library surface. `io` is omitted: scripts write through `print` or
 -- the VFS. `os` is copied without the entry points that would terminate the
@@ -94,6 +103,25 @@ function lab:short(message, path)
   return message
 end
 
+-- A capture buffer is a plain line array that also carries `bytes` and
+-- `truncated`, so one table is both the transcript and the budget.
+local function clearBuffer(buffer)
+  for index = #buffer, 1, -1 do
+    buffer[index] = nil
+  end
+  buffer.bytes = 0
+  buffer.truncated = false
+end
+
+local function pushLine(buffer, line)
+  if #buffer >= MAX_RUN_LINES or (buffer.bytes or 0) >= MAX_RUN_BYTES then
+    buffer.truncated = true
+    return
+  end
+  buffer.bytes = (buffer.bytes or 0) + #line + 1
+  buffer[#buffer + 1] = line
+end
+
 -- Build a fresh environment per run so one script cannot leave globals behind
 -- for the next one. `output` receives captured `print` lines.
 function lab:environment(output)
@@ -123,12 +151,7 @@ function lab:environment(output)
       -- Bound the line: a captured string is copied into the log and the pane.
       line = line:sub(1, MAX_LINE_CHARS - 1) .. "…"
     end
-    if #output >= MAX_RUN_LINES or (output.bytes or 0) >= MAX_RUN_BYTES then
-      output.truncated = true
-      return
-    end
-    output.bytes = (output.bytes or 0) + #line + 1
-    output[#output + 1] = line
+    pushLine(output, line)
   end
 
   return env
@@ -227,6 +250,335 @@ function lab:execute(source, path)
   return result
 end
 
+--------------------------------------------------------------------------------
+-- Interpreter
+--
+-- A script run gets a fresh environment every time; that is what makes one run
+-- reproducible and what the scratchpad is for. The interpreter trades the other
+-- way: one environment stays alive, so a name assigned on one line is still
+-- there on the next.
+--
+-- Sessions are named environments, not saved files. Lua state is closures,
+-- coroutines and userdata, so it cannot be written to disk and reloaded; the
+-- registry lives in the module (which the kernel caches) and an empty
+-- environment is one `:` command away. What does survive a reboot is the log:
+-- every submission is recorded with the session name in its header.
+--------------------------------------------------------------------------------
+
+local repl = {}
+repl.__index = repl
+
+local SESSION_NAME = "^[%w_%-]+$"
+local MAX_SESSION_NAME = 16
+
+--- The registry of interpreter sessions for this boot.
+function lab:sessions()
+  if not lab.sessionRegistry then
+    lab.sessionRegistry = { order = {}, map = {}, active = nil }
+  end
+  return lab.sessionRegistry
+end
+
+--- The active session, or the one named `name` when one is given.
+-- With no argument it creates `main` on first use, so the app and the Terminal
+-- can both ask for "the" session without coordinating.
+function lab:repl(name)
+  local registry = self:sessions()
+
+  if name then
+    local session = registry.map[name]
+    if not session then
+      return nil, "no session named " .. tostring(name)
+    end
+    registry.active = name
+    return session
+  end
+
+  if not registry.active then
+    self:newRepl("main")
+  end
+  return registry.map[registry.active]
+end
+
+--- Start a session with a clean environment and make it active.
+function lab:newRepl(name)
+  local registry = self:sessions()
+  name = tostring(name or ""):match("^%s*(.-)%s*$")
+  if name == "" then
+    name = "s" .. tostring(#registry.order + 1)
+  end
+  if #name > MAX_SESSION_NAME or not name:match(SESSION_NAME) then
+    return nil, "invalid session name: " .. name
+  end
+  if registry.map[name] then
+    return nil, "session already exists: " .. name
+  end
+
+  local session = setmetatable({
+    runner = self,
+    name = name,
+    buffer = {},
+    pending = {},
+    history = {},
+    transcript = {},
+    submissions = 0,
+  }, repl)
+  session:reset()
+
+  registry.map[name] = session
+  registry.order[#registry.order + 1] = name
+  registry.active = name
+  return session
+end
+
+--- Forget a session. The last one cannot go, and the log keeps its record.
+function lab:dropRepl(name)
+  local registry = self:sessions()
+  if not registry.map[name] then
+    return nil, "no session named " .. tostring(name)
+  end
+  if #registry.order <= 1 then
+    return nil, "the last session cannot be dropped"
+  end
+
+  registry.map[name] = nil
+  for index, value in ipairs(registry.order) do
+    if value == name then
+      table.remove(registry.order, index)
+      break
+    end
+  end
+  if registry.active == name then
+    registry.active = registry.order[#registry.order]
+  end
+  return true
+end
+
+--- One line naming every session, the active one marked with `*`.
+function lab:sessionList()
+  local registry = self:sessions()
+  local names = {}
+  for _, name in ipairs(registry.order) do
+    names[#names + 1] = name == registry.active and (name .. "*") or name
+  end
+  return "sessions: " .. table.concat(names, "  ")
+end
+
+--- Drop every pane transcript. The environments stay as they are.
+function lab:clearSessionTranscripts()
+  local registry = self:sessions()
+  for _, name in ipairs(registry.order) do
+    registry.map[name]:clearTranscript()
+  end
+end
+
+--- Drop every name the session defined.
+function repl:reset()
+  self.buffer = {}
+  self.env = self.runner:environment(self.buffer)
+  self.pending = {}
+  self.submissions = 0
+  return self
+end
+
+--- Prompt for the next line; a `... ` prompt means a block is still open.
+function repl:prompt()
+  return #self.pending > 0 and "... " or "lua> "
+end
+
+--- Drop the transcript of the pane. The environment is untouched.
+function repl:clearTranscript()
+  self.transcript = {}
+  return self
+end
+
+--- Build the log and pane record for one submission.
+function repl:record(source, ok, body, started)
+  local result = {
+    ok = ok,
+    lines = {},
+    duration = math.max(0, (uptime() - started) * 1000),
+    path = "repl@" .. self.name,
+  }
+
+  result.lines[1] = string.format(
+    "=== %s · %s · %s · %d ms",
+    self.runner:stamp(),
+    result.path,
+    ok and "ok" or "error",
+    math.floor(result.duration)
+  )
+  for line in (source .. "\n"):gmatch("(.-)\n") do
+    result.lines[#result.lines + 1] = "> " .. line
+  end
+  for _, line in ipairs(body) do
+    result.lines[#result.lines + 1] = line
+  end
+  return result
+end
+
+function repl:pushTranscript(lines)
+  for _, line in ipairs(lines) do
+    self.transcript[#self.transcript + 1] = line
+  end
+  while #self.transcript > MAX_TRANSCRIPT_LINES do
+    table.remove(self.transcript, 1)
+  end
+  return self
+end
+
+--- `:` commands act on the session, never on the environment.
+-- They are recorded in the pane and the log, so a session's story stays whole.
+function repl:command(source)
+  local started = uptime()
+  local text = source:match("^%s*:(.*)$") or ""
+  local name, rest = text:match("^(%S*)%s*(.*)$")
+  name = (name or ""):lower()
+  rest = (rest or ""):match("^%s*(.-)%s*$")
+
+  local ok, output = true, {}
+
+  if name == "" or name == "help" then
+    output[1] = "sessions: :list  :new [name]  :use <name>  :reset  :clear  :drop <name>"
+  elseif name == "list" then
+    output[1] = self.runner:sessionList()
+  elseif name == "new" then
+    local session, reason = self.runner:newRepl(rest)
+    if session then
+      output[1] = "session " .. session.name .. " · clean environment"
+    else
+      ok, output[1] = false, "! " .. tostring(reason)
+    end
+  elseif name == "use" then
+    if rest == "" then
+      ok, output[1] = false, "! usage: :use <name>  (:list shows them)"
+    else
+      local session, reason = self.runner:repl(rest)
+      if session then
+        output[1] = "session " .. session.name
+      else
+        ok, output[1] = false, "! " .. tostring(reason)
+      end
+    end
+  elseif name == "reset" then
+    self:reset()
+    output[1] = "session " .. self.name .. " · every name dropped"
+  elseif name == "clear" then
+    self:clearTranscript()
+    output[1] = "session " .. self.name .. " · pane cleared"
+  elseif name == "drop" then
+    if rest == "" then
+      ok, output[1] = false, "! usage: :drop <name>"
+    else
+      local dropped, reason = self.runner:dropRepl(rest)
+      if dropped then
+        output[1] = "session " .. rest .. " dropped"
+      else
+        ok, output[1] = false, "! " .. tostring(reason)
+      end
+    end
+  else
+    ok, output[1] = false, "! unknown command: :" .. name .. " (:help)"
+  end
+
+  -- `:new`, `:use` and `:drop` move the cursor, so the confirmation belongs to
+  -- the session that is active now — the pane the operator is about to read.
+  local target = self.runner:repl() or self
+  local result = target:record(source, ok, output, started)
+  target:pushTranscript(result.lines)
+  self.runner:append(result)
+  return result
+end
+
+--- Evaluate `input`, continuing the block in flight when there is one.
+-- Returns nil for a blank line outside a block, `{ incomplete = true }` while a
+-- block is unfinished, or a run record shaped like `lab:execute`.
+function repl:submit(input)
+  input = input or ""
+  if #self.pending == 0 and input:match("^%s*$") then
+    return nil
+  end
+
+  if #self.pending == 0 and input:match("^%s*:") then
+    return self:command(input)
+  end
+
+  self.pending[#self.pending + 1] = input
+  local source = table.concat(self.pending, "\n")
+  local started = uptime()
+
+  local chunk, compileError = load(source, "=" .. REPL_PATH, "t", self.env)
+  local expression = false
+
+  if not chunk then
+    -- `=expr` is the classic "print this value" form. A bare expression such
+    -- as `1 + 1` is not a statement, so it goes through the same door instead
+    -- of failing with a syntax error.
+    local body = source:match("^%s*=(.*)$") or source
+    local asExpression = load("return " .. body, "=" .. REPL_PATH, "t", self.env)
+    if asExpression then
+      chunk, expression = asExpression, true
+    elseif tostring(compileError):find("<eof>", 1, true) then
+      -- An open block: keep the buffer and wait for the rest of it.
+      return { incomplete = true }
+    end
+  end
+
+  clearBuffer(self.buffer)
+  local ok, failure = true, nil
+
+  if chunk then
+    local packed = table.pack(pcall(chunk))
+    if not packed[1] then
+      ok, failure = false, packed[2]
+    elseif expression then
+      for index = 2, packed.n do
+        pushLine(self.buffer, tostring(packed[index]))
+      end
+    end
+  else
+    ok, failure = false, compileError
+  end
+
+  if not ok then
+    pushLine(self.buffer, "! " .. self:short(tostring(failure), REPL_PATH))
+  end
+
+  self.pending = {}
+  self.submissions = self.submissions + 1
+
+  if self.history[#self.history] ~= source then
+    self.history[#self.history + 1] = source
+    if #self.history > MAX_HISTORY then
+      table.remove(self.history, 1)
+    end
+  end
+
+  local body = {}
+  for _, line in ipairs(self.buffer) do
+    body[#body + 1] = line
+  end
+  if self.buffer.truncated then
+    body[#body + 1] = string.format(
+      "... output truncated (%d lines / %d KB)",
+      MAX_RUN_LINES,
+      math.floor(MAX_RUN_BYTES / 1024)
+    )
+  end
+
+  local result = self:record(source, ok, body, started)
+  result.error = failure
+  result.session = self.name
+  self:pushTranscript(result.lines)
+  self.runner:append(result)
+  return result
+end
+
+--- Short form of a compiler or runtime message, for the pane.
+function repl:short(message, path)
+  return self.runner:short(message, path)
+end
+
 --- Last `count` lines of the run log, newest last.
 function lab:tail(count)
   count = math.max(1, math.floor(tonumber(count) or 80))
@@ -236,7 +588,7 @@ function lab:tail(count)
     return {}
   end
 
-  local data = vfs.readTail(lab.LOG, TAIL_BYTES)
+  local data = vfs.readTail(lab.LOG, MAX_TAIL_BYTES)
   if not data or data == "" then
     return {}
   end
