@@ -304,6 +304,10 @@ desktop forwards it to the focused app as `paste`:
   `Shift` therefore extends a selection across several arrows and opens several
   `Shift+Enter` lines. Typing a printable key clears a Ctrl that never reported
   its release; `blur` clears both.
+- A chord may carry text: some clients report `\3` for Ctrl+C and `\22` for
+  Ctrl+V instead of no character at all. The app decides by the held modifier,
+  never by the absence of text, so a control character neither breaks the chord
+  nor gets inserted.
 
 The Terminal command `lua` opens that tab; `lua <file>` runs a script by path
 without opening the app. Bare `lua` used to run `/var/lab/script.lua`, which is

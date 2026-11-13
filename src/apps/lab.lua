@@ -559,7 +559,9 @@ function lab:submitRepl(ctx)
   local source = self:cellSource()
   local result = self:activeSession():submit(source)
   if not result then
-    self:cellReset()
+    -- Enter on an empty cell: open a line instead of doing nothing, so the
+    -- operator gets the same feedback an editor gives on a blank line.
+    self:cellNewline(ctx)
     return
   end
   if result.incomplete then
@@ -1245,15 +1247,16 @@ function lab:handle(ctx, name, a, b, c)
     return true
   end
 
-  -- A printable key is never a Ctrl chord in OpenComputers (chords arrive with
-  -- no text), so clear a Ctrl that never reported its release. Shift is not
-  -- cleared: it legitimately stays down while the operator types capitals.
-  if char ~= nil then
+  -- OpenComputers delivers Ctrl+<letter> with the control character as `char`
+  -- (`\3` for Ctrl+C, `\22` for Ctrl+V) on some clients, and with no text at
+  -- all on others. The held flag decides, not the text. A *printable* key is
+  -- never a chord, so it clears a Ctrl that never reported its release. Shift
+  -- is not cleared: it legitimately stays down while the operator types capitals.
+  if char ~= nil and not char:match("^%c$") then
     self.ctrl = false
   end
 
-  -- A chord key arrives without text; a printable key is never a shortcut.
-  local ctrlHeld = self.ctrl == true and char == nil
+  local ctrlHeld = self.ctrl == true
   local shifted = self.shift == true
 
   if ctrlHeld then

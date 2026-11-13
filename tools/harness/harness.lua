@@ -1215,6 +1215,28 @@ elseif scenario == "lab_repl" then
   ev("key_down", "screen-1", nil, 0x2F, "tester") -- V
   ev("key_up", "screen-1", nil, 0x1D, "tester")
   idle(2)
+elseif scenario == "lab_blank_line" then
+  -- Enter on an empty cell opens a line; it must not vanish without feedback.
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 Terminal
+  idle(1)
+  typeText("lua")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  ev("key_down", "screen-1", nil, 0x1C, "tester") -- Enter on the empty cell
+  idle(2)
+elseif scenario == "lab_empty_line" then
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 Terminal
+  idle(1)
+  typeText("lua")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
+  typeText("function f()")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x1C, "tester") -- Enter on the empty line
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x1C, "tester") -- Enter again
+  idle(2)
 elseif scenario == "lab_continue" then
   -- Enter on an open block keeps the text in the cell and starts a new line,
   -- instead of clearing it and leaving the block invisible.
@@ -1264,13 +1286,13 @@ elseif scenario == "lab_mouse_select" then
   ev("drop", "screen-1", wx + winWidth - 2, wy + 6, 0, "tester")
   idle(1)
   ev("key_down", "screen-1", nil, 0x1D, "tester") -- Ctrl
-  ev("key_down", "screen-1", nil, 0x2E, "tester") -- C
+  ev("key_down", "screen-1", 3, 0x2E, "tester") -- C, with the \3 some clients send
   ev("key_up", "screen-1", nil, 0x1D, "tester")
   idle(1)
   ev("key_down", "screen-1", nil, 0x0F, "tester") -- Tab: Lua tab
   idle(1)
   ev("key_down", "screen-1", nil, 0x1D, "tester") -- Ctrl
-  ev("key_down", "screen-1", nil, 0x2F, "tester") -- V
+  ev("key_down", "screen-1", 22, 0x2F, "tester") -- V, with the \22 some clients send
   ev("key_up", "screen-1", nil, 0x1D, "tester")
   idle(1)
   ev("key_down", "screen-1", nil, 0x1C, "tester") -- Enter runs the cell
@@ -1815,6 +1837,20 @@ if STRICT then
     if not screen:find("lua> ", 1, true) then
       errors = errors + 1
       print("FAIL: the interpreter did not show its prompt")
+    end
+  end
+  if scenario == "lab_blank_line" then
+    if not screen:find("lua> ", 1, true) then
+      errors = errors + 1
+      print("FAIL: the interpreter lost its prompt")
+    end
+    if not screen:find("  .. ", 1, true) then
+      errors = errors + 1
+      print("FAIL: Enter on an empty cell did not open a new line")
+    end
+    if written["/var/log/lab.log"] ~= nil then
+      errors = errors + 1
+      print("FAIL: an empty Enter was recorded in the run log")
     end
   end
   if scenario == "lab_continue" then

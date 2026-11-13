@@ -76,7 +76,14 @@ run off the right edge.
 `lab_mouse_select` presses on the first script line, drags to the third, copies
 with `Ctrl+C`, switches to the Lua tab, pastes with `Ctrl+V` and runs the cell.
 The log must contain the dragged `for` line and the `lab ok  10` output, so the
-mouse selection, the clipboard and the paste path are all covered.
+mouse selection, the clipboard and the paste path are all covered. The copy and
+paste chords carry `\3` and `\22` as their text, which is what some clients
+report for Ctrl+C and Ctrl+V.
+
+`lab_blank_line` presses Enter on an empty interpreter cell and requires the
+prompt plus a `  .. ` continuation row: the cell opens a line instead of doing
+nothing. No record may reach `/var/log/lab.log`, because an empty Enter is not a
+submission.
 
 `lab_continue` types `function snake()`, presses Enter and types `return 1`.
 The screen must show `...  function snake()` over `  .. return 1`: an open
