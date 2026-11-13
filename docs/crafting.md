@@ -155,6 +155,12 @@ Re-read the matrix after every rebuild. The face numbers follow the physical
 sides, and moving a container to another side changes which number it answers
 on; the Transposer's own address also changes if it was re-placed.
 
+Reading slots: `getStackInSlot` answers **`nil` for an empty slot**, which is a
+valid result, not a failure. `nil, "invalid slot"` means the index is past that
+face's `getInventorySize` (a pipe has 1, a basic drawer 2, a chest 27). The
+reader asks for the size first and walks `1..size`, skipping empty slots
+silently; "no table" from a probe usually means the container is empty.
+
 **Degradation rule**: a line without inventory reads runs in **coarse mode**
 (gate by total fill only, warning shown). The program must never pretend to
 know types or exact counts it did not read. Precision is opt-in per container,
