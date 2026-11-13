@@ -491,8 +491,11 @@ means for `tc.addr` and the registry.
 Transposer answered `getInventoryName` / `getInventorySize` with
 `minecraft:hopper` 5, `minecraft:chest` 27, `gregtech:machine` 90,
 `storagedrawers:basicdrawers` 2, `nil` "no inventory", and
-`gregtech:item_pipe_small` 1. The Transposer sees drawers the Adapter does not,
-and reports pipes as one-slot inventories; both are recorded in
+`gregtech:item_pipe_small` 1. After the rig was rebuilt, the same five
+containers answered on different faces — hopper 0, drawer 1, machine 2, chest 3,
+empty 4, pipe 5 — which is what made `dump1(1, 3)` report `invalid slot`: face 1
+is the two-slot drawer now, not the chest. The Transposer sees drawers the
+Adapter does not, and reports pipes as one-slot inventories; both are recorded in
 [`crafting.md`](crafting.md#the-sensing-requirement-the-load-bearing-dependency)
 and [`drivers.md`](drivers.md#closed-capability-vocabulary).
 
