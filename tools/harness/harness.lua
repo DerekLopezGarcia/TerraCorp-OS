@@ -520,6 +520,7 @@ local savedUpdateIcon = rawget(_G, "SCENARIO") == "icon_update"
 local labScenario = rawget(_G, "SCENARIO") == "lab"
 local labErrorScenario = rawget(_G, "SCENARIO") == "lab_error"
 local labEditorScenario = rawget(_G, "SCENARIO") == "lab_editor"
+local labMouseScenario = rawget(_G, "SCENARIO") == "lab_mouse_select"
 local luaCommandScenario = rawget(_G, "SCENARIO") == "lua_command"
 local labReplScenario = rawget(_G, "SCENARIO") == "lab_repl"
 local filesScrollScenario = rawget(_G, "SCENARIO") == "files_scroll"
@@ -590,7 +591,7 @@ if savedUpdateIcon then
     .. '  iconLayout = "dashboard@1,console@2,settings@3,notes@4,files@5,about@6",\n'
     .. '}\n'
 end
-if labScenario or labErrorScenario or labEditorScenario or luaCommandScenario then
+if labScenario or labErrorScenario or labEditorScenario or labMouseScenario or luaCommandScenario then
   -- The Lab loads this scratch file at open; Run executes it and appends the
   -- output to /var/log/lab.log. `lua` in the Terminal runs the same file.
   written["/var/lab/script.lua"] = labErrorScenario
@@ -1214,6 +1215,31 @@ elseif scenario == "lab_repl" then
   ev("key_down", "screen-1", nil, 0x2F, "tester") -- V
   ev("key_up", "screen-1", nil, 0x1D, "tester")
   idle(2)
+elseif scenario == "lab_mouse_select" then
+  -- Drag over the three script lines with the mouse, copy, switch to the Lua
+  -- tab and run the pasted code: select code without touching Shift.
+  local wx, wy, winWidth = windowRect()
+  ev("key_down", "screen-1", nil, 0x44, "tester") -- F10 opens Lab
+  idle(1)
+  ev("touch", "screen-1", wx + 5, wy + 4, 0, "tester") -- line 1, column 1
+  idle(1)
+  ev("drag", "screen-1", wx + winWidth - 2, wy + 5, 0, "tester") -- line 2
+  idle(1)
+  ev("drag", "screen-1", wx + winWidth - 2, wy + 6, 0, "tester") -- line 3
+  ev("drop", "screen-1", wx + winWidth - 2, wy + 6, 0, "tester")
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x1D, "tester") -- Ctrl
+  ev("key_down", "screen-1", nil, 0x2E, "tester") -- C
+  ev("key_up", "screen-1", nil, 0x1D, "tester")
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x0F, "tester") -- Tab: Lua tab
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x1D, "tester") -- Ctrl
+  ev("key_down", "screen-1", nil, 0x2F, "tester") -- V
+  ev("key_up", "screen-1", nil, 0x1D, "tester")
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x1C, "tester") -- Enter runs the cell
+  idle(2)
 elseif scenario == "lab_wrap" then
   -- A result wider than the pane must wrap inside it instead of running off
   -- the right edge. 200 Zs are wider than any supported window.
@@ -1754,6 +1780,17 @@ if STRICT then
     if not screen:find("lua> ", 1, true) then
       errors = errors + 1
       print("FAIL: the interpreter did not show its prompt")
+    end
+  end
+  if scenario == "lab_mouse_select" then
+    local journal = written["/var/log/lab.log"] or ""
+    if not journal:find("> for index = 1, 4 do total = total + index end", 1, true) then
+      errors = errors + 1
+      print("FAIL: the mouse drag did not copy the selected code")
+    end
+    if not journal:find("\nlab ok\t10\n", 1, true) then
+      errors = errors + 1
+      print("FAIL: the pasted code did not run")
     end
   end
   if scenario == "lab_wrap" then

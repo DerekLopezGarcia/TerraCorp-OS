@@ -194,25 +194,39 @@ end
 --------------------------------------------------------------------------------
 -- Selection
 --
--- Shift+arrows walk a cursor over the pane text and Ctrl+C copies that span to
--- the OS clipboard, which Ctrl+V pastes into the input. OpenComputers has no
--- clipboard API to write to, so this stays inside TerraCorp: getting text out
--- of the game is a different problem (the mod only sends clipboard text in).
+-- Shift+arrows walk a cursor over the pane text, a mouse drag selects what the
+-- pointer crosses, and Ctrl+C copies that span to the OS clipboard, which
+-- Ctrl+V pastes into the input. OpenComputers has no clipboard API to write
+-- to, so this stays inside TerraCorp: getting text out of the game is a
+-- different problem (the mod only sends clipboard text in).
 --------------------------------------------------------------------------------
 
--- The pane text that can be selected, by tab.
+-- The text that can be selected, by tab. The script editor selects its code;
+-- the two panes select their transcript.
 function lab:transcriptFor(tab)
   if tab == "output" then
     return self.output
   elseif tab == "repl" then
     return self:activeSession().transcript
+  elseif tab == "script" then
+    return self.lines
   end
   return nil
+end
+
+-- The text as it is measured: panes draw tabs expanded, the editor draws the
+-- line as it is, so columns must use the same string in both directions.
+function lab:displayFor(tab, line)
+  if tab == "script" then
+    return tostring(line or "")
+  end
+  return shown(line)
 end
 
 function lab:clearSelection()
   self.selAnchor = nil
   self.selCursor = nil
+  self.selecting = false
 end
 
 function lab:selectionActive()
@@ -234,13 +248,19 @@ function lab:moveSelection(ctx, code)
   end
 
   if not self:selectionActive() then
-    local last = shown(lines[#lines])
-    self.selAnchor = { line = #lines, col = ctx.text.width(last) }
-    self.selCursor = { line = #lines, col = ctx.text.width(last) }
+    if self.tab == "script" then
+      -- In the editor the caret is the anchor, the way a text cursor works.
+      self.selAnchor = { line = self.row, col = self.col }
+      self.selCursor = { line = self.row, col = self.col }
+    else
+      local last = self:displayFor(self.tab, lines[#lines])
+      self.selAnchor = { line = #lines, col = ctx.text.width(last) }
+      self.selCursor = { line = #lines, col = ctx.text.width(last) }
+    end
   end
 
   local cursor = self.selCursor
-  local width = ctx.text.width(shown(lines[cursor.line] or ""))
+  local width = ctx.text.width(self:displayFor(self.tab, lines[cursor.line] or ""))
 
   if code == 0xCD then
     cursor.col = cursor.col + 1
@@ -254,16 +274,16 @@ function lab:moveSelection(ctx, code)
     cursor.col = cursor.col - 1
     if cursor.col < 0 and cursor.line > 1 then
       cursor.line = cursor.line - 1
-      cursor.col = ctx.text.width(shown(lines[cursor.line] or ""))
+      cursor.col = ctx.text.width(self:displayFor(self.tab, lines[cursor.line] or ""))
     else
       cursor.col = math.max(0, cursor.col)
     end
   elseif code == 0xD0 then
     cursor.line = math.min(#lines, cursor.line + 1)
-    cursor.col = math.min(cursor.col, ctx.text.width(shown(lines[cursor.line] or "")))
+    cursor.col = math.min(cursor.col, ctx.text.width(self:displayFor(self.tab, lines[cursor.line] or "")))
   elseif code == 0xC8 then
     cursor.line = math.max(1, cursor.line - 1)
-    cursor.col = math.min(cursor.col, ctx.text.width(shown(lines[cursor.line] or "")))
+    cursor.col = math.min(cursor.col, ctx.text.width(self:displayFor(self.tab, lines[cursor.line] or "")))
   elseif code == 0xC7 then
     cursor.col = 0
   elseif code == 0xCF then
@@ -374,12 +394,12 @@ function lab:copySelection(ctx)
   if not lines then
     message = "nothing to select in this tab"
   elseif not self:selectionActive() then
-    message = "no selection: hold Shift and use the arrows, then Ctrl+C"
+    message = "no selection: drag the mouse or hold Shift and use the arrows"
   else
     local from, to = self:orderedSelection()
     local parts = {}
     for index = from.line, to.line do
-      local line = shown(lines[index] or "")
+      local line = self:displayFor(self.tab, lines[index] or "")
       local startCol = index == from.line and from.col or 0
       local endCol = index == to.line and to.col or ctx.text.width(line)
       if endCol > startCol then
@@ -838,6 +858,23 @@ function lab:drawScript(ctx, top)
     end
     v:put(GUTTER + 1, y, ctx.text.slice(line, start + 1, start + width), c.text, c.deep)
 
+    -- Mouse or Shift selection: paint the intersection with the visible slice
+    -- before the caret so the caret stays on top.
+    if self:selectionActive() then
+      local from, to = self:orderedSelection()
+      if index >= from.line and index <= to.line then
+        local lineWidth = ctx.text.width(line)
+        local startCol = index == from.line and from.col or 0
+        local endCol = index == to.line and to.col or lineWidth
+        local first = math.max(startCol, start)
+        local last = math.min(endCol, start + width)
+        if last > first then
+          local span = ctx.text.slice(line, first + 1, last)
+          v:put(GUTTER + 1 + (first - start), y, span, c.deep, c.accent)
+        end
+      end
+    end
+
     if index == self.row then
       local caret = self.col - start
       local glyph = ctx.text.charAt(line, self.col + 1) or " "
@@ -992,6 +1029,105 @@ end
 -- Events
 --------------------------------------------------------------------------------
 
+-- The visual row at content row `y`, with the same window the draw uses.
+function lab:visualRowAt(ctx, lines, top, rows, scroll, y)
+  if #lines == 0 or y < top then
+    return nil
+  end
+  local visual = self:visualRows(ctx, lines, rows, scroll)
+  local from = math.max(1, #visual - rows + 1)
+  return visual[from + (y - top)]
+end
+
+-- Map a pointer position to a logical character position in the current tab.
+function lab:pointAt(ctx, x, y)
+  if self.tab == "repl" then
+    local rows = self:replRows(ctx)
+    if y < 3 or y > 2 + rows then
+      return nil
+    end
+    local lines = self:activeSession().transcript
+    local row = self:visualRowAt(ctx, lines, 3, rows, self.replScroll, y)
+    if not row then
+      return nil
+    end
+    local width = ctx.text.width(row.text)
+    return { line = row.index, col = ctx.util.clamp(row.start + (x - 1), row.start, row.start + width) }
+  elseif self.tab == "output" then
+    local rows = self:visibleRows(ctx)
+    if y < 3 or y > ctx.h - 1 then
+      return nil
+    end
+    local row = self:visualRowAt(ctx, self.output, 3, rows, self.outScroll, y)
+    if not row then
+      return nil
+    end
+    local width = ctx.text.width(row.text)
+    return { line = row.index, col = ctx.util.clamp(row.start + (x - 1), row.start, row.start + width) }
+  elseif self.tab == "script" then
+    if y < 3 or y > ctx.h - 1 or #self.lines == 0 then
+      return nil
+    end
+    local index = ctx.util.clamp(self.top + (y - 3), 1, #self.lines)
+    local line = self.lines[index]
+    local visible = math.max(1, ctx.w - GUTTER)
+    local start = 0
+    if index == self.row and self.col >= visible then
+      start = self.col - visible + 1
+    end
+    local col = ctx.util.clamp(start + (x - GUTTER - 1), 0, ctx.text.width(line))
+    return { line = index, col = col }
+  end
+  return nil
+end
+
+-- Clamp a drag past the pane edge to the nearest row so the selection keeps
+-- extending instead of freezing.
+function lab:edgePoint(ctx, x, y)
+  local low, high = 3, ctx.h - 1
+  if self.tab == "repl" then
+    high = 2 + self:replRows(ctx)
+  end
+  local point = self:pointAt(ctx, x, ctx.util.clamp(y, low, high))
+  if point then
+    return point
+  end
+  return self:pointAt(ctx, x, math.max(3, high))
+end
+
+function lab:startSelection(point)
+  self.selAnchor = { line = point.line, col = point.col }
+  self.selCursor = { line = point.line, col = point.col }
+  self.selecting = true
+end
+
+-- Drag the mouse over a pane or the editor: the anchor stays where the press
+-- landed and the cursor follows the pointer.
+function lab:dragSelection(ctx, x, y)
+  if not self.selecting then
+    return false
+  end
+  local point = self:pointAt(ctx, x, y) or self:edgePoint(ctx, x, y)
+  if point then
+    self.selCursor = { line = point.line, col = point.col }
+  end
+  return true
+end
+
+function lab:dropSelection(ctx)
+  if not self.selecting then
+    return false
+  end
+  self.selecting = false
+  -- A press without movement is a click: place the caret, leave no selection.
+  if self:selectionActive()
+    and self.selAnchor.line == self.selCursor.line
+    and self.selAnchor.col == self.selCursor.col then
+    self:clearSelection()
+  end
+  return true
+end
+
 function lab:touch(ctx, x, y)
   for _, hit in ipairs(self.hits) do
     if y == hit.y and x >= hit.x and x < hit.x + hit.w then
@@ -1015,17 +1151,18 @@ function lab:touch(ctx, x, y)
     local index = self.replCellTop + (y - ((ctx.h - 1) - self:replCellRows(ctx) + 1))
     self.replRow = ctx.util.clamp(index, 1, #self.replCell)
     self.replCol = ctx.util.clamp(x - promptWidth, 0, ctx.text.width(self.replCell[self.replRow]))
+    self:clearSelection()
     return true
   end
 
-  if self.tab == "script" and y >= 3 and y < ctx.h then
-    local index = self.top + (y - 3)
-    local line = self.lines[index]
-    if line then
-      self.row = index
-      self.col = ctx.util.clamp(x - GUTTER - 1, 0, ctx.text.width(line))
-      return true
+  local point = self:pointAt(ctx, x, y)
+  if point then
+    if self.tab == "script" then
+      self.row = point.line
+      self.col = point.col
     end
+    self:startSelection(point)
+    return true
   end
 
   return false
@@ -1034,6 +1171,14 @@ end
 function lab:handle(ctx, name, a, b, c)
   if name == "touch" then
     return self:touch(ctx, a, b)
+  end
+
+  if name == "drag" then
+    return self:dragSelection(ctx, a, b)
+  end
+
+  if name == "drop" then
+    return self:dropSelection(ctx)
   end
 
   if name == "scroll" then
@@ -1249,6 +1394,7 @@ function lab:blur(ctx)
   -- must not carry a held modifier into the next app.
   self.ctrl = false
   self.shift = false
+  self.selecting = false
   if self.dirty then
     self:save(ctx)
   end

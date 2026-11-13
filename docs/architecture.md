@@ -252,6 +252,11 @@ session.
 - The transcript and the output pane wrap long lines at the pane width instead
   of clipping them, so a component listing or a long string is readable in
   full. The input cell still clips horizontally to keep the caret visible.
+- Selection works with the keyboard and the mouse: `Shift+arrows` walks a
+  cursor, and pressing in a pane or in the editor and dragging selects what the
+  pointer crosses. `Ctrl+C` copies that span to the OS clipboard and `Ctrl+V`
+  pastes it into the input. In the editor the press also places the caret; a
+  press without a drag leaves no selection.
 - Arrow up and down walk the submitted lines. `Reset` drops every name in the
   active session.
 - Sessions are named environments: `:new work` starts one, `:use main` switches

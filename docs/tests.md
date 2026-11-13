@@ -73,6 +73,11 @@ table display and its elision.
 screen across at least three rows: a result wider than the pane must wrap, not
 run off the right edge.
 
+`lab_mouse_select` presses on the first script line, drags to the third, copies
+with `Ctrl+C`, switches to the Lua tab, pastes with `Ctrl+V` and runs the cell.
+The log must contain the dragged `for` line and the `lab ok  10` output, so the
+mouse selection, the clipboard and the paste path are all covered.
+
 The same scenario covers the later fixes: `Shift+Enter` keeps two lines in one
 record, a held `Shift` keeps adding lines across two Enters (the modifier is
 only released by `key_up`), an open `= 300 +` waits for the next line instead
