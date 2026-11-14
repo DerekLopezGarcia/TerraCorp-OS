@@ -169,6 +169,11 @@ is **about one face per tick**. A sweep is scheduled round-robin instead of
 reading every face at once: twenty faces fill a second, forty take two. The
 snapshot period follows from that, not from a wish for 1 Hz.
 
+A per-slot benchmark must keep the index inside `getInventorySize`: a loop
+`1..n` over a 27-slot chest asks for slot 28 onwards, gets `invalid slot`, and
+aborts before printing. Benchmark one fixed slot, or wrap with
+`(i - 1) % size + 1`; the number is the same, because the cost is the call.
+
 **Degradation rule**: a line without inventory reads runs in **coarse mode**
 (gate by total fill only, warning shown). The program must never pretend to
 know types or exact counts it did not read. Precision is opt-in per container,
