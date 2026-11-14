@@ -47,6 +47,7 @@ npm run test:refresh-rate
 npm run test:drag-metric
 npm run test:lab
 npm run test:files-scroll
+npm run test:release-notes
 npm run test:updater
 npm run test:updater-legacy
 npm run test:updater-rollback

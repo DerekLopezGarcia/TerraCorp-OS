@@ -518,6 +518,9 @@ local savedIconOrder = rawget(_G, "SCENARIO") == "icon_order_saved"
 local savedIconSlot = rawget(_G, "SCENARIO") == "icon_slot_saved"
 local savedUpdateIcon = rawget(_G, "SCENARIO") == "icon_update"
 local labScenario = rawget(_G, "SCENARIO") == "lab"
+local notesManyScenario = rawget(_G, "SCENARIO") == "notes_many"
+local notesOneScenario = rawget(_G, "SCENARIO") == "notes_one"
+local notesSameScenario = rawget(_G, "SCENARIO") == "notes_same"
 local labErrorScenario = rawget(_G, "SCENARIO") == "lab_error"
 local labEditorScenario = rawget(_G, "SCENARIO") == "lab_editor"
 local labMouseScenario = rawget(_G, "SCENARIO") == "lab_mouse_select"
@@ -605,6 +608,15 @@ if filesScrollScenario then
     body[#body + 1] = string.format("scroll line %03d", index)
   end
   written["/scroll.txt"] = table.concat(body, "\n") .. "\n"
+end
+if notesManyScenario then
+  written["/var/version"] = "0.3.29\n"
+end
+if notesOneScenario then
+  written["/var/version"] = "0.3.31\n"
+end
+if notesSameScenario then
+  written["/var/version"] = "0.3.32\n"
 end
 local nodesFloppy = nodesScenario and newVolume(512 * 1024) or nil
 local modemPackets = 0
@@ -1335,6 +1347,10 @@ elseif scenario == "files_scroll" then
     ev("key_down", "screen-1", nil, 0xD1, "tester") -- PgDn
   end
   idle(2)
+elseif scenario == "notes_many" or scenario == "notes_one" or scenario == "notes_same" then
+  -- The kernel compares /var/version with the running build at boot and
+  -- writes the notes of every skipped release.
+  idle(3)
 elseif scenario == "boot_update" or scenario == "boot_update_master" then
   idle(2)
 elseif scenario == "updater" or scenario == "updater_legacy" or scenario == "updater_recover" then
@@ -1851,6 +1867,44 @@ if STRICT then
     if not screen:find("lua> ", 1, true) then
       errors = errors + 1
       print("FAIL: the interpreter did not show its prompt")
+    end
+  end
+  if scenario == "notes_many" then
+    local notes = written["/var/whatsnew.md"] or ""
+    for _, version in ipairs({ "0.3.30", "0.3.31", "0.3.32" }) do
+      if not notes:find("## " .. version, 1, true) then
+        errors = errors + 1
+        print("FAIL: the release notes missed " .. version)
+      end
+    end
+    if notes:find("## 0.3.29", 1, true) then
+      errors = errors + 1
+      print("FAIL: the release notes included the version already installed")
+    end
+    if not screen:find("What's new: /var/whatsnew.md", 1, true) then
+      errors = errors + 1
+      print("FAIL: the desktop did not announce the release notes")
+    end
+    if (readReal("/var/version") or ""):gsub("%s+$", "") ~= "0.3.32" then
+      errors = errors + 1
+      print("FAIL: /var/version did not record the running build")
+    end
+  end
+  if scenario == "notes_one" then
+    local notes = written["/var/whatsnew.md"] or ""
+    if not notes:find("## 0.3.32", 1, true) then
+      errors = errors + 1
+      print("FAIL: the release notes did not include the new version")
+    end
+    if notes:find("## 0.3.31", 1, true) then
+      errors = errors + 1
+      print("FAIL: the release notes included the previous build")
+    end
+  end
+  if scenario == "notes_same" then
+    if written["/var/whatsnew.md"] ~= nil then
+      errors = errors + 1
+      print("FAIL: a boot with no version change wrote release notes")
     end
   end
   if scenario == "lab_blank_line" then

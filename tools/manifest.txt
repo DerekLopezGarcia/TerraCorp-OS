@@ -14,6 +14,7 @@ src/boot/kernel.lua
 src/boot/netboot.lua
 src/boot/netfetch.lua
 src/init.lua
+src/lib/tc/changelog.lua
 src/lib/tc/cluster.lua
 src/lib/tc/config.lua
 src/lib/tc/gfx.lua

@@ -13,7 +13,7 @@ presented as fact.
 | Field | Value | Source |
 |---|---|---|
 | Product | TerraCorp OS | `src/lib/tc/version.lua` |
-| Version | 0.3.31 "Gauge", API 1 | `src/lib/tc/version.lua` |
+| Version | 0.3.32 "Gazette", API 1 | `src/lib/tc/version.lua` |
 | Vendor string | TerraCorp Industrial Systems | `src/lib/tc/version.lua` |
 | License | MIT | `LICENSE` |
 | Host | OpenComputers, Minecraft 1.12.2 + Forge, Supersymmetry pack | `README.md` |
@@ -92,6 +92,8 @@ All state lives on the boot volume. Nothing is stored outside it.
 |---|---|---|
 | `/etc/terracorp.cfg` | Settings, theme, icon layout | `src/lib/tc/config.lua` |
 | `/var/log/tc.log` | System log; truncated when it grows too large | `src/boot/kernel.lua` |
+| `/var/version` | Last booted build; drives the release notes range | `src/boot/kernel.lua` |
+| `/var/whatsnew.md` | Notes of every release skipped by an update | `src/boot/kernel.lua` |
 | `/var/log/lab.log` | Lab run log, including printed output and errors | `src/lib/tc/lab.lua` |
 | `/var/lab/script.lua` | Lab scratch script | `src/apps/lab.lua` |
 | `/var/notes.txt` | Notes scratchpad | `src/apps/notes.lua` |

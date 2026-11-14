@@ -52,14 +52,12 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.3.31 Gauge, published as v0.3.31 on 2026-11-14. That is
+The current build is 0.3.32 Gazette, published as v0.3.32 on 2026-11-15. That is
 also the latest stable release, so an up-to-date installation has nothing to
-fetch. Versions through 0.3.30 update to it in-game as usual: no manifest or
-paths changed shape, and no files were added. 0.3.31 corrects 0.3.30:
-OpenComputers' sandbox does not expose `collectgarbage` to user code, so the
-interpreter cannot force a collection and the memory probe reads
-`computer.freeMemory()`. The harness now hides `collectgarbage` too, so the
-tests match the game.
+fetch. Versions through 0.3.31 update to it in-game as usual: no manifest or
+paths changed shape, and one file was added (the changelog module). 0.3.32
+writes the notes of every release skipped between the old build and this one to
+`/var/whatsnew.md`, and the desktop posts a notice pointing at it.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

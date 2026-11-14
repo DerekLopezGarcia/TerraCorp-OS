@@ -4,7 +4,7 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.3.31 Gauge**. The prototype boots into a desktop shell with
+Current version: **0.3.32 Gazette**. The prototype boots into a desktop shell with
 ten apps, persists settings, notes, and the desktop icon layout, and logs
 errors. The Nodes app provisions rack servers over a wired network and keeps a
 node registry. Local simulations cover the OpenComputers API contract; in-game
@@ -26,7 +26,8 @@ testing is tracked in [`docs/tests.md`](docs/tests.md).
   whose names survive between lines; output and errors are kept at
   `/var/log/lab.log`.
 - **Update:** version details, a SYSTEM section (memory, storage, screen,
-  devices, boot volume, address), and a GitHub Releases updater.
+  devices, boot volume, address), a GitHub Releases updater, and release
+  notes in /var/whatsnew.md after an update.
 - **Nodes:** discover rack servers on a wired network, prepare a floppy
   netboot installer, watch a node install, and rename or reassign nodes in
   `/var/nodes.tsv`.

@@ -645,6 +645,10 @@ local function apply()
   end
 
   local changed = {}
+  -- Remember the version being replaced so the new kernel can list the notes
+  -- of every release this update skipped.
+  local previousSource = readFile("/lib/tc/version.lua")
+  local previousVersion = previousSource and previousSource:match('version%s*=%s*"([^"]+)"')
   for _, item in ipairs(staged) do
     step("Installing " .. version, item.target, string.format("%d of %d files", #changed + 1, #staged))
     local state = { target = item.target, backup = item.backup }
@@ -700,6 +704,13 @@ local function apply()
     local message = failure("version.lua did not install correctly", restoredOk, restoreFailure)
     finish(false, message)
     return false, message
+  end
+
+  -- The kernel writes the release notes when /var/version names an older
+  -- build; on the first updated release that file may not exist yet, so the
+  -- applier records the version it just replaced.
+  if previousVersion and previousVersion ~= version then
+    pcall(writeFile, "/var/version", previousVersion)
   end
 
   removeTree(stageRoot)

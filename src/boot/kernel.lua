@@ -380,6 +380,85 @@ end
 -- Startup
 --------------------------------------------------------------------------------
 
+local function parseVersion(value)
+  local major, minor, patch = tostring(value or ""):match("^(%d+)%.(%d+)%.(%d+)$")
+  if not major then
+    return nil
+  end
+  return { tonumber(major), tonumber(minor), tonumber(patch) }
+end
+
+local function versionLess(left, right)
+  for index = 1, 3 do
+    if left[index] ~= right[index] then
+      return left[index] < right[index]
+    end
+  end
+  return false
+end
+
+-- Write the notes of every version between the one the node was running and
+-- this one. `/var/version` records the last booted version and survives
+-- updates, so a node that skipped releases gets all of them, not just the last.
+local function writeReleaseNotes(instance, requireModule)
+  local vfs, version, log = instance.vfs, instance.version, instance.log
+  local current = version.version
+
+  vfs.ensureDir("/var")
+  local previous = vfs.read("/var/version")
+  previous = previous and previous:match("([%d]+%.[%d]+%.[%d]+)")
+  vfs.write("/var/version", current .. "\n")
+
+  if not previous or previous == current then
+    return nil
+  end
+
+  local from, to = parseVersion(previous), parseVersion(current)
+  if not from or not to or not versionLess(from, to) then
+    return nil
+  end
+
+  local ok, changelog = pcall(requireModule, "tc.changelog")
+  if not ok or type(changelog) ~= "table" or type(changelog.notes) ~= "table" then
+    log.warn("Release notes unavailable: " .. tostring(changelog))
+    return nil
+  end
+
+  local lines = {
+    "# What's new",
+    "",
+    "Updated from " .. previous .. " to " .. current .. ".",
+    "",
+  }
+  local included = 0
+  for _, candidate in ipairs(changelog.order or {}) do
+    local candidateVersion = parseVersion(candidate)
+    local notes = changelog.notes[candidate]
+    if candidateVersion and notes
+      and versionLess(from, candidateVersion)
+      and not versionLess(to, candidateVersion) then
+      included = included + 1
+      lines[#lines + 1] = "## " .. candidate
+      for _, note in ipairs(notes) do
+        lines[#lines + 1] = "- " .. note
+      end
+      lines[#lines + 1] = ""
+    end
+  end
+
+  if included == 0 then
+    return nil
+  end
+
+  local written = vfs.write("/var/whatsnew.md", table.concat(lines, "\n"))
+  if not written then
+    log.warn("Could not write /var/whatsnew.md")
+    return nil
+  end
+  log.info(string.format("Release notes: %d version(s), %s -> %s", included, previous, current))
+  return "/var/whatsnew.md"
+end
+
 function kernel.start(boot)
   local volume = component.proxy(boot.address)
   if not volume then
@@ -538,6 +617,10 @@ function kernel.start(boot)
     tpsValue = nil,
   }, { __index = kernel })
 
+  -- Notes for every release this node skipped, written before either role
+  -- starts so a headless server gets the file too.
+  instance.notesPath = writeReleaseNotes(instance, requireModule)
+
   -- A node has no desktop and may not have a GPU. Start the headless runtime
   -- before any screen work so a rack server can boot without a monitor.
   if config.get("role") == "node" then
@@ -642,6 +725,10 @@ function kernel.start(boot)
     apps = apps,
     util = util,
   })
+
+  if instance.notesPath then
+    instance.ui:notify("info", "What's new: " .. instance.notesPath)
+  end
 
   local okCluster, clusterModule = pcall(requireModule, "tc.cluster")
   if okCluster and type(clusterModule) == "table" then

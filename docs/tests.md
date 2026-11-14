@@ -28,6 +28,7 @@ npm run test:boot-update
 npm run test:notes
 npm run test:lab
 npm run test:files-scroll
+npm run test:release-notes
 npm run test:nodes
 npm run test:cluster
 npm run test:faults
@@ -36,6 +37,21 @@ npm run test:screens
 
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
+
+## 0.3.32 release notes checks
+
+`npm run test:release-notes` runs three boots against a seeded `/var/version`:
+
+1. `notes_many` starts from `0.3.29` and requires `/var/whatsnew.md` to contain
+   sections for `0.3.30`, `0.3.31` and `0.3.32` — every release skipped — and
+   not `0.3.29` itself. It also requires the `What's new: /var/whatsnew.md`
+   notice on screen and `/var/version` rewritten to `0.3.32`.
+2. `notes_one` starts from `0.3.31`: only the `0.3.32` section.
+3. `notes_same` starts from `0.3.32`: no notes file at all.
+
+The bootstrap write path is covered by `boot-update` too: the applier records
+the replaced version in `/var/version`, which is what gives the kernel a range
+on the first updated build.
 
 ## 0.3.21 Lab and Files scrolling checks
 

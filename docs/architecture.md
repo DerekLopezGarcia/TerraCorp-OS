@@ -319,6 +319,25 @@ Scripts and interpreted lines run on the desktop event loop. There is no
 preemption and no instruction budget, so a runaway loop blocks the node until it
 reboots; keep test code bounded.
 
+## Release notes in the OS
+
+`/var/version` records the last booted build. The kernel writes it on every
+boot, and the boot-time applier records the version it replaced after a
+successful install, so the first update to a build with this feature still has
+a range to work with.
+
+When the recorded version differs from the running one, the kernel loads
+`tc.changelog` and writes `/var/whatsnew.md` with the notes of **every version
+between the two, new one included**. A one-version update gets one section; a
+node that skipped four releases gets all four. Downgrades and same-version
+boots write nothing. The file is plain Markdown and Files opens it with the
+pager; the desktop also posts a `What's new` notice pointing at it. Headless
+nodes get the file too, because it is written before the role split.
+
+`tc.changelog` is the source of truth: one entry per released version, newest
+last. It is Lua because the updater only installs `src/**/*.lua`; a Markdown
+file would be rejected as an unsafe OS path by older clients.
+
 ## Cluster
 
 The kernel reads `role` from `/etc/terracorp.cfg`. `desktop` starts the UI and
