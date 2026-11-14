@@ -503,9 +503,10 @@ Transposer read cost measured in the same session: 200 `getStackInSlot` calls
 took 10,000 ms and 50 `getAllStacks` calls took 2,549 ms, both ~50 ms per call
 with `clock=uptime` — one server tick per host call whatever the payload.
 `computer.realTime` is `nil` on this build, so `clock()` fell back to `uptime`.
-`getAllStacks` is documented as returning userdata, not a table, so the bulk
-read is unproven until its wrapper is probed; until then the stock reader is
-per-slot at one tick per call.
+`getAllStacks` documents `function(side:number):userdata`, but the Lua side is a
+table: `all[1]` is a stack, `pairs` lists the wrapper's methods, and `count()` /
+`getAll()` give the length and the array (`getAll` returns a plain table). The
+bulk read is usable; the next probe checks `count()` and the array shape.
 
 Stack shape read from the drawer (face 1, slot 2) and the chest (face 3, slots
 1..7): `name`, `damage`, `size`, `label`, `maxSize`, `maxDamage`, `hasTag`;

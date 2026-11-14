@@ -177,12 +177,13 @@ per tick**, so a sweep is scheduled round-robin instead of reading every face at
 once: twenty faces fill a second, forty take two. The snapshot period follows
 from that, not from a wish for 1 Hz.
 
-Bulk read caveat: `getAllStacks(side)` is documented as returning **userdata**,
-not a Lua table (`function(side:number):userdata`). Until the wrapper's methods
-are known (`type`, `size()`, `get(1)`), the stock reader cannot iterate it, so
-per-slot reads are the only verified path — at one tick per call, a 90-slot
-machine costs 4.5 s per snapshot. The next probe decides whether the bulk read
-is usable at all; `stock.snapshot` is written after that, not before.
+Bulk read: `getAllStacks(side)` is documented as `function(side:number):userdata`
+because its Java type is one, but the Lua side is a **table**: `type(all)` says
+`table`, `all[1]` is a stack, and the wrapper exposes `count()`, `reset()` and
+`getAll()`. `getAll()` returns the whole array as a plain table (the mod's own
+doc calls it "memory intensive"); `pairs(all)` walks the wrapper's method names,
+not the slots. One call per face therefore returns every slot, so the stock
+reader uses that and never scans slots.
 
 A per-slot benchmark must keep the index inside `getInventorySize`: a loop
 `1..n` over a 27-slot chest asks for slot 28 onwards, gets `invalid slot`, and
