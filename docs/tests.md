@@ -67,7 +67,9 @@ empty (`type(count)` is `nil`), switching back restored `count` (`count + 1` is
 It also submits `type(1)` with no `=` and requires `"number"` in the log: the
 interpreter tries the line as an expression first, like OpenOS, so a bare call
 prints. `= { answer = 42 }` must show `["answer"]=42`, which covers the sorted
-table display and its elision.
+table display and its elision. `=type(collectgarbage)` must print `"nil"`: the
+client sandbox does not expose `collectgarbage`, and the harness hides it so the
+tests match the game.
 
 `lab_wrap` submits `= string.rep("Z", 200)` and requires all 200 characters on
 screen across at least three rows: a result wider than the pane must wrap, not

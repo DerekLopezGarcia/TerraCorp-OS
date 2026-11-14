@@ -421,7 +421,6 @@ function kernel.start(boot)
     io = io,
     coroutine = coroutine,
     utf8 = utf8,
-    collectgarbage = collectgarbage,
   }
 
   local requireModule

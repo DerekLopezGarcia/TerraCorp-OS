@@ -102,7 +102,6 @@ end
 local function baseLibrary()
   return {
     assert = assert,
-    collectgarbage = collectgarbage,
     error = error,
     getmetatable = getmetatable,
     ipairs = ipairs,

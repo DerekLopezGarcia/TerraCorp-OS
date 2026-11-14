@@ -73,6 +73,10 @@ Verified scan-code subset:
   without an energy component; call it under `pcall`.
 - `computer.totalMemory()` / `freeMemory()` and filesystem `spaceUsed()` /
   `spaceTotal()` return bytes. OpenComputers has no filesystem `space()` method.
+- The sandbox does not expose `collectgarbage` to user code: the real one is
+  used inside `machine.lua` only. A program cannot force a collection; observe
+  the heap with `computer.freeMemory()` and let the host collect. The local
+  harness hides `collectgarbage` too, so a test cannot lean on it.
 - `computer.uptime()` returns emulated time that advances with server ticks.
   `computer.realTime()` is **not available** on the pack's build: a probe on
   2026-11-14 (0.3.29, Supersymmetry) found it `nil` and had to fall back to
