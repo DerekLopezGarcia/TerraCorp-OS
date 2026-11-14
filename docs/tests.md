@@ -503,8 +503,15 @@ Transposer read cost measured in the same session: 200 `getStackInSlot` calls
 took 10,000 ms and 50 `getAllStacks` calls took 2,549 ms, both ~50 ms per call
 with `clock=uptime` — one server tick per host call whatever the payload.
 `computer.realTime` is `nil` on this build, so `clock()` fell back to `uptime`.
-The stock reader must use `getAllStacks` per face and sweep faces round-robin:
-one face per tick is the budget.
+`getAllStacks` is documented as returning userdata, not a table, so the bulk
+read is unproven until its wrapper is probed; until then the stock reader is
+per-slot at one tick per call.
+
+Stack shape read from the drawer (face 1, slot 2) and the chest (face 3, slots
+1..7): `name`, `damage`, `size`, `label`, `maxSize`, `maxDamage`, `hasTag`;
+`tag` only appears when `hasTag` is true. The drawer held 128
+`threng:material` (damage 23, "Flux-Plated Iron Ingot"); the chest held seven
+stacks of 64 `gregtech:item_pipe_small` (damage 23, "Small Cobalt Item Pipe").
 
 Post-release work under development: an interrupted install could leave the
 EEPROM pointed at a half-written disk (the boot address is now set after a

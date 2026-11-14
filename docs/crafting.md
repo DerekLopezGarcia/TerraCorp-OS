@@ -141,11 +141,20 @@ Two consequences:
 
 - **Drawers are visible to the Transposer** even though the Adapter does not
   expose them; the "drawers are not a sensor" conclusion only held for the
-  Adapter. Per-slot reads on that face are still to confirm.
+  Adapter. A per-slot read on that face returned a stack, so the drawer is a
+  sensor through the Transposer.
 - **A pipe answers like a one-slot inventory.** It must be classified as
   transport and never counted as a stock member: otherwise every pipe adds a
   phantom slot and the item in transit inflates the count. Classify by kind
   (descriptor), never by `size == 1` — a real one-slot container exists.
+
+Stack shape, read from the drawer and the chest: `name`, `damage`, `size`,
+`label`, `maxSize`, `maxDamage`, `hasTag`. `tag` appears **only when `hasTag` is
+true**; when it is false the field is absent, so the item key is
+`name` + `damage` (+ `tag` when present). The drawer held 128
+`threng:material` (damage 23, "Flux-Plated Iron Ingot"); the chest held seven
+stacks of 64 `gregtech:item_pipe_small` (damage 23, "Small Cobalt Item Pipe").
+`damage` carries the GT material variant, so it belongs in the key.
 
 The name is the block's registry name, so the driver layer can key on it without
 asking the block itself. A face with nothing on it answers `nil` plus
@@ -163,11 +172,17 @@ silently; "no table" from a probe usually means the container is empty.
 
 Read cost (in-game 2026-11-14): 200 `getStackInSlot` calls took **10,000 ms** and
 50 `getAllStacks` calls took **2,549 ms**, both ~50 ms with `clock=uptime` — one
-server tick per host call whatever the payload. Per-slot scans are for
-diagnostics and `move` only; `getAllStacks` is the snapshot read, and the budget
-is **about one face per tick**. A sweep is scheduled round-robin instead of
-reading every face at once: twenty faces fill a second, forty take two. The
-snapshot period follows from that, not from a wish for 1 Hz.
+server tick per host call whatever the payload. The budget is **about one face
+per tick**, so a sweep is scheduled round-robin instead of reading every face at
+once: twenty faces fill a second, forty take two. The snapshot period follows
+from that, not from a wish for 1 Hz.
+
+Bulk read caveat: `getAllStacks(side)` is documented as returning **userdata**,
+not a Lua table (`function(side:number):userdata`). Until the wrapper's methods
+are known (`type`, `size()`, `get(1)`), the stock reader cannot iterate it, so
+per-slot reads are the only verified path — at one tick per call, a 90-slot
+machine costs 4.5 s per snapshot. The next probe decides whether the bulk read
+is usable at all; `stock.snapshot` is written after that, not before.
 
 A per-slot benchmark must keep the index inside `getInventorySize`: a loop
 `1..n` over a 27-slot chest asks for slot 28 onwards, gets `invalid slot`, and
