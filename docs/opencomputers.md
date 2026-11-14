@@ -73,11 +73,11 @@ Verified scan-code subset:
   without an energy component; call it under `pcall`.
 - `computer.totalMemory()` / `freeMemory()` and filesystem `spaceUsed()` /
   `spaceTotal()` return bytes. OpenComputers has no filesystem `space()` method.
-- `computer.uptime()` returns emulated time that advances with server ticks;
-  `computer.realTime()` is believed to return wall-clock seconds with sub-second
-  resolution, but its exact behavior in 1.7.x is **pending in-game
-  verification**. The kernel's tick-rate estimate (`kernel:tps()`) degrades to
-  "no data" when `realTime` is missing or non-numeric.
+- `computer.uptime()` returns emulated time that advances with server ticks.
+  `computer.realTime()` is **not available** on the pack's build: a probe on
+  2026-11-14 (0.3.29, Supersymmetry) found it `nil` and had to fall back to
+  `uptime` for timing. The kernel's tick-rate estimate (`kernel:tps()`) therefore
+  degrades to "no data" in this pack.
 - GPU VRAM buffers (1.7.5 dev builds / 1.8, **pending in-game verification**;
   full plan in `docs/render.md`): `gpu.allocateBuffer([w, h]) -> index`,
   `gpu.buffers()`, `gpu.setActiveBuffer(index)` / `getActiveBuffer()`,

@@ -161,6 +161,14 @@ face's `getInventorySize` (a pipe has 1, a basic drawer 2, a chest 27). The
 reader asks for the size first and walks `1..size`, skipping empty slots
 silently; "no table" from a probe usually means the container is empty.
 
+Read cost (in-game 2026-11-14): 200 `getStackInSlot` calls took **10,000 ms** and
+50 `getAllStacks` calls took **2,549 ms**, both ~50 ms with `clock=uptime` — one
+server tick per host call whatever the payload. Per-slot scans are for
+diagnostics and `move` only; `getAllStacks` is the snapshot read, and the budget
+is **about one face per tick**. A sweep is scheduled round-robin instead of
+reading every face at once: twenty faces fill a second, forty take two. The
+snapshot period follows from that, not from a wish for 1 Hz.
+
 **Degradation rule**: a line without inventory reads runs in **coarse mode**
 (gate by total fill only, warning shown). The program must never pretend to
 know types or exact counts it did not read. Precision is opt-in per container,

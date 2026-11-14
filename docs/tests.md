@@ -499,6 +499,13 @@ Adapter does not, and reports pipes as one-slot inventories; both are recorded i
 [`crafting.md`](crafting.md#the-sensing-requirement-the-load-bearing-dependency)
 and [`drivers.md`](drivers.md#closed-capability-vocabulary).
 
+Transposer read cost measured in the same session: 200 `getStackInSlot` calls
+took 10,000 ms and 50 `getAllStacks` calls took 2,549 ms, both ~50 ms per call
+with `clock=uptime` — one server tick per host call whatever the payload.
+`computer.realTime` is `nil` on this build, so `clock()` fell back to `uptime`.
+The stock reader must use `getAllStacks` per face and sweep faces round-robin:
+one face per tick is the budget.
+
 Post-release work under development: an interrupted install could leave the
 EEPROM pointed at a half-written disk (the boot address is now set after a
 complete copy), re-preparing an already prepared floppy rewrote it (same
