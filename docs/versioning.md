@@ -52,13 +52,12 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.3.29 Chord, published as v0.3.29 on 2026-11-14. That is
+The current build is 0.3.30 Heap, published as v0.3.30 on 2026-11-14. That is
 also the latest stable release, so an up-to-date installation has nothing to
-fetch. Versions through 0.3.28 update to it in-game as usual: no manifest or
-paths changed shape, and no files were added. 0.3.29 fixes Ctrl+C and Ctrl+V in
-the Lab on clients that report a control character (`\3`, `\22`) as the key's
-text: the app decides by the held modifier, not by the absence of text, and an
-empty Enter now opens a line instead of doing nothing.
+fetch. Versions through 0.3.29 update to it in-game as usual: no manifest or
+paths changed shape, and no files were added. 0.3.30 exposes `collectgarbage` in
+the interpreter's environment, so the memory probe works and a session can be
+checked for giving its space back.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

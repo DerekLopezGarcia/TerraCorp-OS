@@ -1123,6 +1123,11 @@ elseif scenario == "lab_repl" then
   typeText("type(1)")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(1)
+  -- The sandbox exposes collectgarbage: the memory probe is how the operator
+  -- checks that a session gives its space back.
+  typeText("=type(collectgarbage)")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(1)
   -- A table result is elided by depth and entry count, with sorted keys.
   typeText("= { answer = 42 }")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
@@ -1769,6 +1774,10 @@ if STRICT then
     if not journal:find('\n"number"\n', 1, true) then
       errors = errors + 1
       print("FAIL: a bare expression did not print its result")
+    end
+    if not journal:find('\n"function"\n', 1, true) then
+      errors = errors + 1
+      print("FAIL: collectgarbage is missing from the interpreter environment")
     end
     if not journal:find('["answer"]=42', 1, true) then
       errors = errors + 1

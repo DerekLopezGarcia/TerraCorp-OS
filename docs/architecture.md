@@ -218,10 +218,11 @@ shortcut. `iconStyle = "accent"` draws the tile with the accent background.
 The Lab app (`/apps/lab.lua`) has three tabs. It edits `/var/lab/script.lua` and
 runs it against the live OS. `tc.lab` compiles the buffer with
 `load(source, "=/var/lab/script.lua",
-"t", env)` in a fresh environment per run: the standard libraries, `print`
-(captured), `kernel`, `vfs`, `component`, `computer`, `log`, `config`, `text`,
-`util`, `theme`, `version`, `ui`, and `kernel.require`. It is a test tool, not a
-sandbox boundary: a script can reach anything the desktop can.
+"t", env)` in a fresh environment per run: the standard libraries (including
+`collectgarbage`, so the memory probe works), `print` (captured), `kernel`,
+`vfs`, `component`, `computer`, `log`, `config`, `text`, `util`, `theme`,
+`version`, `ui`, and `kernel.require`. It is a test tool, not a sandbox
+boundary: a script can reach anything the desktop can.
 
 Every run is appended to `/var/log/lab.log` (rotated at 64 KB, newest half
 kept), with a `=== time · path · ok|error · ms` header, the captured lines, and
