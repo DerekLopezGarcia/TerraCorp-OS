@@ -508,7 +508,9 @@ with `clock=uptime` — one server tick per host call whatever the payload.
 `getAllStacks` documents `function(side:number):userdata`, but the Lua side is a
 table: `all[1]` is a stack, `pairs` lists the wrapper's methods, and `count()` /
 `getAll()` give the length and the array (`getAll` returns a plain table). The
-bulk read is usable; the next probe checks `count()` and the array shape.
+chest came back as `count 27`, `#getAll() 27`, and 448 items summed over the
+seven stacks with a name: the array has one entry per slot, empty slots are
+empty tables, so the reader skips entries without `name`.
 
 Stack shape read from the drawer (face 1, slot 2) and the chest (face 3, slots
 1..7): `name`, `damage`, `size`, `label`, `maxSize`, `maxDamage`, `hasTag`;

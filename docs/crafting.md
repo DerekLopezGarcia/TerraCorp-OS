@@ -185,6 +185,12 @@ doc calls it "memory intensive"); `pairs(all)` walks the wrapper's method names,
 not the slots. One call per face therefore returns every slot, so the stock
 reader uses that and never scans slots.
 
+The array has **one entry per slot**, not only the non-empty ones: the 27-slot
+chest with seven stacks came back as `count() == 27`, `#getAll() == 27`, and
+seven entries with a `name`. Empty slots are empty tables, so the reader skips
+any entry without `name`; summing `size` over the array gave 448, which matches
+seven stacks of 64.
+
 A per-slot benchmark must keep the index inside `getInventorySize`: a loop
 `1..n` over a 27-slot chest asks for slot 28 onwards, gets `invalid slot`, and
 aborts before printing. Benchmark one fixed slot, or wrap with
