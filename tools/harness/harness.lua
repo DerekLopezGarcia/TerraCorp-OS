@@ -1623,7 +1623,7 @@ if STRICT then
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
     if not preferences:find(
-      'iconOrder = "files,dashboard,console,settings,notes,update,nodes,vault,gaia,lab"',
+      'iconOrder = "files,dashboard,console,settings,notes,update,nodes,vault,gaia,lab,plant"',
       1,
       true
     ) then
@@ -1631,7 +1631,7 @@ if STRICT then
       print("FAIL: the desktop icon order was not saved")
     end
     if not preferences:find(
-      'iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,gaia@9,lab@10"',
+      'iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,gaia@9,lab@10,plant@11"',
       1,
       true
     ) then
@@ -1667,7 +1667,7 @@ if STRICT then
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
     if not preferences:find(
-      'iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,gaia@9,lab@10,files@32"',
+      'iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,gaia@9,lab@10,plant@11,files@32"',
       1,
       true
     ) then
