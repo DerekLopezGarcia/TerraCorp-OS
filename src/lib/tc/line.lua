@@ -349,4 +349,10 @@ function line.errorText(errors)
   return table.concat(pieces, "; ")
 end
 
+-- Public key parser for the book and the planner: `name@damage` for items,
+-- `name` for fluids. Returns name, damage or nil.
+function line.parseKey(text, kind)
+  return parseKey(text, kind)
+end
+
 return line

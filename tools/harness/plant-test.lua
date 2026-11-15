@@ -125,7 +125,7 @@ local files = {
   }, "\n") .. "\n",
   ["/etc/plant.tsv"] = table.concat({
     "casing/ingots\t10\t0",
-    "casing/casings\t0\t2",
+    "casing/casings\t0\t2\tflow\t40",
   }, "\n") .. "\n",
 }
 
@@ -311,7 +311,17 @@ for _ = 1, 3 do
 end
 equal(reader.calls, callsAfterScan, "idle stock makes zero component calls")
 
-local delta = reader:delta(snapshot.generation)
+-- A scan that reads the same numbers must not move the revision: a mirror's
+-- cursor survives idle scans, while generation still counts the scans.
+local revisionBefore = reader.revision
+local generationBefore = reader.generation
+for _ = 1, 20 do
+  reader:tick(clock + 10)
+end
+equal(reader.generation, generationBefore + 1, "the idle scan still counts in generation")
+equal(reader.revision, revisionBefore, "an unchanged scan keeps the revision")
+
+local delta = reader:delta(snapshot.revision)
 check(delta.resync ~= true and #delta.changes == 0, "current cursor is not a resync")
 local oldDelta = reader:delta(0)
 check(oldDelta.resync == true and oldDelta.snapshot ~= nil, "old cursor asks for a resync")
@@ -372,6 +382,42 @@ local plantSnapshot = service:snapshot()
 equal(plantSnapshot.status.version, "0.4.1", "plant status version")
 equal(plantSnapshot.configured, true, "plant is configured")
 check(plantSnapshot.status.cacheAge ~= nil, "plant status cache age")
+check(plantSnapshot.status.hall ~= nil, "plant status names its hall")
+equal(plantSnapshot.status.halls, 1, "a single-machine plant reports one hall")
+
+local hallView = service:hallView()
+equal(#hallView.halls, 1, "the hall view has one row")
+equal(hallView.halls[1].state, "online", "the local hall is online")
+equal(hallView.stocks and #hallView.stocks, 5, "the merged view carries the local stocks")
+check(hallView.stocks[1].name:find("/", 1, true) ~= nil, "merged stock names are hall-prefixed")
+
+--------------------------------------------------------------------------------
+-- History integration
+--------------------------------------------------------------------------------
+
+local casingsThreshold = service.thresholds["casing/casings"]
+check(casingsThreshold ~= nil and casingsThreshold.flow == true,
+  "the flow flag is parsed from /etc/plant.tsv")
+equal(casingsThreshold and casingsThreshold.trendPercent, 40, "the trend percentage is parsed")
+
+local wall = (service.history:now() or os.time()) + 1000
+for index = 1, 8 do
+  service.history:record({
+    { name = "casing/casings", kind = "item", total = 5, state = "exact", updatedAt = 1 },
+  }, wall + index * 10)
+end
+service:evaluate(clock + 80)
+
+local historyCodes = {}
+for _, alarm in ipairs(service:alarms()) do
+  historyCodes[alarm.code] = true
+end
+check(historyCodes.STALLED == true, "the plant surfaces STALLED from history")
+
+local withRates = service:snapshot()
+local rated = find(withRates.stocks, function(item) return item.name == "casing/casings" end)
+check(rated ~= nil and rated.rate ~= nil, "the snapshot carries the stock rate")
+equal(service:status().historySamples, service.history:count(), "status reports the history samples")
 
 service:stop()
 check(files["/var/plant/seen.tsv"] ~= nil, "plant stop persists first_seen")

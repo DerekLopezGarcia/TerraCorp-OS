@@ -9,6 +9,8 @@ local stock = require("tc.stock")
 local addr = require("tc.addr")
 local path = require("tc.path")
 local driver = require("tc.driver")
+local history = require("tc.history")
+local halls = require("tc.halls")
 
 local plant = {}
 plant.__index = plant
@@ -41,17 +43,28 @@ local function loadThresholds(vfs)
     number = number + 1
     local value = trim(line:gsub("#.*$", ""))
     if value ~= "" then
-      local name, minText, maxText = value:match("^(%S+)%s+(%S+)%s*(%S*)$")
+      local name, minText, maxText, expect, trendText =
+        value:match("^(%S+)%s+(%S+)%s*(%S*)%s*(%S*)%s*(%S*)$")
       local minimum = tonumber(minText)
       local maximum = maxText ~= "" and tonumber(maxText) or 0
+      local trend = trendText ~= "" and tonumber(trendText) or nil
       if not name then
-        errors[#errors + 1] = { line = number, message = "expected <stock> <min> [max]" }
+        errors[#errors + 1] = { line = number, message = "expected <stock> <min> [max] [flow|idle] [trend%]" }
       elseif not minimum or minimum < 0 then
         errors[#errors + 1] = { line = number, message = "invalid minimum: " .. tostring(minText) }
       elseif maximum and maximum < 0 then
         errors[#errors + 1] = { line = number, message = "invalid maximum: " .. tostring(maxText) }
+      elseif expect ~= "" and expect ~= "flow" and expect ~= "idle" then
+        errors[#errors + 1] = { line = number, message = "expect must be flow or idle: " .. expect }
+      elseif trendText ~= "" and (not trend or trend <= 0) then
+        errors[#errors + 1] = { line = number, message = "invalid trend percentage: " .. trendText }
       else
-        thresholds[name] = { min = minimum, max = maximum or 0 }
+        thresholds[name] = {
+          min = minimum,
+          max = maximum or 0,
+          flow = expect == "flow",
+          trendPercent = trend,
+        }
       end
     end
   end
@@ -75,6 +88,9 @@ function plant.new(options)
     addr = self.addr,
     pollInterval = self.pollInterval,
   })
+  self.history = history.new({ vfs = self.vfs, log = self.log })
+  self.hallsRegistry = halls.load(self.vfs)
+  self.hall = halls.localHall(self.hallsRegistry, computer.address(), self.kernel.hostname)
   self.thresholds = {}
   self.errors = {}
   self.alarmList = {}
@@ -173,6 +189,11 @@ function plant:evaluate(now)
     end
   end
 
+  for _, condition in ipairs(self.history:conditions(self.thresholds, now)) do
+    addAlarm(nextState, order, condition.code, condition.source,
+      condition.severity, condition.message, now)
+  end
+
   -- Preserve first-seen across ticks; last-seen always moves to now.
   for key, alarm in pairs(nextState) do
     local previous = self.alarmState[key]
@@ -206,6 +227,9 @@ end
 function plant:tick()
   local now = computer.uptime()
   local changed = self.stock:tick(now)
+  if changed then
+    self.history:record(self.stock.stocks)
+  end
   local alarmChanged = self:evaluate(now)
   return changed or alarmChanged
 end
@@ -244,10 +268,14 @@ function plant:status()
     maximum = maximum,
     link = link,
     components = #(self.components or {}),
+    hall = self.hall and self.hall.name or nil,
+    halls = math.max(1, #(self.hallsRegistry and self.hallsRegistry.list or {})),
     stocks = #(self.stock.stocks or {}),
     calls = self.stock.calls,
     scanning = self.stock.scanning,
     cacheAge = self.stock.updatedAt and math.max(0, now - self.stock.updatedAt) or nil,
+    historySamples = self.history:count(),
+    historyPersisted = self.history.persist,
     configured = self.configured,
     errors = self.errors,
   }
@@ -255,6 +283,15 @@ end
 
 function plant:snapshot()
   local snapshot = self.stock:snapshot()
+  local rates = self.history:summary()
+  for _, item in ipairs(snapshot.stocks or {}) do
+    local value = rates[item.name]
+    if value then
+      item.rate = value.rate
+      item.trend = value.trend
+      item.rateSpan = value.span
+    end
+  end
   snapshot.status = self:status()
   snapshot.alarms = self:alarms()
   snapshot.configured = self.configured
@@ -262,9 +299,27 @@ function plant:snapshot()
   return snapshot
 end
 
+--- The local hall plus every configured hall that has no snapshot yet. With
+-- one machine this is a one-row view; a second hall shows `offline` until it
+-- reports through the aggregator.
+function plant:hallView()
+  local registry = self.hallsRegistry
+  if #(registry.list or {}) == 0 then
+    registry = halls.new()
+    halls.assign(registry, self.hall.name, self.hall.address)
+  end
+  local snapshots = {
+    [self.hall.address] = { snapshot = self:snapshot(), age = 0 },
+  }
+  return halls.merge(registry, snapshots, { staleAfter = self.staleAfter })
+end
+
 function plant:stop()
   if self.addr and self.addr.save then
     self.addr:save()
+  end
+  if self.history and self.history.save then
+    self.history:save()
   end
 end
 

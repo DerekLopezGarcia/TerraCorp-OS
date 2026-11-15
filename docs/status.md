@@ -81,8 +81,57 @@ discovery.
   the casing hall against fake components. In-game: 744 input items and 5
   casings read `exact`, the app drew with zero failures, `STARVED` fired and
   cleared, and an idle line made zero calls across three seconds.
-- **Harness green**: `npm run check` (59 files, 50-file manifest), `test:plant`,
-  `test:line`, `sim`, `sim:oc` and the 50-combination screen matrix.
+- **0.4.2 Mirror**: `plant.status`, `plant.snapshot`, `plant.delta` and
+  `plant.alarms` read the plant cache over the External Link, paged with the
+  existing `LREP`/`LDATA`/`LEND` slicing. The bridge parses each completed body
+  and keeps the last reply of each kind at `GET /link/mirror`. A delta cursor is
+  the stock revision, so an idle scan does not force a resync. `npm run
+  test:link` (32 scenarios) and `npm run test:bridge` cover it. In-game: the real
+  1232-byte snapshot paged intact, the stale cursor resynced, the bridge mirror
+  parsed both stocks, and 50 s with the bridge down left the scan, cache and
+  Plant window untouched.
+- **0.4.4 History**: `tc.history` keeps a bounded ring per stock in
+  `/var/plant/history.tsv` (720 samples, two hours at a 10 s scan), computes
+  items/min and mB/min from boundary deltas, and raises `STALLED` for a stock
+  marked `flow` that does not move and `TREND` for a rate change over the
+  configured percentage. The Plant app and `plant.snapshot` show rate and trend.
+  `npm run test:history` covers the ring, rates, trend, reboot and bounds.
+  In-game: the ring persisted 34 samples across a reboot, the snapshot reported
+  `rate=0.000 rate_span=133` while idle, `STALLED` fired for a `flow` stock and
+  cleared on restore; `TREND` is harness-only because the rig is idle.
+- **0.4.5 Book/planner**: `tc.book` loads `/etc/recipes.tsv`,
+  `/etc/recipe-io.tsv` and the `/etc/lines/*.line` rules; `tc.plan` walks the
+  chain, names the bottleneck, lists the shortfall against the cached stock and
+  calibrates recipes as `declared`, `verified` or `suspect`. `plant.book` and
+  `plant.plan` expose it over the link, read-only. `npm run test:book` covers a
+  three-step chain, a hand-counted shortfall, a 25% contradiction and cycles.
+  In-game: the book loaded 5 recipes with 0 errors; 100 EV casings planned 98
+  crafts with a 592-ingot shortfall, a 3-step synthetic chain ran 1000 plans in
+  under 0.05 s, and a 1.25 calibration turned `suspect` with the measured ratio
+  (980 ingots) before restoring `verified`.
+- **0.4.7 Oracle (MCP)**: `tools/bridge/mcp.js` is a read-only MCP server over
+  stdio. Nine tools — `plant_situation`, `stock_query`, `alarm_list`, `history`,
+  `plan`, `path_list`, `path_query`, `recipe_query`, `audit_tail` — read the
+  cached mirror or queue one `plant.*` verb, and every answer names the verb
+  behind it. A missing reading is an error, never a zero. `npm run test:mcp`
+  covers the full path with a fake node. In-game: the server answered the three
+  questions from the real rig, naming `casing/ingots` (1128 exact), the stock
+  entries and the 100-casing plan (bottleneck 0.0204 targets/s, 592 missing).
+- **0.4.8 Keystone (harness-only slices)**: `tc.halls` names each computer in
+  `/etc/halls.tsv` and merges snapshots with a hall prefix, marking a missing
+  hall `offline` and an old one `stale`. `tc.gate` stores desired setpoints in
+  `/var/gates.tsv`, applies local interlocks (empty input, full output) and
+  raises `DISOBEDIENT LINE` after three refusals. `tc.move` transfers by name
+  through a transposer and reports what actually moved. `plant.halls` and
+  `gate.set` expose them over the link. The second hall, the gate and the
+  transport are not built: `npm run test:field` covers the modules. In-game the
+  modules load (`Gates: 0 lines, 0 errors`), `plant.halls` reports the local hall
+  with 1128 and 5, and `gate.set` answers `unknown_line` without a configured
+  gate; the real second-hall merge, gate reconciliation and move remain pending.
+- **Harness green**: `npm run check` (68 files, 56-file manifest), `test:link`
+  (46 scenarios), `test:bridge`, `test:history`, `test:book`, `test:mcp`,
+  `test:field`, `test:plant`, `test:line`, `sim`, `sim:oc` and the
+  50-combination screen matrix.
 - **0.4.5a parser written**: `tc.line` parses `/etc/lines/*.line` (`stock in/out`,
   multiple rules, multi-item/fluid terms, `ticks`/`limit`) without executing it;
   `npm run test:line` covers the casing fixture and malformed input. The planner
@@ -112,19 +161,12 @@ discovery.
 
 | Area | Document | Slice |
 |---|---|---|
-| Addresses, faces, first seen, local paths, drivers | [`names.md`](names.md), [`drivers.md`](drivers.md) | 0.4.1 |
-| Line-boundary stock/tank/energy readers, cache, coarse fallback | [`crafting.md`](crafting.md), [`telemetry.md`](telemetry.md) | 0.4.1 |
-| Local level alarms and the Plant app | [`plant-service.md`](plant-service.md) | 0.4.1 |
-| `plant.*` mirror over the link | [`external-link.md`](external-link.md) | 0.4.2 |
-| Second hall, `halls.tsv`, merged view | [`plant-service.md`](plant-service.md) | 0.4.3 |
-| Sample ring, rates, `STALLED`/`TREND` | [`plant-service.md`](plant-service.md) | 0.4.4 |
-| Local book, `plan()`, bottleneck, shortfall | [`recipes.md`](recipes.md) | 0.4.5 (parser written) |
-| Gates, desired state, `move` by name | [`crafting.md`](crafting.md), [`names.md`](names.md) | 0.4.6/0.4.6b |
-| Read-only MCP tools | [`agent.md`](agent.md) | 0.4.7 |
 | Reference dataset (SuSy Factory Flow) | [`research-susy-planner.md`](research-susy-planner.md) | optional |
 | Multi-hall gateway/DNS (leaf, gateway, TC1 merge) | [`middleware.md`](middleware.md) | deferred |
 
-Nothing in the 0.4.1 rows has a line of code yet. That is the honest state.
+Nothing here has a line of code yet, and none of it is required for F3: the
+reference dataset is optional and the gateway is deferred. The 0.4.3 and 0.4.6
+modules exist but their in-game halves need hardware the rig does not have.
 
 ## What is missing, in dependency order
 

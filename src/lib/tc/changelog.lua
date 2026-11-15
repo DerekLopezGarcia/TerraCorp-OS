@@ -24,6 +24,11 @@ return {
     "0.3.33",
     "0.4.0",
     "0.4.1",
+    "0.4.2",
+    "0.4.4",
+    "0.4.5",
+    "0.4.7",
+    "0.4.8",
   },
   notes = {
     ["0.3.21"] = {
@@ -88,6 +93,34 @@ return {
       "A line is a black box: one input and one output stock; the machines inside are not read.",
       "The readout runs on one component call per second and makes none while the line is idle.",
       "Groundwork: the data-only /etc/lines/<line>.line parser (stock in/out, rules, items and fluids).",
+    },
+    ["0.4.2"] = {
+      "Mirror: the plant readout now answers the External Link with plant.status, snapshot, delta and alarms.",
+      "A reply larger than one frame is paged and reassembled; the bridge keeps the last parsed reply of each kind.",
+      "The delta cursor only moves when a visible value changed, so idle scans no longer force a resync.",
+    },
+    ["0.4.4"] = {
+      "History: a bounded ring keeps two hours of samples per stock and computes items/min and mB/min.",
+      "STALLED fires when a stock marked flow does not move; TREND fires when its rate changes by the configured percentage.",
+      "The ring is stored in /var/plant/history.tsv, survives a reboot and compacts so it never grows without a cap.",
+      "Plant shows the rate next to the total; plant.snapshot carries rate and trend per stock.",
+    },
+    ["0.4.5"] = {
+      "Book: the operated recipes live in /etc/recipes.tsv and /etc/recipe-io.tsv; line programs add their rules.",
+      "plan() walks the chain, names the bottleneck and lists the shortfall against the cached stock.",
+      "Calibration marks a recipe declared, verified or suspect; a contradicted quantity plans with the measured ratio.",
+      "plant.book and plant.plan expose the book and the plan over the External Link, still read-only.",
+    },
+    ["0.4.7"] = {
+      "MCP: a read-only stdio server next to the bridge answers plant situation, stock, alarm, history, plan, path, recipe and audit questions.",
+      "Every answer cites the verb it came from; a missing reading is an error, never a zero.",
+      "plant.history and plant.paths expose the sample ring and the semantic paths without UUIDs.",
+    },
+    ["0.4.8"] = {
+      "Halls: /etc/halls.tsv names each computer and the merged view prefixes stocks with their hall; a missing hall is offline, not dropped.",
+      "Gates: desired setpoints in /var/gates.tsv, local interlocks for empty input and full output, and DISOBEDIENT LINE after repeated refusals.",
+      "Move: a bounded transfer by item name through a transposer, reporting what actually moved.",
+      "The second hall, the gate and the transport are not built yet: these modules ship harness-tested and their in-game run is pending.",
     },
   },
 }

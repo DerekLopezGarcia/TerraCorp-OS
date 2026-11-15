@@ -13,7 +13,7 @@ presented as fact.
 | Field | Value | Source |
 |---|---|---|
 | Product | TerraCorp OS | `src/lib/tc/version.lua` |
-| Version | 0.4.1 "Sprout", API 1 | `src/lib/tc/version.lua` |
+| Version | 0.4.8 "Keystone", API 1 | `src/lib/tc/version.lua` |
 | Vendor string | TerraCorp Industrial Systems | `src/lib/tc/version.lua` |
 | License | MIT | `LICENSE` |
 | Host | OpenComputers, Minecraft 1.12.2 + Forge, Supersymmetry pack | `README.md` |
@@ -33,7 +33,7 @@ redistribute Supersymmetry or Susy-Core.
 | Signal kinds consumed | `key_down`, `key_up`, `touch`, `drag`, `drop`, `scroll`, `screen_resized`, `component_added`, `component_removed`, `modem_message`, `interrupted`, `shutdown` | `docs/opencomputers.md` |
 | Keyboard | `key_down(address, char, code, playerName)`; `char` is a numeric code point or 0, `code` carries arrows/F-keys | `docs/opencomputers.md` |
 | Pointer | `touch` on press, `drag` on movement, `drop` on release; a release without movement still emits `drop` | `docs/opencomputers.md` |
-| Components | `filesystem`, `gpu`, `screen`, `modem`, `internet`, `disk_drive`, `transposer`, `tank_controller` | `src/init.lua`, `src/boot/kernel.lua`, `src/lib/tc/net.lua`, `src/lib/tc/updater.lua`, `src/lib/tc/cluster.lua`, `src/lib/tc/plant.lua` |
+| Components | `filesystem`, `gpu`, `screen`, `modem`, `internet`, `disk_drive`, `transposer`, `tank_controller`, `redstone` | `src/init.lua`, `src/boot/kernel.lua`, `src/lib/tc/net.lua`, `src/lib/tc/updater.lua`, `src/lib/tc/cluster.lua`, `src/lib/tc/plant.lua`, `src/lib/tc/gate.lua` |
 | Network frames | Protocol `TC1` version `1` on port `4200`, framed as `<protocol> <verb> <rest>` | `src/lib/tc/net.lua` |
 | Boot gesture for icons | Icons open on `drop`, so the same gesture can drag instead of opening | `docs/opencomputers.md` |
 
@@ -102,6 +102,13 @@ All state lives on the boot volume. Nothing is stored outside it.
 | `/etc/stocks.tsv` | Line-boundary stocks and their kind | `src/lib/tc/stock.lua` |
 | `/etc/plant.tsv` | Level thresholds per stock | `src/lib/tc/plant.lua` |
 | `/var/plant/seen.tsv` | Component first-seen times | `src/lib/tc/addr.lua` |
+| `/var/plant/history.tsv` | Bounded sample ring per stock | `src/lib/tc/history.lua` |
+| `/var/plant/calibration.tsv` | Recipe calibration state and ratios | `src/lib/tc/book.lua` |
+| `/etc/recipes.tsv`, `/etc/recipe-io.tsv` | Operated book | `src/lib/tc/book.lua` |
+| `/etc/lines/*.line` | Line programs (data-only rules) | `src/lib/tc/line.lua` |
+| `/etc/halls.tsv` | Hall name to computer address | `src/lib/tc/halls.lua` |
+| `/etc/gates.tsv` | Line to gate component/face and stocks | `src/lib/tc/gate.lua` |
+| `/var/gates.tsv` | Desired gate setpoints | `src/lib/tc/gate.lua` |
 | `/var/nodes.tsv` | Node registry | `src/lib/tc/registry.lua` |
 | `/var/jobs.tsv` | Job journal | `src/lib/tc/jobs.lua` |
 | `/var/vault/index.tsv`, `/var/vault/disks.tsv` | Vault index and disk reports | `src/lib/tc/vault.lua` |
@@ -203,5 +210,5 @@ The following are unknown or unmeasured, and must not be stated as fact:
 
 Before a change is considered complete the repository requires `npm run check`,
 `npm run sim`, `npm run sim:oc`, plus the focused test for whatever was touched
-(`AGENTS.md`). `npm run check` currently reports 59 files checked, 0 errors, and
-a 50-file manifest.
+(`AGENTS.md`). `npm run check` currently reports 68 files checked, 0 errors, and
+a 56-file manifest.

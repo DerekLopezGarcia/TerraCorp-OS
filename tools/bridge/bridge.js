@@ -24,6 +24,7 @@
 
 const crypto = require("crypto");
 const http = require("http");
+const { parsePlantBody } = require("./plant");
 
 const PROTOCOL = "TC1";
 const MAX_FRAME = 1024;
@@ -75,6 +76,9 @@ const HELP = [
   "      Body: one or more LINK frames, one per line. Reply: queued=<n>.",
   "  GET  /link/results?node=<addr>",
   "      Assembled bodies for that node: header, body and '# end' lines.",
+  "  GET  /link/mirror?node=<addr>",
+  "      Last parsed plant reply of each kind (status, snapshot, delta, alarms)",
+  "      as JSON. Empty until the node answers that verb.",
   "  GET  /link/state",
   "      Counters as JSON: nodes, queued, delivered, results.",
   "  GET  /",
@@ -246,7 +250,7 @@ function parseFrames(body, allowedVerbs) {
 function nodeOf(state, name) {
   let node = state.nodes.get(name);
   if (node === undefined) {
-    node = { queue: [], results: new Map() };
+    node = { queue: [], results: new Map(), mirror: new Map() };
     state.nodes.set(name, node);
   }
   return node;
@@ -268,6 +272,20 @@ function applyResultFrame(node, frame) {
     record.chunks.push({ off: Number(frame.fields.off), data: frame.fields.data });
   } else if (frame.verb === "LEND") {
     record.endSize = Number(frame.fields.size);
+    // Only a complete, plant-shaped body updates the mirror: a truncated or
+    // unrelated result must never replace the last good readout.
+    const body = recordBody(record);
+    if (!record.mirrored && Buffer.byteLength(body, "latin1") === record.endSize) {
+      const parsed = parsePlantBody(body);
+      if (parsed !== null) {
+        record.mirrored = true;
+        node.mirror.set(parsed.kind, {
+          received: new Date().toISOString(),
+          size: record.endSize,
+          parsed,
+        });
+      }
+    }
   }
 }
 
@@ -439,6 +457,25 @@ function handleResults(res, state, query) {
   sendText(res, 200, node === undefined ? "" : renderResults(node));
 }
 
+// The last plant reply of each kind, parsed. This is a cache of what the node
+// reported, not a second source of truth: an empty entry means the node has not
+// answered that verb yet, never zero stock.
+function handleMirror(res, state, query) {
+  const name = nodeFromQuery(query, res);
+  if (name === null) return;
+  const node = state.nodes.get(name);
+  const result = { node: name, updated: null };
+  if (node !== undefined) {
+    for (const [kind, entry] of node.mirror) {
+      result[kind] = { received: entry.received, size: entry.size, parsed: entry.parsed };
+      if (result.updated === null || entry.received > result.updated) {
+        result.updated = entry.received;
+      }
+    }
+  }
+  sendJson(res, 200, result);
+}
+
 function handleState(res, state) {
   // The counters are cheap; the address list is what tells an operator which
   // node to queue work for, since nothing else reveals a computer's address.
@@ -448,6 +485,7 @@ function handleState(res, state) {
       node: name,
       queued: node.queue.length,
       results: node.results.size,
+      mirror: node.mirror.size,
     });
   }
 
@@ -534,6 +572,15 @@ async function handleRequest(req, res, expectedDigest, state) {
       return;
     }
     handleResults(res, state, routed.searchParams);
+    return;
+  }
+
+  if (path === "/link/mirror") {
+    if (req.method !== "GET") {
+      sendText(res, 405, "only GET is allowed on /link/mirror");
+      return;
+    }
+    handleMirror(res, state, routed.searchParams);
     return;
   }
 

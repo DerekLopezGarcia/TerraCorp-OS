@@ -56,6 +56,11 @@ npm run test:boot-update
 npm run test:install
 npm run test:fetch
 npm run test:link
+npm run test:bridge
+npm run test:history
+npm run test:book
+npm run test:mcp
+npm run test:field
 npm run test:line
 npm run test:plant
 npm run test:gaia

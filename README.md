@@ -4,7 +4,7 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.4.1 Sprout**. The prototype boots into a desktop shell with
+Current version: **0.4.8 Keystone**. The prototype boots into a desktop shell with
 eleven apps, persists settings, notes, and the desktop icon layout, and logs
 errors. The Nodes app provisions rack servers over a wired network and keeps a
 node registry. Local simulations cover the OpenComputers API contract; in-game
@@ -37,6 +37,22 @@ testing is tracked in [`docs/tests.md`](docs/tests.md).
 - **Plant:** a local readout of line-boundary stocks: items and fluids, exact or
   coarse states, level alarms and node status. One component call per second;
   none while the line is idle.
+- **Plant mirror:** the same readout over the External Link
+  (`plant.status`, `plant.snapshot`, `plant.delta`, `plant.alarms`), paged when
+  a reply exceeds one frame, with the bridge keeping the last parsed reply of
+  each kind.
+- **Plant history:** a bounded ring per stock with items/min and mB/min,
+  `STALLED` and `TREND` alarms, and a ring that survives a reboot.
+- **Plant book:** the operated recipes in `/etc/recipes.tsv` and
+  `/etc/recipe-io.tsv`, line rules as recipes, `plan()` with bottleneck and
+  shortfall, and declared/verified/suspect calibration.
+- **Read-only MCP:** a stdio server next to the bridge exposes the situation,
+  stocks, alarms, history, plan, paths, recipes and the audit tail to an agent,
+  citing the verb behind every number.
+- **Halls, gates and move (harness-only):** a hall registry with a merged,
+  prefixed view; gate setpoints with local interlocks and `DISOBEDIENT LINE`;
+  bounded transfer by item name. The second hall, the gate and the transport
+  are not built yet, so the in-game run is pending.
 - **GAIA:** the external link. Shows whether the link to an outside agent is
   armed, edits the sink and token, and sets how far the far side can reach
   (`off`, `write`, `full`).

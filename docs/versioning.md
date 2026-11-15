@@ -52,15 +52,23 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.4.1 Sprout, published as v0.4.1 on 2026-11-15. That is
-also the latest stable release, so an up-to-date installation has nothing to
-fetch. Versions through 0.4.0 update to it in-game as usual; 0.4.1 adds seven
-files (`tc.addr`, `tc.path`, `tc.driver`, `tc.stock`, `tc.tank`, `tc.plant`,
-`apps/plant.lua`) and the manifest grows to 50 files, so the updater creates
-them and the boot applier keeps the old tree as a backup. 0.4.1 adds the Plant
-app and the local line-boundary readout: items and fluids, exact or coarse
-states, level alarms, and one component call per second. The data-only
-`tc.line` parser for `/etc/lines/<line>.line` is the 0.4.5 groundwork.
+The current build is 0.4.8 Keystone, built on 2026-11-15; v0.4.1 remains the
+latest published release until v0.4.8 is tagged. Versions through 0.4.1 update
+in place: 0.4.8 adds six files (`tc.history`, `tc.book`, `tc.plan`, `tc.halls`,
+`tc.gate`, `tc.move`), so the manifest grows to 56 files and the updater creates
+them. 0.4.1 introduced the Plant app and the local line-boundary readout: items
+and fluids, exact or coarse states, level alarms, and one component call per
+second. 0.4.2 exposes that readout over the External Link with `plant.status`,
+`plant.snapshot`, `plant.delta` and `plant.alarms`, paged with the existing
+`LREP`/`LDATA`/`LEND` slicing. 0.4.4 adds a bounded sample ring per stock
+(`/var/plant/history.tsv`), items/min and mB/min, and the `STALLED`/`TREND`
+alarms. 0.4.5 adds the operated book (`/etc/recipes.tsv`, `/etc/recipe-io.tsv`,
+line rules), `plan()` with bottleneck and shortfall, and calibration exposed as
+`plant.book` and `plant.plan`. 0.4.7 adds `plant.history` and `plant.paths` and
+the read-only MCP server at `tools/bridge/mcp.js`; the MCP tool files live on
+the host, not on the computer, so they are not in the 56-file manifest. 0.4.8
+adds the hall registry, gate setpoints/interlocks and move-by-name modules;
+their in-game halves need hardware the rig does not have.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

@@ -53,6 +53,14 @@ local function entryText(entry)
   return string.format("%s  x%d", label, math.floor(tonumber(entry.count) or 0))
 end
 
+local function rateText(stock)
+  local rate = tonumber(stock.rate)
+  if rate == nil then
+    return ""
+  end
+  return string.format("  %+.1f/min", rate)
+end
+
 function plant.create()
   local self = setmetatable({}, plant)
   self.top = 0
@@ -111,8 +119,8 @@ function plant:draw(ctx)
   v:put(1, 2, ctx.text.truncate(line, ctx.w), c.dim, c.deep)
 
   local cache = status.cacheAge and string.format("%.0fs", status.cacheAge) or "no scan"
-  local note = string.format("cache %s · calls %.0f%s", cache, status.calls or 0,
-    status.scanning and " · scanning" or "")
+  local note = string.format("cache %s · calls %.0f · hist %d%s", cache, status.calls or 0,
+    status.historySamples or 0, status.scanning and " · scanning" or "")
   if not snapshot.configured then
     note = "no stocks configured · edit /etc/stocks.tsv and /etc/paths.tsv, then R"
   end
@@ -121,7 +129,8 @@ function plant:draw(ctx)
   local lines = {}
   for _, stock in ipairs(snapshot.stocks or {}) do
     lines[#lines + 1] = {
-      text = string.format("%s  %s  %s", stock.name, tostring(stock.state or "?"), totalText(stock)),
+      text = string.format("%s  %s  %s%s", stock.name, tostring(stock.state or "?"),
+        totalText(stock), rateText(stock)),
       color = stockColor(c, stock.state),
     }
     local entries = stock.entries or {}

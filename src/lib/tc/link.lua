@@ -37,6 +37,16 @@ local COMMANDS = {
   check = "read",
   ["fs.list"] = "read",
   ["fs.read"] = "read",
+  ["plant.status"] = "read",
+  ["plant.snapshot"] = "read",
+  ["plant.delta"] = "read",
+  ["plant.alarms"] = "read",
+  ["plant.book"] = "read",
+  ["plant.plan"] = "read",
+  ["plant.history"] = "read",
+  ["plant.paths"] = "read",
+  ["plant.halls"] = "read",
+  ["gate.set"] = "write",
   ["link.interval"] = "link",
   ["fs.write"] = "write",
   ["fs.append"] = "write",
@@ -75,6 +85,64 @@ local function splitLines(text)
     lines[#lines] = nil
   end
   return lines
+end
+
+---------------------------------------------------------------- plant bodies
+
+-- Plant replies are line-oriented: a `format=` line, then scalars as
+-- `key=value`, then one record per line. A record is a name followed by
+-- `key=value` tokens separated by one space. Every value goes through
+-- net.escape, so a label with a space, a tab or a newline can never forge a
+-- field or a record. This is the same escaping the wire format already uses.
+local function plantScalar(key, value)
+  return key .. "=" .. net.escape(tostring(value))
+end
+
+local function plantRecord(name, pairs)
+  local parts = { name }
+  for _, pair in ipairs(pairs) do
+    if pair[2] ~= nil then
+      parts[#parts + 1] = plantScalar(pair[1], pair[2])
+    end
+  end
+  return table.concat(parts, " ")
+end
+
+local function plantNumber(value, digits, fallback)
+  local number = tonumber(value)
+  if not number then
+    return fallback
+  end
+  if digits then
+    return string.format("%." .. tostring(digits) .. "f", number)
+  end
+  return tostring(math.floor(number))
+end
+
+local function plantAlarmRecord(alarm)
+  return plantRecord("alarm", {
+    { "code", alarm.code },
+    { "source", alarm.source },
+    { "severity", alarm.severity },
+    { "first", plantNumber(alarm.first, 3, "-1") },
+    { "last", plantNumber(alarm.last, 3, "-1") },
+    -- Acknowledgement is local to the app; a mirror only reports it.
+    { "ack", alarm.ack and "1" or "0" },
+    { "message", alarm.message },
+  })
+end
+
+local function validStockPattern(pattern)
+  if type(pattern) ~= "string" or pattern == "" then
+    return false
+  end
+  for segment in pattern:gmatch("[^/]+") do
+    if segment ~= "*" and segment ~= "**"
+      and not segment:match("^[A-Za-z0-9_%-]+$") then
+      return false
+    end
+  end
+  return true
 end
 
 function link.new(env)
@@ -425,6 +493,26 @@ function link:run(cmd, fields)
     return self:commandInterval(fields.n)
   elseif cmd == "fs.read" then
     return self:commandRead(fields.path)
+  elseif cmd == "plant.status" then
+    return self:commandPlantStatus()
+  elseif cmd == "plant.snapshot" then
+    return self:commandPlantSnapshot(fields)
+  elseif cmd == "plant.delta" then
+    return self:commandPlantDelta(fields)
+  elseif cmd == "plant.alarms" then
+    return self:commandPlantAlarms(fields)
+  elseif cmd == "plant.book" then
+    return self:commandPlantBook(fields)
+  elseif cmd == "plant.plan" then
+    return self:commandPlantPlan(fields)
+  elseif cmd == "plant.history" then
+    return self:commandPlantHistory(fields)
+  elseif cmd == "plant.paths" then
+    return self:commandPlantPaths(fields)
+  elseif cmd == "plant.halls" then
+    return self:commandPlantHalls()
+  elseif cmd == "gate.set" then
+    return self:commandGateSet(fields)
   elseif cmd == "fs.write" then
     return self:commandWrite(fields.path, fields.data, "w")
   elseif cmd == "fs.append" then
@@ -518,6 +606,669 @@ function link:commandCheck()
   end
 
   return table.concat(parts, "\n")
+end
+
+----------------------------------------------------------------- plant mirror
+
+-- The local plant service owns the readout. These commands only read its cache,
+-- so a bridge operator sees exactly what the Plant app shows and never touches
+-- a component from the link.
+
+function link:plantService()
+  local service = self.kernel and self.kernel.plant
+  if type(service) ~= "table" then
+    return nil, "plant_unavailable"
+  end
+  return service
+end
+
+function link:localHall()
+  return tostring(self.kernel.hostname or "local")
+end
+
+-- A single local hall exists in 0.4.2. `local`, `self` and the node address are
+-- accepted as aliases; anything else is a hall this node does not own.
+function link:checkHall(hall)
+  if hall == nil or hall == "" then
+    return true
+  end
+  local wanted = tostring(hall)
+  if wanted == "local" or wanted == "self"
+    or wanted == self:localHall()
+    or wanted == tostring(self.computer.address()) then
+    return true
+  end
+  return nil, "unknown_hall"
+end
+
+function link:stockMatches(pattern, name)
+  if pattern == nil or pattern == "" then
+    return true
+  end
+  if pattern:find("*", 1, true) then
+    local okPath, pathModule = pcall(require, "tc.path")
+    if okPath and type(pathModule) == "table" and type(pathModule.matches) == "function" then
+      return pathModule.matches(pattern, name)
+    end
+    return false
+  end
+  return pattern == name
+end
+
+function link:plantScalars(status)
+  local memory = type(status.memory) == "table" and status.memory or {}
+  local lines = {
+    plantScalar("version", status.version or self.version.version or "?"),
+    plantScalar("codename", self.version.codename or ""),
+    plantScalar("address", self.computer.address()),
+    plantScalar("hall", self:localHall()),
+    plantScalar("uptime", plantNumber(status.uptime, 1, "0")),
+    plantScalar("memory_used_kb", plantNumber((tonumber(memory.used) or 0) / 1024, nil, "0")),
+    plantScalar("memory_total_kb", plantNumber((tonumber(memory.total) or 0) / 1024, nil, "0")),
+    plantScalar("energy", plantNumber(status.energy, 1, "-1")),
+    plantScalar("stored", plantNumber(status.stored, nil, "-1")),
+    plantScalar("maximum", plantNumber(status.maximum, nil, "-1")),
+    plantScalar("halls", "1"),
+    plantScalar("stocks", plantNumber(status.stocks, nil, "0")),
+    plantScalar("components", plantNumber(status.components, nil, "0")),
+    plantScalar("calls", plantNumber(status.calls, nil, "0")),
+    plantScalar("scanning", status.scanning and "1" or "0"),
+    plantScalar("cache_age", plantNumber(status.cacheAge, 3, "-1")),
+    plantScalar("history_samples", plantNumber(status.historySamples, nil, "0")),
+    plantScalar("history_persisted", status.historyPersisted and "1" or "0"),
+    plantScalar("configured", status.configured and "1" or "0"),
+    plantScalar("errors", plantNumber(#(status.errors or {}), nil, "0")),
+  }
+
+  local linkReport = type(status.link) == "table" and status.link or nil
+  if linkReport then
+    lines[#lines + 1] = plantScalar("link_enabled", linkReport.enabled and "1" or "0")
+    lines[#lines + 1] = plantScalar("link_state", linkReport.state or "?")
+  end
+  return lines
+end
+
+function link:commandPlantStatus()
+  local service, reason = self:plantService()
+  if not service then
+    return nil, reason
+  end
+  local ok, status = pcall(service.status, service)
+  if not ok or type(status) ~= "table" then
+    return nil, "plant_status_failed"
+  end
+
+  local report = self:report()
+  local lines = { "format=plant.status.v1" }
+  for _, line in ipairs(self:plantScalars(status)) do
+    lines[#lines + 1] = line
+  end
+  lines[#lines + 1] = plantScalar("generation",
+    plantNumber(service.stock and service.stock.generation, nil, "0"))
+  lines[#lines + 1] = plantScalar("revision",
+    plantNumber(service.stock and service.stock.revision, nil, "0"))
+  lines[#lines + 1] = plantScalar("alarms", plantNumber(#(service:alarms() or {}), nil, "0"))
+  lines[#lines + 1] = plantScalar("link_control", report.control or "off")
+  lines[#lines + 1] = plantScalar("link_interval", plantNumber(report.interval, nil, "0"))
+  lines[#lines + 1] = plantScalar("link_failures", plantNumber(report.failures, nil, "0"))
+  lines[#lines + 1] = plantScalar("link_commands", plantNumber(report.commands, nil, "0"))
+  if report.problem then
+    lines[#lines + 1] = plantScalar("link_problem", report.problem)
+  end
+  return table.concat(lines, "\n") .. "\n"
+end
+
+-- Shared by `plant.snapshot` and the resync branch of `plant.delta`, so the two
+-- verbs can never disagree about what a stock looks like.
+function link:plantSnapshotLines(snapshot, filter)
+  local lines = {
+    plantScalar("at", plantNumber(snapshot.at, 1, "-1")),
+    plantScalar("generation", plantNumber(snapshot.generation, nil, "0")),
+    plantScalar("revision", plantNumber(snapshot.revision, nil, "0")),
+    plantScalar("scanning", snapshot.scanning and "1" or "0"),
+    plantScalar("calls", plantNumber(snapshot.calls, nil, "0")),
+    plantScalar("configured", snapshot.configured and "1" or "0"),
+    plantScalar("halls", "1"),
+    plantScalar("hall", self:localHall()),
+    plantScalar("stocks", plantNumber(#(snapshot.stocks or {}), nil, "0")),
+  }
+
+  for _, stock in ipairs(snapshot.stocks or {}) do
+    if self:stockMatches(filter, stock.name) then
+      lines[#lines + 1] = plantRecord("stock", {
+        { "name", stock.name },
+        { "kind", stock.kind },
+        { "state", stock.state },
+        { "total", plantNumber(stock.total, nil, "0") },
+        { "age", plantNumber(stock.age, 3, "-1") },
+        { "version", plantNumber(stock.version, nil, "0") },
+        { "members", plantNumber(stock.members, nil, "0") },
+        { "cardinality", stock.cardinality },
+        { "path", stock.path },
+        { "rate", stock.rate and plantNumber(stock.rate, 3, nil) or nil },
+        { "trend", stock.trend and plantNumber(stock.trend, 1, nil) or nil },
+        { "rate_span", stock.rateSpan and plantNumber(stock.rateSpan, nil, nil) or nil },
+        { "error", stock.error },
+      })
+      for _, entry in ipairs(stock.entries or {}) do
+        lines[#lines + 1] = plantRecord("entry", {
+          { "stock", stock.name },
+          { "kind", entry.kind },
+          { "key", entry.key },
+          { "damage", entry.damage and plantNumber(entry.damage, nil, "0") or nil },
+          { "label", entry.label },
+          { "count", entry.count and plantNumber(entry.count, nil, "0") or nil },
+          { "amount", entry.amount and plantNumber(entry.amount, nil, "0") or nil },
+          { "capacity", entry.capacity and plantNumber(entry.capacity, nil, "0") or nil },
+          { "hasTag", entry.hasTag and "1" or nil },
+          { "tagged", entry.tagged and "1" or nil },
+        })
+      end
+    end
+  end
+
+  for _, alarm in ipairs(snapshot.alarms or {}) do
+    lines[#lines + 1] = plantAlarmRecord(alarm)
+  end
+  for _, item in ipairs(snapshot.errors or {}) do
+    lines[#lines + 1] = plantRecord("error", {
+      { "line", plantNumber(item.line, nil, "0") },
+      { "message", item.message },
+    })
+  end
+  return lines
+end
+
+function link:commandPlantSnapshot(fields)
+  fields = fields or {}
+  local okHall, hallReason = self:checkHall(fields.hall)
+  if not okHall then
+    return nil, hallReason
+  end
+  local filter = fields.stocks
+  if filter ~= nil and filter ~= "" and not validStockPattern(filter) then
+    return nil, "bad_stocks"
+  end
+
+  local service, reason = self:plantService()
+  if not service then
+    return nil, reason
+  end
+  local ok, snapshot = pcall(service.snapshot, service)
+  if not ok or type(snapshot) ~= "table" then
+    return nil, "plant_snapshot_failed"
+  end
+
+  local lines = { "format=plant.snapshot.v1" }
+  if filter ~= nil and filter ~= "" then
+    lines[#lines + 1] = plantScalar("filter", filter)
+  end
+  for _, line in ipairs(self:plantSnapshotLines(snapshot, filter)) do
+    lines[#lines + 1] = line
+  end
+  return table.concat(lines, "\n") .. "\n"
+end
+
+-- A cursor that matches the current revision means nothing changed. Anything
+-- else is answered with `resync=1` and a full snapshot in the same body, so a
+-- mirror rebuilt after a lost cursor takes one exchange, not a guess.
+function link:commandPlantDelta(fields)
+  fields = fields or {}
+  local cursor = nil
+  if fields.cursor ~= nil and fields.cursor ~= "" then
+    cursor = tonumber(fields.cursor)
+    if not cursor then
+      return nil, "bad_cursor"
+    end
+  end
+
+  local service, reason = self:plantService()
+  if not service then
+    return nil, reason
+  end
+  local stock = service.stock
+  if type(stock) ~= "table" then
+    return nil, "plant_unavailable"
+  end
+
+  local revision = tonumber(stock.revision) or 0
+  local lines = {
+    "format=plant.delta.v1",
+    plantScalar("cursor", plantNumber(cursor, nil, "-1")),
+    plantScalar("revision", plantNumber(revision, nil, "0")),
+    plantScalar("generation", plantNumber(stock.generation, nil, "0")),
+  }
+
+  if cursor == revision then
+    lines[#lines + 1] = plantScalar("resync", "0")
+    lines[#lines + 1] = plantScalar("changes", "0")
+    return table.concat(lines, "\n") .. "\n"
+  end
+
+  local ok, snapshot = pcall(service.snapshot, service)
+  if not ok or type(snapshot) ~= "table" then
+    return nil, "plant_snapshot_failed"
+  end
+  lines[#lines + 1] = plantScalar("resync", "1")
+  lines[#lines + 1] = plantScalar("reason", cursor == nil and "no_cursor" or "stale_cursor")
+  lines[#lines + 1] = "snapshot_begin"
+  for _, line in ipairs(self:plantSnapshotLines(snapshot)) do
+    lines[#lines + 1] = line
+  end
+  return table.concat(lines, "\n") .. "\n"
+end
+
+function link:commandPlantAlarms(fields)
+  fields = fields or {}
+  local since = nil
+  if fields.since ~= nil and fields.since ~= "" then
+    since = tonumber(fields.since)
+    if not since then
+      return nil, "bad_since"
+    end
+  end
+
+  local service, reason = self:plantService()
+  if not service then
+    return nil, reason
+  end
+  local ok, alarms = pcall(service.alarms, service)
+  if not ok or type(alarms) ~= "table" then
+    return nil, "plant_alarms_failed"
+  end
+
+  local lines = {
+    "format=plant.alarms.v1",
+    plantScalar("at", plantNumber(self.computer.uptime(), 1, "0")),
+    plantScalar("since", plantNumber(since, nil, "-1")),
+  }
+  local count = 0
+  for _, alarm in ipairs(alarms) do
+    local last = tonumber(alarm.last) or 0
+    if since == nil or last >= since then
+      lines[#lines + 1] = plantAlarmRecord(alarm)
+      count = count + 1
+    end
+  end
+  lines[#lines + 1] = plantScalar("count", tostring(count))
+  return table.concat(lines, "\n") .. "\n"
+end
+
+------------------------------------------------------------------- book/plan
+
+function link:bookService()
+  local service = self.kernel and self.kernel.book
+  if type(service) ~= "table" then
+    return nil, "book_unavailable"
+  end
+  return service
+end
+
+function link:commandPlantBook(fields)
+  fields = fields or {}
+  local service, reason = self:bookService()
+  if not service then
+    return nil, reason
+  end
+
+  local wanted = fields.recipe
+  local recipes = service:list()
+  if wanted ~= nil and wanted ~= "" then
+    local found = nil
+    for _, recipe in ipairs(recipes) do
+      if recipe.id == wanted then
+        found = recipe
+        break
+      end
+    end
+    if not found then
+      return nil, "unknown_recipe"
+    end
+    recipes = { found }
+  end
+
+  local lines = {
+    "format=plant.book.v1",
+    plantScalar("recipes", plantNumber(#service.order, nil, "0")),
+    plantScalar("errors", plantNumber(#service.errors, nil, "0")),
+    plantScalar("configured", service.configured and "1" or "0"),
+  }
+  for _, recipe in ipairs(recipes) do
+    lines[#lines + 1] = plantRecord("recipe", {
+      { "id", recipe.id },
+      { "label", recipe.label },
+      { "machine", recipe.machine },
+      { "ticks", plantNumber(recipe.ticks, nil, "0") },
+      { "priority", plantNumber(recipe.priority, nil, "0") },
+      { "machines", plantNumber(recipe.machines, nil, "1") },
+      { "source", recipe.source },
+      { "line", recipe.line },
+      { "status", recipe.status },
+      { "ratio", plantNumber(recipe.ratio, 4, "1.0000") },
+    })
+    for _, side in ipairs({ "inputs", "outputs" }) do
+      local direction = side == "inputs" and "in" or "out"
+      for _, term in ipairs(recipe[side] or {}) do
+        lines[#lines + 1] = plantRecord("io", {
+          { "recipe", recipe.id },
+          { "side", direction },
+          { "kind", term.kind },
+          { "key", term.key },
+          { "damage", plantNumber(term.damage, nil, "0") },
+          { "qty", plantNumber(term.qty, nil, "0") },
+          { "chance", plantNumber(term.chance, 4, "1.0000") },
+        })
+      end
+    end
+  end
+  for index, item in ipairs(service.errors or {}) do
+    lines[#lines + 1] = plantRecord("error", {
+      { "index", tostring(index) },
+      { "line", plantNumber(item.line, nil, "0") },
+      { "message", item.message },
+    })
+  end
+  return table.concat(lines, "\n") .. "\n"
+end
+
+function link:commandPlantPlan(fields)
+  fields = fields or {}
+  local planner = self.kernel and self.kernel.plan
+  if type(planner) ~= "table" or type(planner.run) ~= "function" then
+    return nil, "plan_unavailable"
+  end
+  local service, reason = self:plantService()
+  if not service then
+    return nil, reason
+  end
+  local qty = 1
+  if fields.qty ~= nil and fields.qty ~= "" then
+    qty = tonumber(fields.qty)
+    if not qty or qty < 1 or qty ~= math.floor(qty) then
+      return nil, "invalid_qty"
+    end
+  end
+  if type(fields.target) ~= "string" or fields.target == "" then
+    return nil, "invalid_target"
+  end
+
+  local okStock, snapshot = pcall(service.stock.snapshot, service.stock)
+  if not okStock or type(snapshot) ~= "table" then
+    return nil, "plant_snapshot_failed"
+  end
+
+  local ok, result, planReason = pcall(planner.run, planner, fields.target, qty, {
+    stocks = snapshot.stocks,
+  })
+  if not ok then
+    return nil, "plan_failed"
+  end
+  if type(result) ~= "table" then
+    return nil, tostring(planReason or "plan_failed")
+  end
+
+  local lines = {
+    "format=plant.plan.v1",
+    plantScalar("target", fields.target),
+    plantScalar("qty", plantNumber(result.qty, nil, "1")),
+    plantScalar("steps", plantNumber(#(result.steps or {}), nil, "0")),
+    plantScalar("seconds", plantNumber(result.seconds, 3, "0")),
+    plantScalar("rate", plantNumber(result.rate, 6, "0")),
+    plantScalar("bottleneck", result.bottleneck and result.bottleneck.recipe or ""),
+    plantScalar("book_recipes", plantNumber(result.book and result.book.recipes, nil, "0")),
+    plantScalar("book_errors", plantNumber(result.book and result.book.errors, nil, "0")),
+  }
+  for _, step in ipairs(result.steps or {}) do
+    lines[#lines + 1] = plantRecord("step", {
+      { "recipe", step.recipe },
+      { "label", step.label },
+      { "machine", step.machine },
+      { "line", step.line },
+      { "source", step.source },
+      { "status", step.status },
+      { "ratio", plantNumber(step.ratio, 4, "1.0000") },
+      { "crafts", plantNumber(step.crafts, nil, "0") },
+      { "seconds", plantNumber(step.seconds, 3, "0") },
+      { "rate", plantNumber(step.rate, 6, "0") },
+    })
+  end
+  for _, item in ipairs(result.shortfall or {}) do
+    lines[#lines + 1] = plantRecord("shortfall", {
+      { "kind", item.kind },
+      { "key", item.key },
+      { "damage", plantNumber(item.damage, nil, "0") },
+      { "need", plantNumber(item.need, nil, "0") },
+      { "have", plantNumber(item.have, nil, "0") },
+      { "missing", plantNumber(item.missing, nil, "0") },
+    })
+  end
+  for _, item in ipairs(result.warnings or {}) do
+    lines[#lines + 1] = plantRecord("warning", {
+      { "code", item.code },
+      { "recipe", item.recipe },
+      { "key", item.key },
+      { "ratio", item.ratio and plantNumber(item.ratio, 4, nil) or nil },
+    })
+  end
+  return table.concat(lines, "\n") .. "\n"
+end
+
+function link:commandPlantHistory(fields)
+  fields = fields or {}
+  local service, reason = self:plantService()
+  if not service then
+    return nil, reason
+  end
+  local store = service.history
+  if type(store) ~= "table" or type(store.samples) ~= "table" then
+    return nil, "history_unavailable"
+  end
+
+  local limit = math.floor(tonumber(fields.n) or 60)
+  if limit < 1 then
+    limit = 1
+  elseif limit > 360 then
+    limit = 360
+  end
+  local wanted = fields.stock
+
+  local names = {}
+  for name in pairs(store.samples) do
+    if wanted == nil or wanted == "" or wanted == name then
+      names[#names + 1] = name
+    end
+  end
+  table.sort(names)
+  if wanted ~= nil and wanted ~= "" and #names == 0 then
+    return nil, "unknown_stock"
+  end
+
+  local lines = {
+    "format=plant.history.v1",
+    plantScalar("at", plantNumber(self.computer.uptime(), 1, "0")),
+    plantScalar("limit", tostring(limit)),
+    plantScalar("stocks", tostring(#names)),
+  }
+  for _, name in ipairs(names) do
+    local list = store.samples[name]
+    local rate = store:rate(name)
+    local trend = store:trend(name)
+    lines[#lines + 1] = plantRecord("stock", {
+      { "name", name },
+      { "samples", plantNumber(#list, nil, "0") },
+      { "rate", rate and plantNumber(rate.rate, 3, nil) or nil },
+      { "rate_span", rate and plantNumber(rate.span, nil, nil) or nil },
+      { "trend", trend and plantNumber(trend.percent, 1, nil) or nil },
+      { "first", plantNumber(list[1] and list[1].t, 1, nil) },
+      { "last", plantNumber(list[#list] and list[#list].t, 1, nil) },
+    })
+    local first = math.max(1, #list - limit + 1)
+    for index = first, #list do
+      local sample = list[index]
+      lines[#lines + 1] = plantRecord("sample", {
+        { "stock", name },
+        { "t", plantNumber(sample.t, 1, "0") },
+        { "total", plantNumber(sample.total, nil, "0") },
+        { "state", sample.state },
+      })
+    end
+  end
+  return table.concat(lines, "\n") .. "\n"
+end
+
+function link:commandPlantPaths(fields)
+  fields = fields or {}
+  local service, reason = self:plantService()
+  if not service then
+    return nil, reason
+  end
+  local registry = service.stock and service.stock.paths
+  if type(registry) ~= "table" or type(registry.paths) ~= "table" then
+    return nil, "paths_unavailable"
+  end
+
+  local pattern = fields.path
+  if pattern ~= nil and pattern ~= "" and not validStockPattern(pattern) then
+    return nil, "bad_path"
+  end
+
+  local names = {}
+  for name in pairs(registry.paths) do
+    if pattern == nil or pattern == "" or self:stockMatches(pattern, name) then
+      names[#names + 1] = name
+    end
+  end
+  table.sort(names)
+  if pattern ~= nil and pattern ~= "" and #names == 0 then
+    return nil, "unknown_path"
+  end
+
+  local lines = {
+    "format=plant.paths.v1",
+    plantScalar("paths", tostring(#names)),
+  }
+  for _, name in ipairs(names) do
+    local entry = registry.paths[name]
+    local used = 0
+    for _, item in ipairs(service.stock.stocks or {}) do
+      if item.path == name then
+        used = used + 1
+      end
+    end
+    lines[#lines + 1] = plantRecord("path", {
+      { "name", name },
+      { "cardinality", entry.cardinality },
+      { "members", plantNumber(#entry.members, nil, "0") },
+      { "stocks", tostring(used) },
+      { "bound", #entry.members > 0 and "1" or "0" },
+    })
+  end
+  for _, item in ipairs(service.stock.errors or {}) do
+    lines[#lines + 1] = plantRecord("error", {
+      { "line", plantNumber(item.line, nil, "0") },
+      { "message", item.message },
+    })
+  end
+  return table.concat(lines, "\n") .. "\n"
+end
+
+function link:commandPlantHalls()
+  local service, reason = self:plantService()
+  if not service then
+    return nil, reason
+  end
+  if type(service.hallView) ~= "function" then
+    return nil, "halls_unavailable"
+  end
+  local ok, view = pcall(service.hallView, service)
+  if not ok or type(view) ~= "table" then
+    return nil, "halls_failed"
+  end
+
+  local lines = {
+    "format=plant.halls.v1",
+    plantScalar("halls", plantNumber(#(view.halls or {}), nil, "0")),
+    plantScalar("online", plantNumber(view.online, nil, "0")),
+    plantScalar("stale", plantNumber(view.stale, nil, "0")),
+    plantScalar("offline", plantNumber(view.offline, nil, "0")),
+  }
+  for _, hall in ipairs(view.halls or {}) do
+    lines[#lines + 1] = plantRecord("hall", {
+      { "name", hall.name },
+      { "state", hall.state },
+      { "stocks", plantNumber(hall.stocks, nil, "0") },
+      { "age", hall.age and plantNumber(hall.age, 1, nil) or nil },
+    })
+  end
+  for _, stock in ipairs(view.stocks or {}) do
+    lines[#lines + 1] = plantRecord("stock", {
+      { "hall", stock.hall },
+      { "name", stock.name },
+      { "kind", stock.kind },
+      { "state", stock.state },
+      { "total", plantNumber(stock.total, nil, "0") },
+      { "rate", stock.rate and plantNumber(stock.rate, 3, nil) or nil },
+    })
+  end
+  return table.concat(lines, "\n") .. "\n"
+end
+
+function link:commandGateSet(fields)
+  fields = fields or {}
+  local gateService = self.kernel and self.kernel.gate
+  if type(gateService) ~= "table" or type(gateService.reconcile) ~= "function" then
+    return nil, "gate_unavailable"
+  end
+  local name = fields.line
+  if type(name) ~= "string" or name == "" then
+    return nil, "missing_line"
+  end
+  local record = gateService:line(name)
+  if not record then
+    return nil, "unknown_line"
+  end
+
+  local ok, reason = gateService:set(name, fields.state)
+  if not ok then
+    return nil, reason
+  end
+
+  local context = {}
+  local plant = self.kernel.plant
+  if plant and plant.stock then
+    local thresholds = plant.thresholds or {}
+    local function stock(name)
+      for _, item in ipairs(plant.stock.stocks or {}) do
+        if item.name == name then
+          return item
+        end
+      end
+      return nil
+    end
+    if record.input then
+      local item = stock(record.input)
+      if item then
+        local threshold = thresholds[record.input] or {}
+        context.input = { total = item.total, min = threshold.min }
+      end
+    end
+    if record.output then
+      local item = stock(record.output)
+      if item then
+        local threshold = thresholds[record.output] or {}
+        context.output = { total = item.total, max = threshold.max }
+      end
+    end
+  end
+
+  local okProxy, proxy = pcall(component.proxy, record.component)
+  local applied, actual = gateService:reconcile(name, okProxy and proxy or nil, context)
+  if applied then
+    return string.format("line=%s desired=%s actual=%s\n",
+      name, tostring(record.desired), tostring(actual))
+  end
+  return string.format("line=%s desired=%s refused=%s\n",
+    name, tostring(record.desired), tostring(actual))
 end
 
 function link:commandList(path)

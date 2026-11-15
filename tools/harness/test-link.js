@@ -11,6 +11,7 @@ const { lua, lauxlib, lualib, to_luastring, to_jsstring } = require("fengari");
 
 const repoRoot = path.resolve(__dirname, "../..");
 const netSource = fs.readFileSync(path.join(repoRoot, "src/lib/tc/net.lua"), "utf8");
+const pathSource = fs.readFileSync(path.join(repoRoot, "src/lib/tc/path.lua"), "utf8");
 const linkSource = fs.readFileSync(path.join(repoRoot, "src/lib/tc/link.lua"), "utf8");
 const testPath = path.join(__dirname, "link-test.lua");
 
@@ -36,6 +37,31 @@ const scenarios = [
   "lua",
   "lua_error",
   "lua_refused",
+  "plant_status",
+  "plant_snapshot",
+  "plant_snapshot_hall",
+  "plant_snapshot_filter",
+  "plant_snapshot_paged",
+  "plant_delta_match",
+  "plant_delta_resync",
+  "plant_delta_nocursor",
+  "plant_alarms",
+  "plant_alarms_since",
+  "plant_unavailable",
+  "plant_book",
+  "plant_book_one",
+  "plant_book_unknown",
+  "plant_plan",
+  "plant_plan_bad",
+  "plant_history",
+  "plant_history_unknown",
+  "plant_paths",
+  "plant_paths_one",
+  "plant_paths_unknown",
+  "plant_halls",
+  "gate_set",
+  "gate_set_unknown",
+  "gate_set_tier",
 ];
 
 function runScenario(scenario) {
@@ -44,6 +70,8 @@ function runScenario(scenario) {
 
   lua.lua_pushstring(L, to_luastring(netSource));
   lua.lua_setglobal(L, to_luastring("NET_SOURCE"));
+  lua.lua_pushstring(L, to_luastring(pathSource));
+  lua.lua_setglobal(L, to_luastring("PATH_SOURCE"));
   lua.lua_pushstring(L, to_luastring(linkSource));
   lua.lua_setglobal(L, to_luastring("LINK_SOURCE"));
 

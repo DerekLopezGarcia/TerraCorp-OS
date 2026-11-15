@@ -47,6 +47,7 @@ const USAGE = [
   "  use <address>         Remember the node address in .link/node",
   "  queue <cmd> [k=v...]  Queue one LINK frame for the node",
   "  results [id]          Show stored results, or one body by id",
+  "  mirror                Last parsed plant reply of each kind",
   "  wait <id>             Poll until that result has a state",
   "",
   "Options:",
@@ -256,7 +257,11 @@ async function main() {
       return;
     }
     for (const entry of addresses) {
-      console.log(entry.node + "  queued=" + entry.queued + " results=" + entry.results);
+      console.log(
+        entry.node + "  queued=" + entry.queued +
+        " results=" + entry.results +
+        " mirror=" + (entry.mirror || 0),
+      );
     }
     return;
   }
@@ -296,6 +301,15 @@ async function main() {
       return;
     }
     for (const block of blocks) printBlock(block);
+    return;
+  }
+
+  if (command === "mirror") {
+    requireNode(options);
+    const mirror = JSON.parse(
+      await call(options, "GET", "/link/mirror?node=" + encodeURIComponent(options.node)),
+    );
+    console.log(JSON.stringify(mirror, null, 2));
     return;
   }
 

@@ -34,6 +34,8 @@ function stock.new(options)
   self.stocks = {}
   self.errors = {}
   self.generation = 0
+  self.revision = 0
+  self.signature = ""
   self.calls = 0
   self.scanning = false
   self.scan = nil
@@ -144,6 +146,8 @@ function stock:reload()
   self.stocks = nextStocks
   self.configured = #nextStocks > 0
   self.generation = self.generation + 1
+  self.revision = self.revision + 1
+  self.signature = ""
   self.scanning = false
   self.scan = nil
   self.nextScan = 0
@@ -401,6 +405,26 @@ local function beginScan(self, now)
   setPhase(self)
 end
 
+local function contentSignature(self)
+  local parts = {}
+  for _, item in ipairs(self.stocks) do
+    local entries = {}
+    for key, entry in pairs(item.entries or {}) do
+      entries[#entries + 1] = tostring(key) .. "="
+        .. tostring(entry.count or entry.amount or 0)
+    end
+    table.sort(entries)
+    parts[#parts + 1] = table.concat({
+      tostring(item.name),
+      tostring(item.kind),
+      tostring(item.state),
+      tostring(item.total or 0),
+      table.concat(entries, ","),
+    }, "|")
+  end
+  return table.concat(parts, ";")
+end
+
 local function finishScan(self, now)
   for _, item in ipairs(self.stocks) do
     local state
@@ -431,6 +455,13 @@ local function finishScan(self, now)
   end
   self.updatedAt = now
   self.generation = self.generation + 1
+  -- Idle scans still bump `generation`, but a mirror cursor must survive them.
+  -- `revision` moves only when a visible field changed.
+  local signature = contentSignature(self)
+  if signature ~= self.signature then
+    self.signature = signature
+    self.revision = self.revision + 1
+  end
   self.scanning = false
   self.scan = nil
   self.nextScan = now + self.pollInterval
@@ -512,6 +543,7 @@ function stock:snapshot()
   return {
     at = self.updatedAt,
     generation = self.generation,
+    revision = self.revision,
     scanning = self.scanning,
     calls = self.calls,
     stocks = list,
@@ -521,13 +553,18 @@ function stock:snapshot()
 end
 
 --- A minimal delta contract for 0.4.2. A cursor that is not the current
--- generation asks for a resync instead of guessing what changed.
+-- revision asks for a resync instead of guessing what changed.
 function stock:delta(cursor)
-  if cursor == self.generation then
-    return { generation = self.generation, changes = {} }
+  if tonumber(cursor) == self.revision then
+    return {
+      generation = self.generation,
+      revision = self.revision,
+      changes = {},
+    }
   end
   return {
     generation = self.generation,
+    revision = self.revision,
     resync = true,
     snapshot = self:snapshot(),
   }
@@ -539,6 +576,7 @@ function stock:status()
     calls = self.calls,
     scanning = self.scanning,
     generation = self.generation,
+    revision = self.revision,
     configured = self.configured,
     nextScanIn = math.max(0, (self.nextScan or 0) - computer.uptime()),
     errors = self.errors,

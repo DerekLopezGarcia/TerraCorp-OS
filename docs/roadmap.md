@@ -299,6 +299,15 @@ app keeps working with the bridge down.
   snapshot that would exceed one frame is paged and never silently truncated;
   killing the bridge leaves the app and its cache untouched.
 
+> **0.4.2 built and verified in-game (2026-11-15):** the four verbs are in
+> `tc.link`, the bridge parses completed plant bodies into `GET /link/mirror`,
+> `npm run test:link` covers 32 scenarios (including a 40-stock body split
+> across pages) and `npm run test:bridge` proves the mirror parser and its
+> truncation guard. The delta cursor is the stock revision, so an idle scan does
+> not force a resync. In-game: the real 1232-byte snapshot paged intact, an old
+> cursor resynced with a complete snapshot, and 50 s with the bridge down left
+> the scan, cache and Plant window untouched.
+
 ### 0.4.3 Second hall — one computer per hall, a simple merge
 
 A hall is one computer plus its config. The **aggregator** — the bridge when
@@ -312,6 +321,13 @@ leaf/gateway, no TC1 DNS protocol, no service required.**
   not dropped; adding a hall is one computer and one config row, with no new app
   or module.
 
+> **0.4.3 module built, in-game pending (2026-11-15):** `tc.halls` loads
+> `/etc/halls.tsv`, resolves the local hall, prefixes merged stocks and marks
+> missing/old halls `offline`/`stale`; `plant.halls` exposes the view. In-game
+> the 0.4.8 build reports one online hall with the two prefix-stocks; a second
+> computer with Transposers is required to verify the two-hall merge, so
+> `npm run test:field` is the rest of the evidence.
+
 ### 0.4.4 History — rates and rate alarms
 
 The OS keeps a **bounded ring** of samples on disk (downsampled, oldest dropped
@@ -323,6 +339,16 @@ cross-hall policy stays outside.
 - **Exit:** a rate collapse raises `STALLED` while the line is up; a projected
   limit raises `TREND`; the ring survives a reboot and never grows without a
   cap; the panel shows rate and age together.
+
+> **0.4.4 built and verified in-game (2026-11-15):** `tc.history` keeps 720
+> samples per stock in `/var/plant/history.tsv`, computes items/min and mB/min
+> from boundary deltas, and raises `STALLED`/`TREND` through the existing alarm
+> engine. The snapshot and the Plant app carry rate and trend. `npm run
+> test:history` covers the bounded ring, the 60 items/min rate, a -90% trend,
+> reboot persistence and compaction; `test:plant` covers the `flow` threshold
+> and the plant-level `STALLED`. In-game: the ring survived a reboot (18 → 34
+> samples), `STALLED` fired for a `flow` stock and cleared, and the Plant window
+> drew with zero failures. `TREND` remains harness-only: the rig is idle.
 
 ### 0.4.5 Book — recipes and planning, local when it fits
 
@@ -345,6 +371,17 @@ service takes it over without changing the lines or the keys. `declared`,
 > **0.4.5a built (2026-11-15):** `tc.line` (`src/lib/tc/line.lua`) parses the
 > line program format and `npm run test:line` covers the casing fixture and
 > malformed input. The planner, lines and calibration remain.
+
+> **0.4.5b/c built and verified in-game (2026-11-15):** `tc.book` loads the
+> operated book and the line rules; `tc.plan` walks the chain, names the
+> bottleneck, lists the shortfall against the cached stock and applies
+> `declared`/`verified`/`suspect` calibration. `plant.book` and `plant.plan`
+> expose both over the link. `npm run test:book` covers a three-step chain, the
+> hand-counted shortfall, a 25% contradiction and cycle/rng warnings. In-game:
+> the book loaded 5 recipes with 0 errors; 100 EV casings planned 98 crafts and
+> a 592-ingot shortfall; a 3-step synthetic chain ran 1000 plans in under 0.05 s;
+> and a 1.25 calibration turned `suspect` with 980 ingots before restoring
+> `verified`.
 
 ### 0.4.6 Gates — desired state and interlocks
 
@@ -373,6 +410,16 @@ leave one inventory and arrive in another ([`names.md`](names.md#moving-by-name)
   possible reply.
 - Cost is per slot examined, not per item moved, so the selector and the stock
   layout matter: drawers group like items for free, a chest does not.
+
+> **0.4.6 modules built, in-game pending (2026-11-15):** `tc.gate` stores
+> desired setpoints in `/var/gates.tsv`, applies the empty-input and full-output
+> interlocks and raises `DISOBEDIENT LINE` after three refusals; `gate.set` is
+> `write` tier and answers the actual state or the refusal. `tc.move` reads the
+> source slots and transfers by name through a transposer, reporting what
+> actually moved. The rig has no gate/redstone and no transport that accepts an
+> insert: the 0.4.8 build loads `Gates: 0 lines` and `gate.set` answers
+> `unknown_line`, so `npm run test:field` is the evidence and the hardware run is
+> pending.
 
 ### 0.4.7 Agent tools — read-only MCP, optional service
 
@@ -425,6 +472,16 @@ the hologram wall, sessions.
   `coarse`, `no telemetry` or `refused` — never an invented number.
 - **Scale:** a second hall is one reader computer plus config on both sides,
   with no new app or module and no gateway.
+
+> **0.4.7 built and verified in-game (2026-11-15):** `tools/bridge/mcp.js`
+> serves nine read-only tools over stdio. Each reads the cached mirror or queues
+> one `plant.*` verb, cites the verb in the answer, and fails loudly when a
+> reading is missing. `tools/bridge/plant.js` is the shared body parser;
+> `plant.history` and `plant.paths` complete the data. `npm run test:mcp` drives
+> the real bridge and a fake node through all nine tools, including the three
+> questions. In-game: the server answered the situation, the stock entries and
+> the 100-casing plan from the real rig (1128 exact, 592 missing, bottleneck
+> 0.0204 targets/s), each with its source line.
 
 ## F4 — Sessions and displays (0.5) · moved after the readout
 

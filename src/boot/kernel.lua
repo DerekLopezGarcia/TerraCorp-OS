@@ -672,6 +672,55 @@ function kernel.start(boot)
     log.error("Plant service unavailable: " .. tostring(plantModule))
   end
 
+  -- The operated book and the planner are pure data: the book is parsed once at
+  -- boot and the planner reads the cached stock snapshot. A broken book is
+  -- reported, never fatal, so the desktop still starts.
+  local okBook, bookModule = pcall(requireModule, "tc.book")
+  if okBook and type(bookModule) == "table" then
+    local okNew, service = pcall(bookModule.new, { vfs = vfs, log = log })
+    if okNew then
+      instance.book = service
+      log.trace(string.format("Recipe book: %d recipes, %d errors", #service.order, #service.errors))
+      local okPlan, planModule = pcall(requireModule, "tc.plan")
+      if okPlan and type(planModule) == "table" then
+        instance.plan = planModule.new(service)
+      else
+        log.error("Planner unavailable: " .. tostring(planModule))
+      end
+    else
+      log.error("Recipe book failed: " .. tostring(service))
+    end
+  else
+    log.error("Recipe book unavailable: " .. tostring(bookModule))
+  end
+
+  if instance.plant then
+    instance.halls = instance.plant.hallsRegistry
+    instance.hall = instance.plant.hall
+  end
+
+  -- Setpoints and movement are harness-tested until a gate and a transport
+  -- exist; loading them now means the first gate is config, not a code change.
+  local okGate, gateModule = pcall(requireModule, "tc.gate")
+  if okGate and type(gateModule) == "table" then
+    local okNew, gateService = pcall(gateModule.new, { vfs = vfs, log = log })
+    if okNew then
+      instance.gate = gateService
+      log.trace(string.format("Gates: %d lines, %d errors", #gateService.order, #gateService.errors))
+    else
+      log.error("Gate service failed: " .. tostring(gateService))
+    end
+  else
+    log.error("Gate service unavailable: " .. tostring(gateModule))
+  end
+
+  local okMove, moveModule = pcall(requireModule, "tc.move")
+  if okMove and type(moveModule) == "table" then
+    instance.move = moveModule
+  else
+    log.error("Move module unavailable: " .. tostring(moveModule))
+  end
+
   local gpuAddress = component.list("gpu")()
   if not gpuAddress then
     error("TerraCorp OS: a GPU is required to boot the desktop", 0)

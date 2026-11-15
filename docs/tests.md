@@ -63,6 +63,67 @@ against fake components. It requires:
 Terminal and requires the empty-configuration message. `npm run test:screens`
 runs the `plant` scenario at five resolutions (50 combinations total).
 
+## 0.4.2 mirror checks
+
+`npm run test:link` now runs **32 scenarios**. The eleven plant scenarios use a
+fake plant service shaped like `tc.plant` and require:
+
+1. `plant.status` carries the format line, version, hall, energy, stock and
+   alarm counts, the stock revision and the link tier.
+2. `plant.snapshot` carries the input stock, its entries, the alarms and the
+   configuration errors; a label with a space is escaped as `%20`, and the
+   `LREP` size equals the reassembled body.
+3. `hall=other` answers `unknown_hall`; `stocks=casing/casings` keeps exactly
+   one stock and drops the other.
+4. A **40-stock snapshot is larger than 1 KB**, spans several `LDATA` frames,
+   starts at offset 0, reassembles to the declared size, and keeps the last
+   stock and its label intact.
+5. `plant.delta` answers `resync=0 changes=0` for the current revision,
+   `resync=1 reason=stale_cursor` plus `snapshot_begin` and a full snapshot for
+   an old cursor, and `reason=no_cursor` on the first call.
+6. `plant.alarms` carries the alarm record and its escaped message;
+   `since=1001` filters out an alarm last seen at 1000.
+7. Without a plant service, all verbs answer `plant_unavailable`.
+
+`npm run test:bridge` starts the real bridge on a free port, queues the two
+verbs, and posts complete `LREP`/`LDATA`/`LEND` results. It requires:
+
+1. The help text names `/link/mirror`, and both queued verbs are delivered.
+2. The mirror parses the snapshot: revision, hall, ten stocks across pages, the
+   last stock, the decoded `Test Item 1` label, and the decoded alarm message.
+3. The status reply is parsed separately; a plain `status` body does not
+   replace it, and a truncated plant body does not replace the last good
+   snapshot.
+4. `/link/state` reports two mirrored kinds for the node.
+
+`tc.stock` also gained `revision`: an idle scan still increments `generation`
+but leaves `revision` unchanged, which `test:plant` verifies. That is what lets
+a mirror keep its cursor across idle polls.
+
+## 0.4.4 history checks
+
+`npm run test:history` loads `tc.history` against a fake clock and filesystem.
+It requires:
+
+1. 1000 samples at ten-second intervals produce **60 items/min** over a 120 s
+   window, and the ring stops at **720 samples** per stock.
+2. A second instance reads the same file and yields the same rate: the ring
+   survives a reboot, not just a page reload.
+3. With `maxSamples = 10` and `maxLines = 20`, the file stays at **21 lines or
+   fewer** after 100 scans, so compaction bounds it.
+4. Eight samples with an unchanged total raise **`STALLED`** for a stock marked
+   `flow`; the same stock without `flow` stays quiet.
+5. A window at 60/min followed by one at 6/min reports **-90%** and raises
+   **`TREND`** with the percentage in the message.
+6. Malformed lines are skipped, a missing file is an empty ring, and a stock
+   without samples has no rate.
+
+`npm run test:plant` also checks the extended `/etc/plant.tsv` line
+(`<stock> <min> <max> [flow|idle] [trend%]`), that the plant surfaces
+`STALLED` from history, that `plant.snapshot` carries the rate, and that
+`status.historySamples` matches the ring. `npm run test:link` checks that the
+snapshot body carries `rate`, `trend` and `rate_span`.
+
 ## 0.4.5a line parser checks
 
 `npm run test:line` loads `src/lib/tc/line.lua` in Fengari and parses
@@ -79,6 +140,89 @@ runs the `plant` scenario at five resolutions (50 combinations total).
    bad kind, unknown directive, bad limit, bad stock and an oversize file.
 
 The parser is data-only: it never executes the file (decision 22).
+
+## 0.4.5b book and planner checks
+
+`npm run test:book` loads `tc.book` and `tc.plan` over a fake book with three
+recipes and a casing line program. It requires:
+
+1. The book loads **five** recipes (three TSV recipes + two line rules) with no
+   errors, and the higher-priority TSV recipe wins over the line rule for the
+   same EV casing.
+2. A **three-step chain** (casing ← plate ← ingot) plans with the plate step as
+   the bottleneck: `0.0125` targets/s and **80 s** for one casing, because the
+   plate step has two machines but needs eight crafts per casing.
+3. `shortfall` matches a hand count: one casing needs 16 ore, the stock has 10,
+   **6 are missing**. For 200 casings: 1600 plates and 3200 ore, **3190
+   missing**.
+4. Calibration: a measured ratio of **1.25** turns `casing_ev` `suspect`, the
+   plan warns and uses 10 plates (20 ore); **1.05** is `verified` and clears the
+   warning. Calibration is written to `/var/plant/calibration.tsv`.
+5. A line-only book plans the EV rule by name (`line/casing/ev`) and reports
+   its own shortfall.
+6. A cycle A→B→A stops after the pair with a `cycle` warning; a 50% output adds
+   `rng_chain` and needs two crafts for one expected item; an empty book returns
+   `empty_book` and an unknown IO recipe is a load error.
+7. **200 three-step plans stay under one second** in the harness.
+
+`npm run test:link` adds five scenarios (`plant.book`, `plant.book_one`,
+`plant.book_unknown`, `plant.plan`, `plant.plan_bad`), for **37** total. They
+require the book body with recipes and IO, the single-recipe lookup, the plan
+body with steps, bottleneck, shortfall and warnings, and the named errors for
+an unknown recipe and a zero quantity.
+
+## 0.4.7 MCP checks
+
+`npm run test:mcp` starts the real bridge on a free port, starts
+`tools/bridge/mcp.js` over stdio, seeds the mirror with a status, a snapshot and
+an empty alarm list, and runs a fake node that answers the queued verbs. It
+requires:
+
+1. `initialize` names `terracorp-plant`, and `tools/list` returns **nine**
+   tools.
+2. **Question 1 — how is the plant?** `plant_situation` names `casing/ingots`,
+   cites **744**, reports **0 alarms**, and ends with the verbs behind the
+   answer.
+3. **Question 2 — how much titanium?** `stock_query name=casing/ingots` returns
+   `Titanium Ingot x192` and `Steel Ingot x552`; an unknown name answers
+   `No stock matches casing/nope`, not zero.
+4. **Question 3 — what does 100 casings need?** `plan` answers
+   `Bottleneck: casing_ev` and `missing 592`, with the `plant.plan` source.
+5. `alarm_list` says `No active alarms` when the list is empty.
+6. `history` returns `rate 2.5/min` and the two samples; `path_list` reports
+   names and member counts without addresses; `path_query` filters.
+7. `recipe_query recipe=casing_ev` names the assembler and lists
+   `in 8 item gregtech:meta_ingot@113`; `audit_tail` returns the log tail.
+8. A tool that cannot read returns an error with the reason; it never returns
+   an invented number.
+
+The MCP reads the cached mirror when it is fresh and queues one verb when it is
+not, so the test covers both paths. `tools/bridge/plant.js` parses both bodies;
+`test:bridge` keeps the mirror parser honest.
+
+## 0.4.3/0.4.6 hall, gate and move checks
+
+`npm run test:field` loads `tc.halls`, `tc.gate` and `tc.move` against fake
+files and a fake transposer. It requires:
+
+1. `/etc/halls.tsv` loads two valid halls and reports one bad row; the local
+   hall resolves by address, an implicit hall uses the hostname, and
+   `halls.assign`/`save`/`load` round-trips a third hall.
+2. `halls.merge` prefixes stocks with the hall name, counts the missing hall as
+   **offline** and an old snapshot as **stale**, and drops neither.
+3. `gate.set` persists the desired state in `/var/gates.tsv`; a new instance
+   restores it.
+4. The interlocks refuse an empty input (`input_empty`) and a full output
+   (`output_full`), allow a healthy line, and write the configured face through
+   the proxy.
+5. Three refusals raise **`DISOBEDIENT LINE`**; a new setpoint clears it.
+6. `move.run` moves **64 + 36 = 100** matching items across two slots, reports
+   `key_not_found`, `transport_refused`, a guard refusal and `bad_count`, and
+   caps at 512 per call.
+
+The second hall, the gate and the transport are not built. These tests are the
+evidence for the logic; the in-game run is **pending** and will be added when
+the hardware exists.
 
 ## 0.3.33 external link checks
 
@@ -747,6 +891,127 @@ casing/ingots · 744 below minimum 800`; restoring minimum 8 cleared it. Idle:
 calls between scans**. The log after the 0.4.1 boot had no new `ERR`; the only
 `ERR` is the pre-fix Plant draw from the previous boot, fixed in the installed
 app.
+
+0.4.2 mirror (in-game 2026-11-15). The 0.4.2 files (`tc.link`, `tc.stock`,
+`version`, `changelog`) were copied over the 0.4.1 install, verified byte for
+byte with a checksum, and the computer rebooted to `version=0.4.2`,
+`memory=943KB/65536KB`, 15 components. All four verbs answered over the link:
+
+- `plant.status` — 415 bytes: `codename=Mirror`, `hall=TC-2907`,
+  `revision=3`, `alarms=0`, `link_control=full`.
+- `plant.snapshot` — **1232 bytes**, seven `LDATA` slices, reassembled with the
+  declared size: `casing/ingots` exact 1128 (Aluminium 568, Titanium 192,
+  Stainless Steel 184, Steel 184) and `casing/casings` exact 5.
+- `plant.delta cursor=3` — `resync=0 changes=0`, 74 bytes.
+- `plant.delta cursor=1` — `resync=1 reason=stale_cursor` plus
+  `snapshot_begin` and the full 1308-byte snapshot.
+- `plant.alarms` — `count=0`, 49 bytes.
+
+The bridge parsed each completed reply: `GET /link/mirror` returned the status,
+snapshot and delta entries with the stock names, decoded labels and counts.
+The real snapshot is **larger than 1 KB**, so the paging criterion is met by the
+production body, not only by the harness fixture.
+
+Bridge-down check: with the Plant window open, the bridge process was killed,
+the world ran for **50 seconds**, and a new bridge was started. The node
+re-registered on its next poll; `uptime` moved from 130 s to 215 s (no reboot),
+`generation` from 11 to 16 (five scans), `revision` stayed 3 (the stock had not
+changed), `calls` from 54 to 85, both stocks still exact (1128 and 5), zero
+alarms, and the Plant window still reported **0 failures**. The link is a
+reader: losing the bridge neither stops the scan nor clears the cache.
+
+0.4.4 history (in-game 2026-11-15). The 0.4.4 files were installed over 0.4.2
+(backup in `/var/history-backup`) and the computer booted `version=0.4.4`,
+`memory=957KB/65536KB`, 15 components. Findings:
+
+- The sandbox `os.time()` is **frozen** (it stayed at `908247.6` while uptime
+  advanced 204 s → 220 s), and the log's `os.date` timestamps repeat
+  `12:17:27`. The ring therefore stamps samples with
+  `base + computer.uptime()`; `base` continues from the newest persisted
+  sample, so timestamps are monotonic across a reboot and offline time is not
+  counted as a stall.
+- After 95 s of uptime the ring held **6 samples per stock** and
+  `/var/plant/history.tsv` existed. The snapshot reported `rate=0.000`,
+  `rate_span=133` for both stocks (idle), and the Plant window drew with
+  **0 failures**.
+- With `/etc/plant.tsv` temporarily at `casing/casings 0 64 flow 50`, the
+  alarm read **`STALLED casing/casings · no movement in 65s`** while both
+  stocks stayed `exact` (1128 and 5). Restoring the original line cleared it
+  to zero alarms.
+- Reboot persistence: the ring went from **18 samples** (9 per stock) before
+  the reboot to **34** after it, `base=144`, the newest sample at `t=243.35`,
+  and the file held **69 lines**. The ring is bounded and survived the restart.
+
+`TREND` was verified with synthetic samples (60/min → 6/min, **-90%**), not
+in-game: the rig is idle and moving ingots to create two real rates would
+change the stock the user keeps.
+
+0.4.5 book and plan (in-game 2026-11-15). The 0.4.5 files were copied over 0.4.4
+(backup in `/var/plan-backup`), the casing book and line program were written to
+`/etc`, and the computer booted `version=0.4.5`, `memory=1034KB/65536KB`, 15
+components. The log read `Recipe book: 5 recipes, 0 errors` (one TSV recipe and
+the four line rules). Results:
+
+- `plant.book` — **1745 bytes**, four `LDATA` slices: `casing_ev` (priority 10,
+  assembler, 50 ticks) plus `line/casing/{lv,mv,hv,ev}` with their item terms.
+- `plant.plan target=item gregtech:machine_casing@4 qty=100` — one step
+  (`casing_ev`), **98 crafts** (100 minus 2 EV in stock), **4900 s**, bottleneck
+  `casing_ev`, rate `0.020408` targets/s. Shortfall: **784 titanium ingots
+  needed, 192 in stock, 592 missing** — the hand count.
+- A synthetic three-step book (casing ← plate ← ingot) was written to `/etc`
+  temporarily; the plan produced **3 steps** with `plate_ti` as the bottleneck
+  and **1000 plans ran in under 0.05 s** (`computer.uptime` delta `0.0`). The
+  real book was restored immediately and planned again correctly.
+- Calibration: `book:calibrate("casing_ev", 1.25)` and the line rule at the
+  same ratio both became `suspect`; the plan warned `suspect_recipe`, used
+  **1.25** and raised the need to **980 ingots (788 missing)**. Restoring
+  `1.0` returned both to `verified` and the plan to 592 missing.
+  `/var/plant/calibration.tsv` held the expected rows.
+- `/lib/tc/book.lua`, `plan.lua`, `link.lua` and `kernel.lua` were verified
+  byte for byte after the copy; no new `ERR` appeared in the log.
+
+The planner reads the cached stock snapshot and makes no component call, which
+is why 1000 plans stay under the uptime resolution.
+
+0.4.7 MCP (in-game 2026-11-15). The 0.4.7 `tc.link` was copied over 0.4.5
+(backup in `/var/mcp-backup`) and the computer booted `version=0.4.7`,
+`memory=1065KB/65536KB`, 15 components. `plant.history stock=casing/ingots n=3`
+returned **279 samples**, rate `0.000`, `rate_span=129`, and the last three at
+`t=4131.6, 4146.7, 4161.8`; `plant.paths` returned the two casing paths, both
+`single`, 1 member, bound. The MCP server then answered the three posed
+questions from `.link/`:
+
+1. **How is the plant?** `plant_situation` → `TerraCorp 0.4.7 at TC-2907`,
+   `2 stocks, 0 alarms`, `casing/ingots exact 1128 items`, `casing/casings
+   exact 5 items`, with `source: plant.status + plant.snapshot + plant.alarms`.
+2. **How much titanium?** `stock_query name=casing/ingots` → `Titanium Ingot
+   x192 (damage 113)` beside Aluminium 568, Stainless Steel 184 and Steel 184,
+   with the snapshot receive time.
+3. **What does 100 casings need?** `plan` → `Bottleneck: casing_ev (0.0204
+   targets/s), 4900 s`, 98 crafts, `need 784, have 192, missing 592`, with the
+   `plant.plan` source.
+
+The nine tools listed in `tools/list`, and the server identified itself as
+`terracorp-plant 0.4.7`. No answer used a number that was not in a tool result.
+
+0.4.8 field modules (in-game 2026-11-15). The 0.4.8 files were copied over 0.4.7
+(backup in `/var/keystone-backup`) and the computer booted `version=0.4.8`,
+`memory=1120KB/65536KB`, 15 components. The log read `Recipe book: 5 recipes, 0
+errors` and **`Gates: 0 lines, 0 errors`**. Results:
+
+- `plant.status` — `hall=TC-2907`, `halls=1`, `history_samples=822`: the ring
+  kept growing across the updates.
+- `plant.halls` — one online hall, `hall name=TC-2907 state=online stocks=2`,
+  and the merged stocks `TC-2907/casing/ingots` exact 1128 and
+  `TC-2907/casing/casings` exact 5. The prefix is the hall, as designed.
+- `gate.set line=lv state=1` — `unknown_line`, because `/etc/gates.tsv` has no
+  gate yet. The refusal is safe: no component call, no write to the world.
+- The MCP server identified as `terracorp-plant 0.4.8` and answered the three
+  questions again from the updated build (1128 exact, 592 missing, bottleneck
+  0.0204 targets/s).
+
+The actual second hall, gate reconciliation and move are **pending hardware**:
+`npm run test:field` covers the hall merge, interlocks and transfer logic.
 
 Post-release work under development: an interrupted install could leave the
 EEPROM pointed at a half-written disk (the boot address is now set after a

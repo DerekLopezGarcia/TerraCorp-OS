@@ -1,11 +1,11 @@
 # The operator agent (MCP)
 
-Status: **design**. The decision layer of the plant: a local model that reads
-the plant through MCP tools and decides what should happen. It replaces the
-"human at the panel" as the decision-maker, not the deterministic machinery
-underneath. The tools are served by the bridge from the local mirror, or by the
-optional service when it runs; see [`plant-service.md`](plant-service.md) and
-[`roadmap.md`](roadmap.md) decision 15.
+Status: **read tools implemented in 0.4.7** (`tools/bridge/mcp.js`, nine tools
+over stdio). The decision layer — a local model that reads the plant and
+decides what should happen — is still design. The tools are served by the
+bridge from the local mirror, or by the optional service when it runs; see
+[`plant-service.md`](plant-service.md) and [`roadmap.md`](roadmap.md) decision
+15.
 
 ## What the agent is, and what it is not allowed to be
 
@@ -31,19 +31,22 @@ to choose the goal and judge the answer.
 
 | Tool | Arguments | Returns | Why it is shaped this way |
 |---|---|---|---|
-| `plant_situation` | `hall?` | One compact report: halls alive, top alarms, stocks out of limits, rates, stale sources, open orders | Fits a few KB. A dump of every type would burn the context and bury the signal |
-| `stock_query` | `stock`/`hall`, `keys?`, `limit`, `sort` | Filtered, paged entries: key, count, rate | Never "return everything"; the caller must ask |
-| `alarm_list` | `since`, `severity` | Alarms with source, first/last seen, ack state | The agent needs the timeline, not a redesign of it |
-| `history` | `key`, `window`, `bucket` | Downsampled series | 3600 samples is not information, it is noise |
-| `plan` | `target`, `qty`, `constraints` | Steps, seconds, bottleneck, shortfall, warnings | The deterministic planner from [`recipes.md`](recipes.md) |
-| `line_list` | — | Lines, gates, bindings, last refusal reason | Shows what the plant can actually drive |
-| `path_list` | `hall?`, `prefix?` | Semantic paths with member counts, cardinality (`single`/`pool`), state and per-member levels when cheap | The plant's vocabulary — a path is how the plant says "these are the same thing" and "do it in parallel" |
-| `path_query` | `path` (wildcards) | The resolved members, kinds and states, or why it does not resolve | A path that does not resolve must never silently become a nearby guess |
-| `recipe_query` | `id?` | Book entries with state `declared`/`measured`/`verified` | Calibration state is part of the truth |
-| `audit_tail` | `n` | The agent's own recent actions and their results | Self-check against what actually happened |
+| `plant_situation` | — | One compact report: version, hall, stocks with levels and rates, alarm count | Fits a few KB. A dump of every type would burn the context and bury the signal |
+| `stock_query` | `name?`, `kind?` | One stock or every stock, with its entries: key, label, count/amount | Never "return everything"; the caller must ask, and an unknown name is named |
+| `alarm_list` | `since?` | Alarms with source, severity, first/last ring time and message | The agent needs the timeline, not a redesign of it |
+| `history` | `stock?`, `limit?` | Rate, trend and the most recent samples per stock | 3600 samples is not information, it is noise |
+| `plan` | `target`, `qty?` | Steps, seconds, bottleneck, shortfall, warnings | The deterministic planner from [`recipes.md`](recipes.md) |
+| `path_list` | — | Semantic paths with cardinality, member count, stock count and bound state | The plant's vocabulary; addresses stay on the node |
+| `path_query` | `path` (wildcards) | The matching paths, or `unknown_path` | A path that does not resolve must never silently become a nearby guess |
+| `recipe_query` | `recipe?`, `output?` | Book entries with state `declared`/`verified`/`suspect` and their IO | Calibration state is part of the truth |
+| `audit_tail` | `n?` | The tail of `/var/log/tc.log` | Self-check against what actually happened |
+
+`line_list` remains design: the line program is on disk and `plan` names the
+line of each step, but there is no separate tool yet.
 
 Read tools are safe by construction: they cannot change the world, so the agent
-can be given them before anything is proven.
+can be given them before anything is proven. A missing reading is an error, not
+a zero.
 
 ## Tools: write (F7)
 

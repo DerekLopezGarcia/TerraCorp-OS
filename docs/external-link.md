@@ -10,10 +10,11 @@ Status: **phase 1 and 2 implemented**, merged for 0.3.20. What exists today:
 | Start after first render, one step per frame | `src/boot/kernel.lua` |
 | Bridge | `tools/bridge/bridge.js` |
 | Operator window: state, sink, token, tier | `src/apps/gaia.lua` |
-| Gate | `npm run test:link` (21 scenarios) and `npm run test:gaia` |
+| Gate | `npm run test:link` (46 scenarios), `npm run test:bridge` and `npm run test:gaia` |
 
-0.4.x adds the plant readout verbs below; they are design only. The local
-**Plant** app does not need the link, and the link does not need the service.
+0.4.2 adds the plant readout verbs below. The local **Plant** app does not need
+the link, and the link does not need the service: the four verbs read the
+service cache, so a missing bridge leaves the readout untouched.
 
 The harness proves the state machine against a fake Internet Card. In-game,
 0.3.33 verified `status`, `log`, `fs.read`, `fs.write`, `link.interval` and
@@ -129,8 +130,8 @@ know, and the existing peers never send these.
 A command that the current tier does not allow answers `LREP` with
 `state=error reason=needs_<tier>_control` and touches nothing.
 
-Proposed for 0.4 — the plant readout verbs
-([`plant-service.md`](plant-service.md)), not implemented yet. The first
+Implemented in 0.4.2 — the plant readout verbs
+([`plant-service.md`](plant-service.md)). The first
 contract is the **plant snapshot**, not a list of component addresses: an
 external client reads names and counts, and the OS keeps the UUIDs and paths
 inside.
@@ -141,16 +142,121 @@ inside.
 | `plant.snapshot` | read | 0.4.2 | `hall?`, `stocks?` | Paged snapshot: `kind`, `key`, `count`, `state` |
 | `plant.delta` | read | 0.4.2 | `cursor` | Changed entries plus the new cursor; `reason=resync` when expired |
 | `plant.alarms` | read | 0.4.2 | `since?` | Local level alarms with severity, source, first/last seen, ack |
+| `plant.book` | read | 0.4.5 | `recipe?` | The operated book: recipes with their inputs and outputs |
+| `plant.plan` | read | 0.4.5 | `target`, `qty?` | Steps, bottleneck, shortfall and warnings for one target |
+| `plant.history` | read | 0.4.7 | `stock?`, `n?` | The bounded ring: rate, trend and recent samples per stock |
+| `plant.paths` | read | 0.4.7 | `path?` | Semantic paths with cardinality, member count and bound state |
+| `plant.halls` | read | 0.4.8 | — | The hall registry and the merged, prefixed stock view |
+| `gate.set` | write | 0.4.8 | `line`, `state` | Actual state, or `refused=<why>`; the setpoint is stored |
 | `gate.set` | write | 0.4.6 | `line`, `state` | Actual state, or `refused reason=<why>` |
 | `move` | write | 0.4.6b | `from`, `to`, `n`, `key`, `member?`, `policy?` | `moved=<n> slots=<k>` per member, or `moved=0 reason=<why>` |
 
 `component.list`, `path.list`, `path.query`, `path.assign`, `driver.*` and
-`line.list` are **local** in 0.4.1: the Plant app calls them in-process. They
+`line.list` are **local** in 0.4.2: the Plant app calls them in-process. They
 can join the link later if a remote editor needs them; the mirror does not need
 a UUID to show a stock.
 
 Every plant verb speaks the names the OS already knows; a name the node does not
 have answers `unknown_stock` or `unknown_line`, never a guess.
+
+### Plant body format
+
+A plant reply is text, not JSON, so it survives the same frame escaping as any
+other body:
+
+- The first line is `format=plant.<status|snapshot|delta|alarms>.v1`.
+- Scalars are one `key=value` per line.
+- Records are one line each: a type (`stock`, `entry`, `alarm`, `error`) and
+  then `key=value` tokens separated by one space.
+- Every value is escaped with the wire rules (`%` `%25`, space `%20`, tab
+  `%09`, CR `%0D`, LF `%0A`, `=` `%3D`), so a label can never forge a field or
+  a record. Percent-decoding the value restores the label.
+
+A snapshot body looks like this (one stock with one entry):
+
+```text
+format=plant.snapshot.v1
+at=1002.5
+generation=41
+revision=4
+scanning=0
+calls=12
+configured=1
+halls=1
+hall=TC-2907
+stocks=1
+stock name=casing/ingots kind=item state=exact total=744 age=1.250 version=4 members=1 cardinality=single path=casing/ingots rate=-3.500 trend=-12.0 rate_span=120
+entry stock=casing/ingots kind=item key=gregtech:meta_ingot damage=113 label=Titanium%20Ingot count=192
+```
+
+`rate` is items (or mB) per minute over the history window; `trend` is the
+signed percentage change between the previous and recent halves. A stock with
+no history yet omits both fields.
+
+`plant.status` is all scalars (`version`, `uptime`, `memory_used_kb`,
+`memory_total_kb`, `energy`, `stocks`, `calls`, `revision`, `alarms`,
+`link_control`, …). `plant.alarms` carries the same `alarm` records and a
+`count`; `since` keeps only alarms whose `last` is at or after that uptime.
+
+`plant.book` lists every recipe as a `recipe` record (`id`, `label`, `machine`,
+`ticks`, `priority`, `machines`, `source`, `line`, `status`, `ratio`) followed
+by `io` records (`recipe`, `side`, `kind`, `key`, `damage`, `qty`, `chance`).
+`recipe=` returns one; `id` is already the frame id, so it cannot name the
+recipe.
+
+`plant.plan` returns `format=plant.plan.v1`, the target and quantity, the step
+count, total seconds and chain rate, and the bottleneck recipe. Then one `step`
+record per step (`crafts`, `seconds`, `rate` in crafts/s), one `shortfall` record
+per missing leaf (`need`, `have`, `missing`), and one `warning` record per
+condition (`suspect_recipe`, `cycle`, `rng_chain`, `unseen_key`, `depth_limit`).
+The plan reads the cached snapshot, so it makes no component call.
+
+`plant.history` returns `format=plant.history.v1` and one `stock` record per
+stock (`samples`, `rate`, `rate_span`, `trend`, `first`, `last`) followed by its
+most recent `sample` records (`t`, `total`, `state`). `t` is **ring seconds**,
+not wall clock: the OS stamps samples with `base + computer.uptime()` and
+continues `base` from the newest persisted sample, so a reboot does not rewind
+the ring and offline time is not counted as a stall. `n` caps the samples per
+stock (1–360, default 60).
+
+`plant.paths` returns `format=plant.paths.v1` and one `path` record per semantic
+path (`name`, `cardinality`, `members`, `stocks`, `bound`). It exposes no
+component address: the UUIDs stay on the node, which is the point of the path.
+
+`plant.halls` returns `format=plant.halls.v1`, the online/stale/offline counts,
+one `hall` record per configured hall (`name`, `state`, `stocks`, `age`) and one
+`stock` record per merged stock with its hall prefix. The local hall is always
+the source; a configured hall that has not reported is `offline`, never silently
+dropped.
+
+`gate.set` stores the desired state before reconciling and answers
+`line=<line> desired=<0|1> actual=<0|1>` or `refused=<reason>`. The refusal is a
+successful body, because the setpoint was accepted; a retry reconciles the same
+desired state, never a toggle.
+
+The read-only MCP server (`tools/bridge/mcp.js`) wraps these verbs for an agent.
+It answers over stdio, cites the verb behind every number and treats a missing
+reading as an error, never as zero.
+
+`plant.delta` compares `cursor` with the stock **revision**, not the scan
+generation: an idle scan that reads the same numbers does not move it. A match
+answers `resync=0 changes=0`. Anything else answers `resync=1` with
+`reason=stale_cursor` (or `no_cursor` on the first call) and then
+`snapshot_begin`, followed by a complete snapshot body in the same reply. A
+mirror rebuilt after a lost cursor therefore needs one exchange, not a guess.
+
+`stocks` on `plant.snapshot` is a wildcard path filter (`*` one segment, `**`
+zero or more); an invalid pattern answers `bad_stocks`. `hall` accepts `local`,
+`self`, the hostname or the node address; anything else answers `unknown_hall`.
+`plant.status`, `plant.snapshot` and `plant.alarms` are readable at control
+`off`; none of them touches a component, so the bridge sees exactly the cached
+numbers the Plant app shows.
+
+The bridge keeps the last parsed reply of each kind at
+`GET /link/mirror?node=<addr>` (`status`, `snapshot`, `delta`, `alarms`), with
+the receive time and the parsed records. Only a complete body whose byte count
+matches `LEND` and whose first line is `format=plant.` replaces an entry, so a
+truncated page or an unrelated result cannot overwrite the last good readout.
 
 `gate.set` carries **desired state, never an action**: a retried frame must not
 invert a gate, and a reboot must restore the last setpoints without asking the
