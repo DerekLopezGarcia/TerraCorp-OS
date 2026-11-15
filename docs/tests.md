@@ -33,10 +33,28 @@ npm run test:nodes
 npm run test:cluster
 npm run test:faults
 npm run test:screens
+npm run test:line
 ```
 
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
+
+## 0.4.5a line parser checks
+
+`npm run test:line` loads `src/lib/tc/line.lua` in Fengari and parses
+`tools/harness/fixtures/casing.line` plus malformed input. It requires:
+
+1. the casing file has four rules (`lv`/`mv`/`hv`/`ev`), the two stock lists,
+   `ticks 50` and the EV casing limit of 64;
+2. each rule's item key, damage and quantity, and its `ruleText` form
+   (`in 8 item gregtech:meta_ingot@324 = out 1 item gregtech:machine_casing@1`);
+3. a multi-term rule with three inputs (including `1000 fluid water`) and two
+   outputs (including `500 fluid steam`);
+4. CRLF, BOM, comments, an item without `@` (damage 0) and an empty file;
+5. errors for missing `in`/`out`, duplicate rule, zero or fractional quantity,
+   bad kind, unknown directive, bad limit, bad stock and an oversize file.
+
+The parser is data-only: it never executes the file (decision 22).
 
 ## 0.3.33 external link checks
 
@@ -638,7 +656,7 @@ The External Link then answered `status`, `log`, `fs.read`, `fs.write`,
 the session possible: every probe above ran as a short chunk over the bridge
 instead of from the Lab. Items, fluids, energy and coarse redstone are answered
 here and in [`telemetry.md`](telemetry.md#in-game-verification-checklist); a
-multiblock tank and one working machine remain, to be measured during 0.4.2 and
+multiblock tank and one working machine remain, to be measured during 0.4.1 and
 0.4.4.
 
 Stack shape read from the drawer (face 1, slot 2) and the chest (face 3, slots
@@ -646,6 +664,45 @@ Stack shape read from the drawer (face 1, slot 2) and the chest (face 3, slots
 `tag` only appears when `hasTag` is true. The drawer held 128
 `threng:material` (damage 23, "Flux-Plated Iron Ingot"); the chest held seven
 stacks of 64 `gregtech:item_pipe_small` (damage 23, "Small Cobalt Item Pipe").
+
+0.4.0 memory configuration (in-game 2026-11-15). The client's
+`config/opencomputers/settings.conf` was edited to scale the six `ramSizes` by
+32 (level 1 = 6 MB, level 6 = 32 MB); `maxTotalRam` was already `67108864`
+bytes (64 MB), the same value as the server config. A full game restart was
+required. The 0.4.0 computer then answered `status` with
+`memory=863KB/65536KB` (version 0.4.0, uptime 585 s, 18 components); the log
+held only repeated `cluster: no network card installed` warnings, no `ERR`
+entries. The cap is per Lua machine: a top module is 32 MB, a Tier 1 module is
+6 MB, and any combination above 64 MB is clamped. The `supersymmetry-local`
+server config was not changed; on a dedicated server that file would have to
+match. This is the premise behind decision 23 (F3 is local first).
+
+0.4.1 first hall (in-game 2026-11-15). The first rig built for the local
+readout: five Transposers, each with a `gregtech:machine` on face 1 and the same
+`gregtech:item_pipe_large` on face 2. Three are GT crates of 144 slots; the other
+two are an HV assembler (10 slots) and an HV bender (3 slots). One crate
+(`502a3776…`) held 64 `gregtech:meta_ingot` damage 113 (Titanium Ingot); the
+rest were empty. Empty GT-crate slots answer `minecraft:air` with `size=0`, not
+an empty table — see [`crafting.md`](crafting.md#the-sensing-requirement-the-load-bearing-dependency).
+The pipe is a 1-slot `gregtech:item_pipe_large` and must be classified as
+transport, not stock. **For the line model only the input (`502a3776…`) and
+output (`05be29b9…`) Transposers are boundary sensors; the bender/assembler
+Transposers are debug-only (decision 24).** There is no Adapter on the rig, so
+`getProgress`/`getMaxProgress`/`getEUt` remain unreadable; the line does not need
+them: its rate comes from the boundary deltas. The line runs titanium
+ingot → bender (circuit 1) → plate → assembler (circuit 8) → EV machine casing. The first `transferItem` from
+the crate (face 1) to the large pipe (face 2) answered `true, 0`: the pipe was
+not routed to the bender yet. After the pipe was connected to the bender, the
+same call answered `true, 1`, a batch of 8 answered `true, 8`, the bender
+auto-output the plates to the assembler, and the assembler produced
+`gregtech:machine_casing` (damage 4) in the output crate. Eight ingots make one
+casing; 48 ingots remained after two casings. A GT pipe is a valid sink **when
+its network has a destination**; a disconnected pipe returns 0, not an error.
+The four casing tiers were then produced from 8 ingots each: Steel → LV
+(metadata 1), Aluminium → MV (2), Stainless Steel → HV (3), Titanium → EV (4).
+The output crate held 2 EV, 1 HV, 1 LV and 1 MV; ULV (wrought iron) was not in
+the crate. RecipeViewer's dataset agrees on the circuit (8), the 8 plates and
+the material-to-tier mapping; see [`recipes.md`](recipes.md#machine-casings-assembler-circuit-8).
 
 Post-release work under development: an interrupted install could leave the
 EEPROM pointed at a half-written disk (the boot address is now set after a

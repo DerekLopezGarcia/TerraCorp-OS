@@ -17,7 +17,7 @@ layers feed each other instead of duplicating a recipe database.
 TerraCorp's job here: inspect both buffers as inventories (item types + counts),
 let the operator pick which types to allow and how much to feed, and gate the
 feed while the result's stock is below its limit. Target: 0.8.x `tc/craft` plus a
-selection UI; the stock reader it depends on is 0.4.2 (F3 plant readout).
+selection UI; the stock reader it depends on is 0.4.1 (F3 plant readout).
 Design; "verify" items need in-game probes.
 
 **Why this exists**: drawers ship a redstone upgrade that outputs 0–15 by
@@ -69,15 +69,22 @@ craft1.out = drawer C + crate 2
   used by TerraCorp**: it is the constraint being replaced. It remains
   available for dumb vanilla-side indicators.
 
+A line exposes exactly two of those stocks: the **input** buffer and the
+**output** buffer. Transposers sit only at those boundaries; the machines, pipes
+and internal buffers in between are opaque to the OS. The line's recipe and rate
+come from the boundary deltas (decision 24), which is why the craft loop reads IN
+and OUT and nothing else.
+
 ## Program contract
 
 ### 1. Recipe selection (a setpoint, not a recipe)
 
 Selection says *which types may feed, how many, and up to which output limit*.
-It is normally made in the plant-service panel
-([`plant-service.md`](plant-service.md)) and arrives at the node as a run
-descriptor plus the line's desired state (0.4.6); the node also accepts it
-locally from the Terminal, so a hall without a bridge still runs a line.
+It is normally made in the **Plant** app (local) or in the optional
+plant-service panel ([`plant-service.md`](plant-service.md)) and arrives at the
+node as a run descriptor plus the line's desired state (0.4.6); the node also
+accepts it locally from the Terminal, so a hall without a bridge still runs a
+line.
 
 1. `read IN` — list every item type currently in the input buffer with its
    count (live re-read; the buffer is the recipe source of truth).
@@ -147,6 +154,10 @@ Two consequences:
   transport and never counted as a stock member: otherwise every pipe adds a
   phantom slot and the item in transit inflates the count. Classify by kind
   (descriptor), never by `size == 1` — a real one-slot container exists.
+  `transferItem` into a GT pipe moves 0 until the pipe network has a
+  destination; with the pipe routed to the bender, the same call moved 8
+  (in-game 2026-11-15). The route is part of the transport config, not the
+  reader's.
 
 Stack shape, read from the drawer and the chest: `name`, `damage`, `size`,
 `label`, `maxSize`, `maxDamage`, `hasTag`. `tag` appears **only when `hasTag` is
@@ -187,9 +198,16 @@ reader uses that and never scans slots.
 
 The array has **one entry per slot**, not only the non-empty ones: the 27-slot
 chest with seven stacks came back as `count() == 27`, `#getAll() == 27`, and
-seven entries with a `name`. Empty slots are empty tables, so the reader skips
-any entry without `name`; summing `size` over the array gave 448, which matches
-seven stacks of 64.
+seven entries with a `name`. In that chest, empty slots were empty tables, so the
+reader skips any entry without `name`; summing `size` over the array gave 448,
+which matches seven stacks of 64.
+
+A GT crate (`gregtech:machine`, 144 slots) returns a different empty shape
+(in-game 2026-11-15): every empty slot is `minecraft:air` with `size=0` and
+`label=Air`, not an empty table. The reader must skip `size == 0` (or
+`name == "minecraft:air"`), not only entries without `name`; the two shapes
+coexist in the same rig. The crate held 64 `gregtech:meta_ingot` (damage 113,
+Titanium Ingot) in slot 1 and air in the other 143.
 
 A per-slot benchmark must keep the index inside `getInventorySize`: a loop
 `1..n` over a 27-slot chest asks for slot 28 onwards, gets `invalid slot`, and
@@ -217,9 +235,10 @@ container reads.
 
 ## Integration
 
-- **Plant service** ([`plant-service.md`](plant-service.md)): the panel holds the
-  selection, the plan and the alarms; it sends setpoints and reads back refusals.
-  `stock.snapshot`/`stock.delta` are how buffer levels reach it.
+- **Plant app / service** ([`plant-service.md`](plant-service.md)): the local
+  **Plant** app holds the selection, the plan and the alarms; the optional
+  service panel adds the merged, long-history view. It sends setpoints and reads
+  back refusals. `plant.snapshot`/`plant.delta` are how buffer levels reach it.
 - **Relay**: `stock` built-in task (named buffers, types + counts) and
   `craft limit` orders (set limit / reset run) from any terminal.
 - **Telemetry / UI**: buffer levels feed the panel and hologram wall
@@ -250,13 +269,14 @@ container reads.
 Three slices, each independently useful, split across the two layers
 ([`plant-service.md`](plant-service.md)):
 
-1. **Stock reader** (node, 0.4.2): exact types and counts of named buffers,
+1. **Stock reader** (node, 0.4.1): exact types and counts of named buffers,
    pushed out as snapshot and deltas. Useful on day one even with zero
    automation.
 2. **Gate loop** (node, 0.4.6): one line, one run, end to end, driven by a
    desired state and defended by local interlocks.
-3. **Selection and orders** (service, 0.4.5 + F7): the panel sets the run and
-   the plan, and more lines are more config rows, not more code.
+3. **Selection and orders** (Plant app/service, 0.4.5 + F7): the local app or
+   the panel sets the run and the plan, and more lines are more config rows, not
+   more code.
 
 Cross-links: [`plant-service.md`](plant-service.md), [`recipes.md`](recipes.md),
 `distributed.md` (worker role), `telemetry.md`, `names.md`, `relay.md`,

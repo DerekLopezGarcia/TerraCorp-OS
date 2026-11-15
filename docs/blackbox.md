@@ -44,11 +44,11 @@ redistribute Supersymmetry or Susy-Core.
 | Framebuffer | Writes through the bound GPU only; no OpenOS `term`, `shell`, or `event` | `src/boot/kernel.lua`, `AGENTS.md` |
 | Files | The paths in [Persisted state](#persisted-state) | see table |
 | Network | `TC1` frames over the first modem found | `src/lib/tc/net.lua` |
-| HTTP | GitHub Releases only, through the `internet` component, for the updater | `src/lib/tc/updater.lua`, `docs/versioning.md` |
+| HTTP | GitHub Releases (updater) and the operator-configured External Link sink, through the `internet` component | `src/lib/tc/updater.lua`, `src/lib/tc/link.lua`, `docs/external-link.md` |
 | Shutdown | `computer.shutdown` is reachable only through `kernel:poweroff` | `AGENTS.md` |
 
-There is no telemetry endpoint and no third-party network destination in the
-repository.
+The only HTTP destinations are GitHub Releases and the operator-configured
+External Link sink; there is no third-party telemetry endpoint.
 
 ### Boot sequence
 
@@ -198,5 +198,5 @@ The following are unknown or unmeasured, and must not be stated as fact:
 
 Before a change is considered complete the repository requires `npm run check`,
 `npm run sim`, `npm run sim:oc`, plus the focused test for whatever was touched
-(`AGENTS.md`). `npm run check` currently reports 42 files checked, 0 errors, and
-a 37-file manifest.
+(`AGENTS.md`). `npm run check` currently reports 51 files checked, 0 errors, and
+a 43-file manifest.

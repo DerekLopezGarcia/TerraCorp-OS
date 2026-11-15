@@ -1,9 +1,10 @@
 # Recipe book, lines and planning (0.4.5)
 
-Status: **design**. Slice 0.4.5 of F3 (plant readout), running in the **plant
-service** ([`plant-service.md`](plant-service.md)) with the node side in 0.4.6.
-Depends on the 0.4.0 probe for identifier formats and on stocks (0.4.2) for live
-levels. Nothing here moves items.
+Status: **design**. Slice 0.4.5 of F3 (plant readout), running in the **OS** for
+the small operated book and optionally in the **plant service**
+([`plant-service.md`](plant-service.md)) for the full dataset and planning at
+scale. The gate side is 0.4.6. Depends on the 0.4.0 probe for identifier formats
+and on stocks (0.4.1) for live levels. Nothing here moves items.
 
 The readout answers *what is in the hall*. It cannot answer what the hall can
 **become**: that 2 ingots and 1 plate make 1 gear, in which machine, in how many
@@ -46,12 +47,12 @@ Two tiers, because an encyclopedia and a notebook are different objects:
 | Tier | Size | Where | Mutable |
 |---|---|---|---|
 | **Reference dataset** | thousands of recipes, tens of MB | The SuSy developers' published export (Factory Flow dataset), pinned by version and checksum | No. Read-only, replaced whole |
-| **Operated book** | the recipes this plant actually runs | The plant service, flat files below | Yes, by operator or agent |
+| **Operated book** | the recipes this plant actually runs | The OS (0.4.5), or the service when the book outgrows it; flat files below | Yes, by operator or agent |
 
-The book lives in the **plant service**, not in the game
-([`plant-service.md`](plant-service.md)): it is planning data, and the nodes
-have neither the memory nor a reason to hold it. Two flat files, greppable and
-diffable, parsed once at start:
+The small book lives in the **OS**; the full book and the reference dataset live
+in the optional service ([`plant-service.md`](plant-service.md)). It is planning
+data: the node holds the twenty recipes it runs, not the encyclopedia. Two flat
+files, greppable and diffable, parsed once at start:
 
 ```text
 recipes.tsv     id  dataset_recipe  label  machine  ticks  energy  priority
@@ -78,6 +79,72 @@ keeps a separate display map, but it cannot invent precision the sensor lacks.
 
 Two keys never mix: an item and a fluid with similar names, and a fluid inside a
 cell versus the fluid itself.
+
+### Machine casings (assembler, circuit 8)
+
+RecipeViewer's dataset (`recipedump.json.gz`, 2026-11-15) and the in-game line
+agree: **8 plates → 1 casing**, circuit **8**, 16 EU/t, 50 ticks (25 for ULV).
+The material selects the tier; the circuit does not change.
+
+| Casing | Plates | Metadata |
+|---|---|---:|
+| ULV | Wrought Iron (335) | 0 |
+| LV | Steel (324) | 1 |
+| MV | Aluminium (2) | 2 |
+| HV | Stainless Steel (323) | 3 |
+| EV | Titanium (113) | 4 |
+
+The rig's four materials cover LV-EV; ULV needs wrought iron. The line produced
+2 EV, 1 HV, 1 LV and 1 MV from 8 ingots each.
+
+### The line program
+
+A line is a black box (decision 24), so its program is a small **data file**, not
+Lua. One file per line, edited in the Plant app or through the link at `write`
+tier, parsed as data:
+
+```text
+# /etc/lines/casing.line
+stock in  casing/ingots
+stock out casing/casings
+
+rule lv
+  in  8 item gregtech:meta_ingot@324
+  out 1 item gregtech:machine_casing@1
+rule mv
+  in  8 item gregtech:meta_ingot@2
+  out 1 item gregtech:machine_casing@2
+rule hv
+  in  8 item gregtech:meta_ingot@323
+  out 1 item gregtech:machine_casing@3
+rule ev
+  in  8 item gregtech:meta_ingot@113
+  out 1 item gregtech:machine_casing@4
+
+ticks 50
+limit 64 item gregtech:machine_casing@4
+```
+
+- `item <name>@<damage>` is the exact key the sensor reports; `fluid <name>` is
+  the Forge fluid name. Multiple terms are joined with `+`:
+  `in 4 item ... + 1000 fluid water`. A rule may have several inputs and
+  several outputs at once. NBT variants (`hasTag=true`) are not in this first
+  grammar; a tag field comes when a stock reports one.
+- A rule is `in = out` with quantities per craft. A line can hold several
+  rules; the app selects one by name or by its input key.
+- `ticks` and `limit` are **line-level**: they close the previous rule and
+  apply to the whole program. A rule cannot override them in this version;
+  repeat `limit` once per output you want to cap.
+- The file is **data**: no functions, no expressions, no Lua. `/etc` is writable
+  through the link, so executable config would be remote code execution
+  (decision 22).
+- The parser is `tc.line` (`src/lib/tc/line.lua`); it returns
+  `stocks.inputs` / `stocks.outputs` (Lua reserves `in`). `npm run test:line`
+  runs the casing fixture and the malformed-input cases.
+- The declared rule is `declared`; the boundary deltas make it `measured` and
+  then `verified`; a contradiction turns it `suspect` (decision 13).
+- The line still only exposes its two boundary stocks. The program says
+  `mat in = mat out`; the machines between them are not named.
 
 ## From recipe to plant: lines
 
@@ -141,15 +208,16 @@ reason.
 
 ## Where it runs
 
-In the **plant service** ([`plant-service.md`](plant-service.md)), as a pure
-function over the recipe book plus the stock snapshots the nodes push. It reads
-no components itself, costs no tick time in the game, and survives a hall going
-offline: the plan shows the last known levels and their age instead of pretending
-they are current.
+In the **OS** for the small book, and in the optional **plant service**
+([`plant-service.md`](plant-service.md)) when the book or the dataset outgrows
+the node. In both cases it is a pure function over the book plus the cached
+stock snapshots; the local planner reads no components itself, costs no tick
+time, and survives a hall going offline: the plan shows the last known levels
+and their age instead of pretending they are current.
 
-Actuation is not this slice. The service turns a plan into `gate.set` setpoints
-(0.4.6) and the node reconciles them under its own interlocks; restock orders
-across halls come in F7.
+Actuation is not this slice. The plan turns into `gate.set` setpoints (0.4.6)
+and the node reconciles them under its own interlocks; restock orders across
+halls come in F7.
 
 ## Calibration
 

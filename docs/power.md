@@ -2,8 +2,8 @@
 
 How TerraCorp coordinates the staged startup, shutdown, and load shedding
 described in `distributed.md` ("The data center uses a dedicated power plant
-and UPS…"). Design for 0.7.x; depends on Relay (0.3.2), the alarm registry and
-energy history (0.4.1), the alarm channel (`long-distance.md`), and telemetry
+and UPS…"). Design for 0.7.x; depends on Relay (0.3.2), the local alarm engine
+and energy history (0.4.1), the alarm channel (`long-distance.md`), and telemetry
 (`docs/telemetry.md`).
 
 ## The hard constraint first
@@ -48,6 +48,9 @@ Split the same way as the readout ([`plant-service.md`](plant-service.md)):
   `plant island`).
 - **Outputs**: Relay jobs (`drain`, `shutdown`), the alarm channel, the panel,
   the desktop banner, the hologram wall (if built, `holo.md`).
+
+Decision 23 leaves this split intact: the local `NO POWER` alarm is the node's
+own, but stages, shedding and cross-hall policy stay service work.
 
 **The accepted cost:** with the bridge down there is no shedding, only the last
 setpoints. That is tolerable while the service runs on the same host as the

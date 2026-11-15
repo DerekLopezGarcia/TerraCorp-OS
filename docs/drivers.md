@@ -121,8 +121,8 @@ errors.
 ## What this is not
 
 Not a scripting layer for plant logic. A descriptor says **how to call a block**,
-never **what the plant should do**. Recipes, thresholds and alarms stay outside
-the game (decision 16).
+never **what the plant should do**. Cross-hall recipes, rates and alarm text stay
+outside the game; local level thresholds are the plant role's own (decision 23).
 
 ## In-game verification checklist
 

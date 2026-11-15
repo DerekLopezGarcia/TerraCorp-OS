@@ -1,8 +1,10 @@
 # TerraCorp Middleware — leaves, gateways and the minimal profile
 
-Status: **design** (0.4.1). The plant runs on **TerraCorp Middleware**: the part
-of the OS that exposes components to programs outside the game, with no desktop
-and no apps. The desktop build stays for computers with an operator in front.
+Status: **design; deferred to 0.4.3 (second hall)**. The first F3 slice runs on
+one computer: the plant core reads locally and the Plant app shows the result.
+**TerraCorp Middleware** is the multi-hall profile — the part of the OS that
+exposes components to other computers, with no desktop and no apps — and it
+arrives only when a second hall exists.
 
 Name and roles agreed with the pack's co-operator on 2026-11-13.
 
@@ -18,6 +20,9 @@ Name and roles agreed with the pack's co-operator on 2026-11-13.
 So the plant is built from **plain computers**, not rack servers. Racks, Vault,
 waves and Relay stay shipped and tested (`0.3.x`) but are **off the plant path**:
 they answer density and pooled disks, not component access.
+
+For 0.4.1 the computer is both the reader and its own authority; no gateway is
+needed. The profile below is kept for the second hall (0.4.3).
 
 ## Two roles
 
@@ -42,6 +47,9 @@ they answer density and pooled disks, not component access.
 |---|---|---|---|
 | **Leaf** | wired network card | Owns its components: reads them, sets redstone, moves items on command, keeps its local registry copy | Talk to the outside world, hold plant logic |
 | **Gateway** | internet + wired + wireless | The only HTTP egress; forwards frames to its leaves; merges their registry copies; serves the tablet over wireless | Read components it cannot see, decide anything |
+
+For 0.4.1 there is no gateway: the plant computer owns its components, paths and
+cache. The gateway row describes 0.4.3+.
 
 Each computer runs a **proxy**: the local authority for its own addresses and
 paths, a translator from named requests to component calls, and a **driver
@@ -109,9 +117,10 @@ the declared cardinality says `single`.
 
 ## What this profile must never grow
 
-No recipes, no thresholds, no alarm text, no planner, no job queue, no UI. The
-moment one of those appears in the world, the tick budget argument dies and the
-brain has leaked back into the game (decision 16).
+No cross-hall recipes, rates, thresholds, alarm text, planner or queue. Local
+level rules over the cache are the plant role's own (decision 23); the moment a
+cross-hall decision or a UI appears in a headless proxy, the tick-budget argument
+dies and the brain has leaked back into the game (decision 16).
 
 ## Verification checklist
 
@@ -132,10 +141,10 @@ brain has leaked back into the game (decision 16).
 
 ## Sequencing
 
-1. `middleware` profile in the kernel: headless, registry, no apps — 0.4.1.
-2. Proxy verbs and the TC1 leg — 0.4.1.
-3. Gateway merge and the service ingest — 0.4.1/0.4.4.
-4. Then stock reading, gates and `move` on top (0.4.2-0.4.6).
+1. Single-computer plant core: registry, readers, level alarms, Plant app — 0.4.1.
+2. Mirror over the link — 0.4.2.
+3. Second hall and the leaf/gateway merge — 0.4.3.
+4. Service ingest, gates and `move` — 0.4.4-0.4.6.
 
 Cross-links: [`names.md`](names.md) (addresses and paths),
 [`plant-service.md`](plant-service.md) (combined view), `docs/opencomputers.md`

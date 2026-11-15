@@ -1,0 +1,24 @@
+# TerraCorp line program: machine casings for the test rig.
+# One rule per material; the assembler circuit stays at 8.
+
+stock in  casing/ingots
+stock out casing/casings
+
+rule lv
+  in  8 item gregtech:meta_ingot@324
+  out 1 item gregtech:machine_casing@1
+
+rule mv
+  in  8 item gregtech:meta_ingot@2
+  out 1 item gregtech:machine_casing@2
+
+rule hv
+  in  8 item gregtech:meta_ingot@323
+  out 1 item gregtech:machine_casing@3
+
+rule ev
+  in  8 item gregtech:meta_ingot@113
+  out 1 item gregtech:machine_casing@4
+
+ticks 50
+limit 64 item gregtech:machine_casing@4

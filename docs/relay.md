@@ -35,7 +35,7 @@ claimants; nothing else changes.
 | `DRAIN` | master → node | `id`, `drain` (`true`/`false`) |
 
 Field budget: `args` ≤ 600 bytes escaped, `out` ≤ 700 bytes. Larger outputs
-wait for Vault (0.3.3) or are written to a file and referenced by name.
+wait for Vault (0.3.4) or are written to a file and referenced by name.
 
 ## Publisher (tc.jobs, master side first)
 
@@ -102,5 +102,3 @@ wait for Vault (0.3.3) or are written to a file and referenced by name.
    `jobs` and `drain` per node (older 9/10-column files still load).
 
 Exit criteria live in [`roadmap.md`](roadmap.md); they need the in-game run.
-
-Exit criteria live in [`roadmap.md`](roadmap.md).

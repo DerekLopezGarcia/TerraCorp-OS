@@ -21,6 +21,7 @@ src/lib/tc/gfx.lua
 src/lib/tc/jobs.lua
 src/lib/tc/keys.lua
 src/lib/tc/lab.lua
+src/lib/tc/line.lua
 src/lib/tc/link.lua
 src/lib/tc/log.lua
 src/lib/tc/net.lua

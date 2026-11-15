@@ -10,10 +10,14 @@ Status: **phase 1 and 2 implemented**, merged for 0.3.20. What exists today:
 | Start after first render, one step per frame | `src/boot/kernel.lua` |
 | Bridge | `tools/bridge/bridge.js` |
 | Operator window: state, sink, token, tier | `src/apps/gaia.lua` |
-| Gate | `npm run test:link` (16 scenarios) and `npm run test:gaia` |
+| Gate | `npm run test:link` (21 scenarios) and `npm run test:gaia` |
 
-The harness proves the state machine against a fake Internet Card. The in-game
-behaviour is still unproven; see [Unverified](#unverified).
+0.4.x adds the plant readout verbs below; they are design only. The local
+**Plant** app does not need the link, and the link does not need the service.
+
+The harness proves the state machine against a fake Internet Card. In-game,
+0.3.33 verified `status`, `log`, `fs.read`, `fs.write`, `link.interval` and
+`lua` at a 1 s cadence; see [`tests.md`](tests.md#results-log).
 
 Deployment scope is **one machine** for now: the world host and the bridge on
 the same box, which is the bridge default (`127.0.0.1:8787`). The WAN path is
@@ -125,34 +129,35 @@ know, and the existing peers never send these.
 A command that the current tier does not allow answers `LREP` with
 `state=error reason=needs_<tier>_control` and touches nothing.
 
-Proposed for 0.4 — the plant service verbs
-([`plant-service.md`](plant-service.md)), not implemented yet:
+Proposed for 0.4 — the plant readout verbs
+([`plant-service.md`](plant-service.md)), not implemented yet. The first
+contract is the **plant snapshot**, not a list of component addresses: an
+external client reads names and counts, and the OS keeps the UUIDs and paths
+inside.
 
-| `cmd` | Tier | Arguments | Returns |
-|---|---|---|---|
-| `component.list` | read | — | Components on this proxy: address, kind, face, `first_seen`, paths |
-| `component.unclaimed` | read | — | Seen but not in any path, newest first |
-| `path.list` | read | — | Paths on this proxy: member count, cardinality, state |
-| `path.query` | read | `path` (wildcards) | The resolved set, or `unknown_path` / `unreachable_members` |
-| `path.assign` | write | `path`, `address`, `cardinality?` | Updated entry, validated against `component.list()` |
-| `stock.snapshot` | read | `paths?` | Full stock listing, sliced: `kind`, `key`, `count` |
-| `stock.delta` | read | `cursor` | Entries changed since the cursor plus the new one; `reason=resync` when it expired |
-| `move` | write | `from`, `to`, `n`, `key`, `member?`, `policy?` | `moved=<n> slots=<k>` per member, or `moved=0 reason=<why>` |
-| `line.list` | read | — | Line path → gate address and cached levels |
-| `gate.set` | write | `line`, `state` | Actual state, or `refused reason=<why>` |
-| `node.status` | read | — | Version, uptime, memory, energy, link health, cache age |
+| `cmd` | Tier | Slice | Arguments | Returns |
+|---|---|---|---|---|
+| `plant.status` | read | 0.4.2 | — | Version, uptime, memory, energy, link health, cache age, halls |
+| `plant.snapshot` | read | 0.4.2 | `hall?`, `stocks?` | Paged snapshot: `kind`, `key`, `count`, `state` |
+| `plant.delta` | read | 0.4.2 | `cursor` | Changed entries plus the new cursor; `reason=resync` when expired |
+| `plant.alarms` | read | 0.4.2 | `since?` | Local level alarms with severity, source, first/last seen, ack |
+| `gate.set` | write | 0.4.6 | `line`, `state` | Actual state, or `refused reason=<why>` |
+| `move` | write | 0.4.6b | `from`, `to`, `n`, `key`, `member?`, `policy?` | `moved=<n> slots=<k>` per member, or `moved=0 reason=<why>` |
 
-Every one of these speaks **semantic paths**, never UUIDs ([`names.md`](names.md)).
-An external instruction has to be readable, reviewable and diffable; a frame full
-of 36-character addresses is none of those. The registry resolves a path to
-physical addresses at the target proxy — the caller never needs to know where a
-component lives.
+`component.list`, `path.list`, `path.query`, `path.assign`, `driver.*` and
+`line.list` are **local** in 0.4.1: the Plant app calls them in-process. They
+can join the link later if a remote editor needs them; the mirror does not need
+a UUID to show a stock.
 
-`gate.set` and `move` carry the same discipline: **desired state, never an
-action**. A retried frame must not invert a gate, and a reboot must restore the
-last setpoints without asking the bridge. The node reconciles each tick under its
-own interlocks, evaluates the optional guard against its cache, and reports the
-actual state plus the refusal reason.
+Every plant verb speaks the names the OS already knows; a name the node does not
+have answers `unknown_stock` or `unknown_line`, never a guess.
+
+`gate.set` carries **desired state, never an action**: a retried frame must not
+invert a gate, and a reboot must restore the last setpoints without asking the
+bridge. `move` is a bounded action that reports what actually moved; the caller
+retries from that answer, never from an assumption. The node reconciles gates
+each tick under its own interlocks, evaluates the optional guard against its
+cache, and reports the actual state plus the refusal reason.
 
 ### Control tiers
 

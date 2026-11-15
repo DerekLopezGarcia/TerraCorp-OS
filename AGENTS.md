@@ -56,6 +56,7 @@ npm run test:boot-update
 npm run test:install
 npm run test:fetch
 npm run test:link
+npm run test:line
 npm run test:gaia
 npm run test:boot
 npm run test:faults

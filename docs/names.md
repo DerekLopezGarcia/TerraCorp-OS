@@ -1,8 +1,9 @@
 # Component addressing and the semantic registry
 
-Status: **0.4.1, first slice of F3**. Two namespaces, deliberately separate: an
-opaque **physical address** for routing, and a **semantic path** for search and
-grouping. Nothing outside the game ever handles the physical one by hand.
+Status: **0.4.1, local first; the gateway merge is 0.4.3**. Two namespaces,
+deliberately separate: an opaque **physical address** for routing, and a
+**semantic path** for search and grouping. Nothing outside the game ever handles
+the physical one by hand; the link exposes plant snapshots, not UUIDs.
 
 Design agreed with the pack's co-operator on 2026-11-13; it supersedes the
 earlier single-name registry.
@@ -41,9 +42,12 @@ string is what makes plant configs unmaintainable.
   The face is **physical**: it stays put while the block and its Adapter or
   Transposer do not move, but a rebuild can leave the same container on another
   face. A saved `address:face` is only valid for the layout it was read from.
-  The per-side inventory API and the `address:side` argument form are
-  **pending in-game verification** (see the checklist); until then the face is
-  part of the address but the operations pass it explicitly.
+  The per-side inventory API is **verified in-game (2026-11-14)**: the
+  Transposer answers `getInventoryName(side)`, `getInventorySize(side)`,
+  `getStackInSlot(side, slot)` and `getAllStacks(side)`, and `getAllStacks`
+  returns one entry per slot. The `address:side` shorthand is not used by the
+  OS; the face stays part of the address for routing and the operation passes
+  it as an argument.
 
 The registry also keeps a short **node alias** (`hall1-oc`) so logs and the
 combined view can print `hall1-oc/9f3c…:north` instead of two UUIDs.
@@ -124,6 +128,10 @@ combined view of all proxies is offered to the app.**
 | **Gateway** | Merged copy of its leaves | The segment's view; the only one with an Internet Card |
 | **Plant service** | Merged copy of the gateways | The combined view apps and the agent consume |
 
+For 0.4.1 there is no gateway: the plant computer is the authority for its own
+components and paths, and the Plant app reads that local copy. The gateway and
+service rows describe 0.4.3+.
+
 - No peer-to-peer DNS protocol between computers inside the game. A leaf asks its
   gateway; the gateway asks the service or answers from its copy. Anything more
   becomes Relay with a different name.
@@ -152,18 +160,26 @@ The periodic scan is cheap because it is local (`component.list()`), so the list
 stays alive without touching the tick budget. **Reading inventories** is the
 expensive half and stays on demand, trickled across ticks.
 
-## Moving by path
+## Moving by name
 
 ```text
-move from=hall1/ore_processing/entrada to=hall1/ore_processing/grinders
-     n=64 key=gregtech:meta_ore* policy=fill
+move from=hall1/casing/ingots to=hall1/casing/line
+     n=8 key=gregtech:meta_ingot* policy=fill
 ```
+
+`from` is the input stock; `to` is the line's input boundary (the transport
+that feeds it). The machine buffers inside the line are not named and not read
+(decision 24).
 
 1. Resolve both paths (and the transport's) on the owning proxy; `unknown_path`
    if any fails.
 2. Read the source slots, keep the ones whose key matches the selector.
 3. Transfer **slot by slot** through the transposer, up to `n` units, honouring
-   `policy` when the target is a pool.
+   `policy` when the target is a pool. The transport must be an inventory the
+   transposer can insert into, **and its network must have a destination**: the
+   same crate→pipe call answered `true, 0` while the pipe was disconnected and
+   `true, 8` after it was routed to the bender (in-game 2026-11-15). A connected
+   GT pipe is a valid sink; verify the route, not just the face.
 4. Return what actually moved, per member: `moved=<n> slots=<k>`, or
    `moved=0 reason=<why>` — never a cheerful `ok`.
 
@@ -195,12 +211,19 @@ Errors are first-class and never guessed around: `unknown_path`,
 Verified facts used above (`component.list()` shape, address stability,
 `component_added`) are in `docs/opencomputers.md`. Still to prove:
 
-1. **Per-side inventory API**: do the Adapter's inventory methods take a side, and
-   what do they return for an invalid or empty side?
-2. **Transposer argument form**: does it accept `address:side` (and `:slot`), or
-   must the side be passed per method? This decides whether faces are free.
-3. **Inventory read shape**: one slot per call or a range — 40 slots at 40 calls
-   changes the budget of `move`.
+1. **Per-side inventory API** — **verified in-game 2026-11-14 for the
+   Transposer**: `getInventoryName(side)`, `getInventorySize(side)`,
+   `getStackInSlot(side, slot)` and `getAllStacks(side)`; an empty side is
+   `nil, "no inventory"`. The Adapter's inventory exposure for chests and GT
+   crates is still pending; the Tank Controller path is verified.
+2. **Transposer argument form** — **verified in-game 2026-11-14/15**: the side
+   is passed per method; `transferItem(from, to, count[, sourceSlot[,
+   sinkSlot]])` takes slot integers and moves at most one stack per call. The
+   `address:side` shorthand is not used.
+3. **Inventory read shape** — **verified in-game 2026-11-14**: `getAllStacks`
+   returns an array with one entry per slot, empty slots are empty tables, and
+   `getStackInSlot` returns `nil` for an empty slot. One call per face, so the
+   budget of `move` is per face, not per slot.
 4. Path wildcards against a real proxy: `**/…` and `hall1/*/…` return what a hand
    count says.
 5. Rename a path and confirm the saved line still points at the same address.
@@ -212,10 +235,12 @@ Verified facts used above (`component.list()` shape, address stability,
 ## Sequencing
 
 1. **`tc.addr`** — physical addresses, faces, `component.list`, `first_seen`.
-2. **`tc.path`** — paths, wildcards, assign/query, cardinality.
-3. **Proxy + gateway wiring** — the merged copy and the two transports
+2. **`tc.path`** — local paths, wildcards, assign/query, cardinality.
+3. **Local readers, cache and Plant app** — 0.4.1.
+4. **`plant.*` mirror** — 0.4.2.
+5. **Gateway and merge** — 0.4.3, when a second hall exists
    ([`middleware.md`](middleware.md)).
-4. **`move` and `gate.set`** — last, because they depend on the probe answers.
+6. **`move` and `gate.set`** — 0.4.6, on the verified transposer and cache.
 
 Cross-links: [`middleware.md`](middleware.md) (leaf, gateway, profiles),
 [`plant-service.md`](plant-service.md) (combined view, verbs),

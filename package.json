@@ -38,6 +38,7 @@
     "measure": "node tools/harness/measure.js",
     "test:fetch": "node tools/harness/test-fetch.js",
     "test:link": "node tools/harness/test-link.js",
+    "test:line": "node tools/harness/test-line.js",
     "test:gaia": "node tools/harness/test-gaia.js",
     "test:updater": "node tools/harness/simulate.js updater --strict",
     "test:updater-legacy": "node tools/harness/simulate.js updater_legacy --strict",

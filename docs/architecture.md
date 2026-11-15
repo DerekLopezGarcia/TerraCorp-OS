@@ -343,10 +343,12 @@ file would be rejected as an unsafe OS path by older clients.
 The kernel reads `role` from `/etc/terracorp.cfg`. `desktop` starts the UI and
 `cluster` service; `node` skips GPU setup and starts the headless runtime.
 
-The cluster is the in-game half of a two-layer plant: the nodes read components
-and hold gates; a **plant service** outside the game owns the recipe book, the
-planner, the history and the panel ([`plant-service.md`](plant-service.md)). The
-only bridge between them is the external link (`docs/external-link.md`), one
+The cluster is the storage/density layer: provisioning, Relay, waves and Vault.
+The plant readout is **self-contained**: the computer that sees the components
+reads, caches, evaluates its local level alarms and shows them in the Plant app
+([`plant-service.md`](plant-service.md)); a service outside the game is optional
+and owns long history, the reference dataset, planning at scale and the agent.
+The external link (`docs/external-link.md`) mirrors the local readout, one
 polling computer at a time.
 
 | Module | Responsibility |
@@ -375,7 +377,7 @@ overwrite an incomplete target, but never a finished one.
 
 - One screen cell per Unicode code point; wide CJK characters and emoji are not
   supported.
-- No modem-based distributed messaging yet.
+- The plant readout is local-first; the multi-hall gateway and the service are optional/design.
 - No accounts or session locking.
 - Windows can be moved but not resized with the pointer.
 - Terminal history and in-memory logs do not survive reboot; warnings/errors are

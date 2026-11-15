@@ -3,8 +3,9 @@
 Status: **design**. The decision layer of the plant: a local model that reads
 the plant through MCP tools and decides what should happen. It replaces the
 "human at the panel" as the decision-maker, not the deterministic machinery
-underneath. See [`plant-service.md`](plant-service.md) for the service that
-exposes those tools and [`roadmap.md`](roadmap.md) decision 15.
+underneath. The tools are served by the bridge from the local mirror, or by the
+optional service when it runs; see [`plant-service.md`](plant-service.md) and
+[`roadmap.md`](roadmap.md) decision 15.
 
 ## What the agent is, and what it is not allowed to be
 

@@ -16,7 +16,8 @@
 > Target model: **one application server and lightweight terminals in each
 > factory**. See [`distributed.md`](distributed.md). The 0.3.x cluster is the
 > first layer: the existing computer becomes the master, and rack servers become
-> nodes.
+> nodes. F3 starts with **one self-contained computer**; the application-server
+> model returns when a second hall exists.
 
 Each phase has measurable exit criteria. Do not start the next phase until the
 current phase meets its criteria.
@@ -65,7 +66,7 @@ prototype.
 originally planned for 0.2.x is folded into F4 Sessions; 0.3.x only adds the
 `tc.net` transport and cluster modules needed for nodes.
 
-## F2 — Cluster (0.3.x) · built, in-game verification pending
+## F2 — Cluster (0.3.x) · built; partial in-game verification
 
 **Goal:** discover cable-connected racks, install a slave system on each server,
 delegate work, and delegate storage. This phase is the substrate the plant
@@ -94,8 +95,9 @@ Vault owns the file storage.
 both are online after a reboot; the master reports aggregate RAM and disk; the
 registry survives an OS update; no EEPROM is written.
 
-> 0.3.0 shipped on 2026-10-26. The in-game rack build and provisioning test are
-> still pending; see [`tests.md`](tests.md) for the checklist.
+> 0.3.0 shipped on 2026-10-26. Provisioning and Relay are verified in-game
+> (0.3.9/0.3.10); the second node, update waves, Vault and the RAID probe remain.
+> See [`tests.md`](tests.md) for the checklist.
 
 ### 0.3.1 Pull — built, in-game checks pending
 
@@ -200,15 +202,24 @@ the WAN path is parked (decision 9).
 waves, Vault and external-link checks in [`tests.md`](tests.md) pass in-game in
 one sitting, and the Adapter probe from F3 is recorded in the same session — the
 probe needs the world running anyway, so it rides along instead of costing
-another run.
+another run. **Partially met:** provisioning, Relay, the 0.3.33 update and the
+external link pass; the second node, waves, Vault and the RAID probe remain.
 
 ## F3 — Plant readout (0.4) · in progress
 
 **Goal:** turn the plant into numbers an operator can act on — items and fluids
 as named stocks, energy per node, an alarm list, and a plan that names its own
-bottleneck. The phase has **two layers** (decision 14,
-[`plant-service.md`](plant-service.md)): the nodes read and hold, the service
-remembers, plans and explains. Neither layer is optional.
+bottleneck. The first layer is **self-contained**: the computer that can see the
+components reads them, caches the answers, evaluates its own level alarms and
+shows them in the **Plant** app. A service outside the world is **optional** and
+owns only what the node cannot — long history, the reference dataset, planning at
+scale and the MCP agent (decision 23, amending 14, 16, 17 and 21). The 64 MB
+memory change verified in-game on 2026-11-15 is what makes the local layer
+affordable; the 50 ms per host call still governs every read.
+
+> **Revision 2026-11-15:** F3 is local-first (decision 23). The service and the
+> gateway are optional; 0.4.1 delivers the readout, 0.4.2 the mirror, and 0.4.3
+> the second hall.
 
 ### 0.4.0 The probe · done 2026-11-15
 
@@ -229,182 +240,194 @@ Drawer with a Redstone Upgrade, a Redstone I/O and a Redstone Control `rsio`.
 | Cost | **50 ms per host call**, uniformly — one server tick |
 
 Precision is viable: items and fluids read exactly, energy reads with a string
-normalizer and the 2^53 caveat, and coarse redstone is a working fallback. Two
-probes remain and do not block 0.4.1: a **multiblock tank** (several tanks behind
-one face) and a **working machine** (`getProgress`, `getMaxProgress`, `getEUt`,
-`getCurrentRecipe`), which decides whether rates come from the machine or from
-stock deltas.
+normalizer and the 2^53 caveat, and coarse redstone is a working fallback. One
+probe remains and does not block 0.4.1: a **multiblock tank** (several tanks
+behind one face). The working-machine probe is no longer needed for F3: a line is
+a black box and its rate comes from the boundary deltas (decision 24); machine
+progress is diagnostics, not readout.
 
-### 0.4.1 Addressing, semantic paths and the middleware profile
+### 0.4.1 Plant — local registry, readers, alarms and the app
 
-Design in [`names.md`](names.md) and [`middleware.md`](middleware.md). Two
-namespaces, not one: an **opaque physical address** (`node:component:face`) that
-routes, and a **hierarchical semantic path** (`hall1/ore_processing/grinders`)
-that searches. Nothing outside ever handles the first by hand.
+**0.4.1a Registry.** `tc.addr` (physical `node:component:face`, `first_seen`,
+faces), `tc.path` (local semantic paths, wildcards, assign/query, cardinality)
+and `tc.driver` (declarative descriptors over the closed capability vocabulary).
+`node.status` reports version, uptime, memory, energy, link health and cache age
+without a component scan. **No gateway and no DNS protocol in this slice:** the
+computer is the authority for its own components and paths.
 
-- **Proxies:** each computer is authoritative for its own components, faces,
-  `first_seen` and the paths that mention them (`component.list`,
-  `component.unclaimed`, `path.list`, `path.query`, `path.assign`).
-- **Paths resolve to sets; the operation reduces them:** reads sum with a
-  per-member breakdown (drift is **skew**, a bottleneck symptom); writes dispatch
-  by the policy **in the command** (`all`, `any`, `fill`; `round_robin` is the
-  service's cursor sent as `member=`). A declared cardinality of `single` that
-  resolves to two members is `cardinality_mismatch`.
-- **Many-to-many:** a component lives in every path that describes it, so the same
-  drawer is in `hall1/ore_processing/entrada` and `lineas/grinder_1/entrada`.
-  Wildcards (`**/grinders`, `hall1/*/tanks`) are how the agent finds things
-  without memorising the base.
-- **Merged outward, never pushed down:** proxy → gateway → service. Saved configs
-  reference addresses, so renaming a path cannot silently rewire a line.
-- **Middleware profile:** leaves (wired only, components only) and gateways
-  (internet + wired + wireless, the single ingress, dumb proxy). Plain computers,
-  not rack servers — those do not boot after a world reload and their internals are
-  never visible to anyone else.
-- **Driver registry:** an Adapter can expose signs, chests, tanks and machines as
-  readily as drawers, so each kind is described by a **declarative descriptor**
-  (`/etc/drivers/<kind>.lua`) over a **closed capability vocabulary**
-  (`inventory`, `tank`, `energy`, `redstone`, `text`, `transfer`). A descriptor is
-  data, never code: `/etc` is writable through the link, and a descriptor that
-  executed Lua would turn a config edit into remote code execution. An unknown
-  kind shows up as `driver=unknown`, `driver.dump` gives its methods, and a reload
-  registers it without touching the kernel ([`drivers.md`](drivers.md)).
-- **Node status:** `node.status` — version, uptime, memory, energy, link health,
-  cache age. Cheap, no component scan.
-- **Service:** skeleton, ingest, the alarm engine (severity, source, first/last
-  seen, ack) and the panel with per-hall liveness.
-- The proxy keeps **no alarm registry**: naming, thresholds and grouping are
-  decisions, and decisions live outside the world (decision 16).
+**0.4.1b Readout.** `tc.stock` and `tc.tank` are batch readers, not plant
+modules. A named stock is a list of containers in `/etc/stocks.tsv` — a **line
+boundary**, not every container inside the line. The reader walks the boundary
+containers with a per-tick call budget, uses `getAllStacks` / `getFluidInTank`
+where the probe showed them, caches every answer and serves the snapshot and
+delta verbs from that cache. Energy reads use the GT driver names and a string
+normalizer for `power_substation`. Any container that cannot be read marks its
+stock **coarse**; the app says so and the OS never reports a count it did not
+read. Idle means zero component calls.
 
-### 0.4.2 Stock — items as named stocks
+**0.4.1c Alarms and app.** A local alarm engine evaluates **level** rules against
+the cache (`STARVED`, `FULL`, `NO POWER`, `STALE`, `UNBOUND`) with severity,
+source, first/last seen and ack; thresholds live in `/etc/plant.tsv`. The
+**Plant** app shows halls, stocks, tanks, energy and alarms in one page, exact vs
+coarse and the age of each source. A headless plant computer keeps the same core
+and serves snapshots without a GPU; a desktop or kiosk draws the app. No extra
+component call is spent to decide an alarm.
 
-- **Node:** `tc.stock` is a batch reader, not a plant module. A **named stock**
-  is a list of containers in `/etc/stocks.tsv`; the reader walks them with a
-  **per-tick call budget**, caches every answer, and serves `stock.snapshot` /
-  `stock.delta` from that cache. Idle means no calls at all.
-- Snapshot and delta verbs: the first listing is paged like `FETCH`, later polls
-  carry only changes against a cursor, and an expired cursor answers `resync`.
-  A snapshot that silently truncates is worse than none.
-- Coarse fallback: any container in a stock that cannot be read marks the whole
-  stock **coarse**, and the UI says so. The OS never reports a count it did not
-  read.
-- **Service:** ingest, history, and a per-hall stock view keyed by exactly what
-  the node reported. Rate and trend maths live here.
+- **Exit:** one hall with an item stock, a tank and an energy source reports
+  **exact** counts and the app shows them; pulling a drawer raises `STARVED`
+  within one polling cycle and clears on refill; an idle hall makes **zero**
+  component calls per tick; a removed container goes `unbound`/`coarse`, never
+  zero; the plant core fits comfortably in the 64 MB machine and the 30 Hz
+  desktop loop shows no visible drop.
 
-### 0.4.3 Tanks — fluids
+### 0.4.2 Mirror — the link exposes the local readout
 
-- **Node:** same reader for fluids: per tank, fluid type, amount, capacity,
-  aggregated per named tank group.
-- **Service:** same ingest and history; thresholds raise input-empty and
-  output-full alarms.
+The external link carries the readout without requiring a service:
+`plant.status`, `plant.snapshot` (paged with the existing `LREP`/`LDATA`/`LEND`
+slicing), `plant.delta` (cursor plus `resync`) and `plant.alarms`. The bridge
+stores the mirror, so an operator or a later service can read the same numbers
+the app shows. The link is **read-only for the plant** in this slice; the local
+app keeps working with the bridge down.
 
-### 0.4.4 Rates and plant alarms
+- **Exit:** an external client reads a hall's exact stock, tanks and alarms; a
+  snapshot that would exceed one frame is paged and never silently truncated;
+  killing the bridge leaves the app and its cache untouched.
 
-- **Service only.** Rates (items/min, mB/min) come from its own sample history,
-  because the node has no memory for it and the panel needs the trend.
-- Alarms derived from samples: `STARVED` (below minimum while a consumer runs),
-  `FULL` (above maximum), `STALLED` (rate collapsed while the line is up),
-  `TREND` (projected to hit a limit within the horizon), plus chain-level ones
-  the node cannot know ("hall A waits on hall B").
-- Thresholds live in the service config per stock: a new hall sets its own
-  limits without a code change.
+### 0.4.3 Second hall — one computer per hall, a simple merge
 
-### 0.4.5 Recipe book and planning
+A hall is one computer plus its config. The **aggregator** — the bridge when
+every hall has an Internet Card, or the master over TC1 when they are wired —
+keeps `halls.tsv` (hall name → computer address) and merges `plant.snapshot` from
+each hall. Paths
+stay local to each computer; the merged view prefixes the hall name. **No
+leaf/gateway, no TC1 DNS protocol, no service required.**
 
-- **Service only.** Design in [`recipes.md`](recipes.md). The readout says what
-  is in the hall; the book says what the hall can become — and without it a
-  level that stops moving can never be told apart from "step X is the limit".
-- **Declared or imported, measured, verified**: the numbers drive the planner
-  until a real run contradicts them; then the recipe turns `suspect`, the
-  measured ratio wins, and an alarm says so. Imported is not verified.
-- **Chain**: priority between alternative recipes, bounded passes for GT
-  reprocessing cycles, chance byproducts at their expected value and flagged
-  when a plan leans on luck. Bottleneck and shortfall per
-  [`recipes.md`](recipes.md).
-- **Lines**: the node owns the hardware binding (`/etc/lines.tsv`: line name →
-  gate address), the service owns the planning binding (line name → recipe,
-  limits). The line name is the join key; a name on one side only is an
-  `unknown_line` alarm, never a guess.
-- **Reference library, optional**: a published pack export may be imported
-  read-only and pinned by version and checksum, so the operated book points at
-  reference ids instead of retyping ticks and EU/t
-  ([`research-susy-planner.md`](research-susy-planner.md)). We never derive
-  recipes from the mods ourselves and never vendor pack data here.
+- **Exit:** two halls report into one page; a hall that is offline is `stale`,
+  not dropped; adding a hall is one computer and one config row, with no new app
+  or module.
+
+### 0.4.4 History — rates and rate alarms
+
+The OS keeps a **bounded ring** of samples on disk (downsampled, oldest dropped
+first) and computes items/min and mB/min from the **line boundary deltas**;
+`STALLED` and `TREND` join the level alarms. The ring is sized for the panel and the agent, not for months of
+history: long retention stays in the optional service. Thresholds remain local;
+cross-hall policy stays outside.
+
+- **Exit:** a rate collapse raises `STALLED` while the line is up; a projected
+  limit raises `TREND`; the ring survives a reboot and never grows without a
+  cap; the panel shows rate and age together.
+
+### 0.4.5 Book — recipes and planning, local when it fits
+
+The operated book stays small and local (`recipes.tsv`, `recipe-io.tsv`,
+`lines.tsv`) — the twenty recipes the plant actually runs, not the encyclopedia.
+A **line program** is one data file per line (`/etc/lines/<line>.line`) with
+`stock in`/`stock out` and `rule` blocks: `mat in = mat out`, several items and
+fluids per rule, no code ([`recipes.md`](recipes.md#the-line-program)).
+`plan()` computes steps, seconds, bottleneck and shortfall in the OS for that
+book. The SuSy reference dataset remains **outside** (tens of MB and not ours to
+vendor) and is optional; when the book or the optimizer outgrows the node, the
+service takes it over without changing the lines or the keys. `declared`,
+`imported`, `measured` and `verified` keep their meanings.
+
+- **Exit:** a three-step chain plans in under a second on the in-game computer,
+  names its bottleneck, and its shortfall matches a hand count; a declared
+  quantity contradicted by a run turns `suspect` and raises an alarm; the
+  absence of the reference dataset changes no local plan.
+
+> **0.4.5a built (2026-11-15):** `tc.line` (`src/lib/tc/line.lua`) parses the
+> line program format and `npm run test:line` covers the casing fixture and
+> malformed input. The planner, lines and calibration remain.
 
 ### 0.4.6 Gates — desired state and interlocks
 
-- **Node:** `gate.set` stores the **desired** state in `/var/gates.tsv`,
-  reconciles it every tick and reports the actual state with the last refusal
-  reason. Interlocks are local: no feeding a full output, no opening a line
-  whose input stock is empty, no state change the node cannot verify.
-- Desired state, never toggles: a retried request must not invert a gate, and a
-  reboot must restore the last setpoints without asking anyone.
-- **Service:** turns a plan into setpoints, shows refusals, and after N
-  consecutive refusals raises `DISOBEDIENT LINE` and stops resending.
-- `gate.set` requires `linkControl = write`; with `off` the node reports and
-  refuses to move anything.
+`gate.set` stores the desired state in `/var/gates.tsv`, reconciles it every tick
+and reports the actual state with the last refusal reason. Interlocks are local
+and run on the cache: no feeding a full output, no opening a line whose input
+stock is empty, no state change the node cannot verify. Desired state, never
+toggles; a reboot restores the setpoints without asking anyone. A repeated
+refusal raises `DISOBEDIENT LINE` and stops resending. `gate.set` requires
+`linkControl = write`; with `off` the node reports and refuses to move anything.
 
 ### 0.4.6b Movement — `move` by name
 
 The only physical operation the node performs, because nobody else can: items
-leave one inventory and arrive in another ([`names.md`](names.md#moving-by-name-move)).
+leave one inventory and arrive in another ([`names.md`](names.md#moving-by-name)).
 
 - `move from=<name> to=<name> n=<amount> key=<selector>` resolves both names
   (and the transport's name), reads the source slots, filters by selector and
   transfers **slot by slot** through the named transport, capped per command.
+  The transport must accept the insert **and have a destination**: the same
+  crate→pipe call answered `true, 0` while the pipe was disconnected and
+  `true, 8` once it fed the bender (in-game 2026-11-15). A connected GT pipe is
+  a valid sink; a disconnected one is not.
 - The answer is what actually moved, per source member; `moved=0 reason=…` when
   nothing did. A cheerful `ok` for a move that did not happen is the worst
   possible reply.
 - Cost is per slot examined, not per item moved, so the selector and the stock
   layout matter: drawers group like items for free, a chest does not.
 
-### 0.4.7 Agent tools — read-only MCP
+### 0.4.7 Agent tools — read-only MCP, optional service
 
-The decision layer is a **local model** that gets the plant as MCP tools and
-decides through them ([`agent.md`](agent.md)). This slice exposes only what
-cannot hurt: `plant_situation`, `stock_query`, `alarm_list`, `history`, `plan`,
-`line_list`, `name_list`, `name_resolve`, `recipe_query`, `audit_tail`.
+The decision layer is a local model that gets the plant as MCP tools. With the
+self-contained readout the tools can be served by the **bridge** from the local
+mirror (no service required) or by the optional service when it is running:
+`plant_situation`, `stock_query`, `alarm_list`, `history`, `plan`, `line_list`,
+`path_list`, `path_query`, `recipe_query`, `audit_tail`. The situation report
+is **pre-aggregated and bounded**: halls, top alarms, stocks out of limits,
+rates, stale sources. The deterministic planner is a **tool**, never arithmetic
+the model does in its head; every number the agent states must be traceable to a
+tool result. Read-only on purpose: it validates whether the model understands
+the plant before it can move a gate, and it cannot break anything while it
+learns.
 
-- The situation report is **pre-aggregated and bounded**: halls, top alarms,
-  stocks out of limits, rates, stale sources. A dump of every item type would
-  bury the signal and burn the context.
-- The deterministic planner is a **tool**, never arithmetic the model does in its
-  head. Every number the agent states must be traceable to a tool result.
-- Read-only on purpose: it validates whether the model understands the plant
-  before it can move a gate, and it cannot break anything while it learns.
-
-Not in this phase: write tools, autonomous policy, approvals.
-
-Not in this phase: moving items, restock orders, hologram walls, sessions.
+Not in this phase: write tools, autonomous policy, approvals, restock orders,
+the hologram wall, sessions.
 
 **Exit criteria:**
 
-- **Node:** one hall with two stocks (items and fluid) reports **exact** counts
-  to the service with no visible drop in the TPS sampler; pulling a drawer
-  raises `STARVED` in the service within one polling cycle and clears on refill;
-  an idle hall makes **zero** component calls per tick; a node's energy falling
-  raises an alarm before the node halts; with the service stopped, gates hold
-  their last desired state and the node keeps serving its cache; a reboot
-  restores setpoints with the service absent.
-- **Service:** a three-step chain plans in under a second, names its bottleneck
-  step, and its shortfall matches a hand count; a refused gate shows up as an
-  alarm instead of a silent retry; the panel marks every hall `stale` after a
-  config drift rather than planning on old numbers.
+- **Node:** one **line** with an input stock, an output stock and an energy
+  source reports **exact** counts to the app; the casing rig falls by 8 ingots
+  and rises by 1 casing, and the machine buffers in between are **not read**;
+  pulling the input stock below its minimum raises `STARVED` within one polling
+  cycle and clears on refill; an idle line makes **zero** component calls per
+  tick; a removed boundary container goes `unbound`/`coarse`, never zero; a
+  node's energy falling raises `NO POWER` before it halts; with the bridge
+  stopped the app keeps serving its cache; a reboot restores the desired states.
+- **Mirror:** an external client reads the same snapshot, tanks and alarms the
+  app shows; a body larger than one frame is paged and never silently truncated;
+  killing the bridge leaves the app untouched.
+- **Halls:** two halls report into one page; a hall that is offline is `stale`,
+  not dropped; adding a hall is one computer and one config row.
+- **Service (optional):** when it runs, a three-step chain plans in under a
+  second and names its bottleneck; its shortfall matches a hand count; a refused
+  gate shows up as an alarm instead of a silent retry; a hall with a config
+  drift is marked `stale` rather than planned on old numbers.
 - **Agent:** with read tools only, the local model answers three posed questions
   — "what limits the gear chain", "which hall runs dry first", "what changed in
   the last hour" — citing the tool call behind every number, and inventing none.
 - **Paths:** `move from=hall1/ore_processing/entrada
-  to=hall1/ore_processing/grinders n=64 policy=fill` runs without a single UUID in
-  the command; a path resolving to two members sums its reads and dispatches by
-  the policy it was given; a second member under a `single` path raises
-  `cardinality_mismatch`; a mutating command on a multi-member path with no policy
-  is refused; breaking and re-placing one drawer leaves that member `unbound`
-  while the path keeps resolving; renaming a path does not rewire a saved line.
-- **Degradation:** with the Adapter absent or `linkControl = off`, the apps show
+  to=hall1/ore_processing/grinders n=64 policy=fill` runs without a single UUID
+  in the command; a path resolving to two members sums its reads and dispatches
+  by the policy it was given; a second member under a `single` path raises
+  `cardinality_mismatch`; a mutating command on a multi-member path with no
+  policy is refused; breaking and re-placing one drawer leaves that member
+  `unbound` while the path keeps resolving; renaming a path does not rewire a
+  saved line.
+- **Degradation:** with the Adapter absent or `linkControl = off`, the app shows
   `coarse`, `no telemetry` or `refused` — never an invented number.
-- **Scale:** a second hall is one reader node plus config on both sides, with no
-  new app or module.
+- **Scale:** a second hall is one reader computer plus config on both sides,
+  with no new app or module and no gateway.
 
 ## F4 — Sessions and displays (0.5) · moved after the readout
+
+> **Memory note (2026-11-15).** The 64 MB change removes the original
+> 64 KB/session pressure that motivated packing the framebuffer. Sessions are
+> still needed for terminals, kiosks and moving the UI off a plant computer, but
+> they no longer gate the readout. The packed framebuffer remains the target for
+> remote sessions; the local desktop keeps the current renderer until the remote
+> path needs it.
 
 **Goal:** replace the desktop singleton with sessions, so apps can later run on a
 node with more RAM. Sessions come second on purpose: a stock number on the
@@ -534,14 +557,14 @@ action; the wall shows the same numbers as the panel.
 | # | Work item | Phase | Size |
 |---|---|---|---|
 | 1 | In-game 0.3.x verification + probe — **done 2026-11-15**; a multiblock tank and one working machine remain | F2/F3 | L |
-| 2 | Names (DNS), `node.status`, service skeleton, ingest, alarm engine, panel | 0.4.1 | L |
-| 3 | `tc.stock` reader, snapshot and delta verbs; service history | 0.4.2 | L |
-| 4 | Tanks as stocks | 0.4.3 | M |
-| 5 | Rates and plant alarms in the service | 0.4.4 | M |
-| 6 | Recipe book, lines and chain planning in the service | 0.4.5 | L |
+| 2 | Local plant core: `tc.addr`, `tc.path`, drivers, stock/tank/energy readers, cache, level alarms, Plant app, `node.status` | 0.4.1 | L |
+| 3 | Mirror: `plant.status/snapshot/delta/alarms` over the link, paged and never truncated | 0.4.2 | M |
+| 4 | Second hall: one computer per hall, `halls.tsv`, merged view, no gateway | 0.4.3 | M |
+| 5 | Local history ring, rates, `STALLED`/`TREND` | 0.4.4 | M |
+| 6 | Local book and `plan()`; the reference dataset stays optional and outside | 0.4.5 | L |
 | 7 | `gate.set`, desired state, local interlocks, refusals | 0.4.6 | M |
 | 8 | `move` by name: selector, transport, bounded accounting | 0.4.6b | M |
-| 9 | Read-only MCP surface for the local agent | 0.4.7 | M |
+| 9 | Read-only MCP surface over the mirror (bridge or service) | 0.4.7 | M |
 | 10 | Sessions, display backends, packed framebuffer | 0.5 | L |
 | 11 | App placement, remote session protocol, terminal client | 0.6 | L |
 | 12 | Data-center power, UPS, health, rebalancing | 0.7 | M |
@@ -600,6 +623,10 @@ action; the wall shows the same numbers as the panel.
     locally whatever its interlocks reject and reports why; a dead service means
     "hold the last setpoints", not "stop the plant". See
     [`plant-service.md`](plant-service.md).
+    **Amended 2026-11-15 (decision 23):** with 64 MB the readout, cache, local
+    level alarms and the Plant app live in the OS; the service owns long
+    history, the reference dataset, planning at scale and the agent. The
+    `gate.set`/desired-state rule is unchanged.
 15. **The decision-maker is a local agent, on tools (2026-11-13).** A local model
     connects over **MCP** and decides goals, priorities and sequencing. It gets
     no arithmetic and no free execution: numbers come from deterministic tools
@@ -616,6 +643,10 @@ action; the wall shows the same numbers as the panel.
     fact that anything on a 1 MB computer competes with the OS itself. The
     translator still refuses what its **cache** shows to be wrong, and never
     spends an extra component call to decide.
+    **Amended 2026-11-15:** the node evaluates **local level thresholds**
+    against its own cache and raises its own level alarms; cross-hall policy,
+    rates, recipes and alarm interpretation stay outside. The no-extra-call
+    rule is what keeps this honest.
 17. **The translator's first job is a DNS (2026-11-13).** Components get
     **semantic, hierarchical paths** — `hall1/ore_processing/grinders` — and every
     command from outside speaks those paths, never a UUID. A path resolves to a
@@ -627,6 +658,9 @@ action; the wall shows the same numbers as the panel.
     change is a hard error. Paths are what make external instructions readable,
     reviewable and diffable, and they ship first because every other verb depends
     on them. See [`names.md`](names.md).
+    **Amended 2026-11-15:** paths are local to each computer first; the
+    gateway merge arrives with the second hall (0.4.3), not with the first
+    readout.
 18. **Where each fact lives (2026-11-13).** Binding, kind and cardinality
     describe the hardware, so they live in the node and survive a service
     restart. Dispatch policy, amount, selector and limits describe what the
@@ -668,6 +702,9 @@ action; the wall shows the same numbers as the panel.
     one-directional merge, never pushed back down. The app's whole job is to
     execute calls on components through those paths. See [`names.md`](names.md)
     and [`middleware.md`](middleware.md).
+    **Amended 2026-11-15:** the first version has no gateway; each computer is
+    its own authority and the merged view is only added when a second hall
+    exists.
 22. **Component kinds are plugins, and a plugin is data (2026-11-13).** An Adapter
     can expose signs, chests, tanks and machines as readily as drawers, so no block
     name is hardcoded. A kind is described by a declarative descriptor over a
@@ -676,3 +713,19 @@ action; the wall shows the same numbers as the panel.
     through the link, so executable config would be remote code execution with a
     different name. New kind = unknown component + `driver.dump` + a file + a
     reload. New *capability* is a kernel decision. See [`drivers.md`](drivers.md).
+23. **Self-contained readout first (2026-11-15).** The computer that sees the
+    plant has up to 64 MB (verified in-game: `memory=863KB/65536KB`), so the
+    readout, cache, level alarms and Plant app run in the OS; a service is
+    optional and owns long history, the reference dataset, planning at scale and
+    the MCP agent. The gateway/DNS/leaf split is deferred until a second hall
+    exists. This does not repeal the tick budget: reads are trickled, cached and
+    never polled in the draw path, and no alarm spends an extra component call.
+    It amends 14, 16, 17 and 21 as noted there.
+24. **Lines are black boxes with an input and an output (2026-11-15).** A
+    production line exposes exactly two boundary stocks — what goes in and what
+    comes out — and Transposers sit only at those boundaries. The OS reads and
+    moves the boundary stocks; it never reads the machine buffers inside the
+    line. The line's recipe and rate are measured from input/output deltas, not
+    from `getProgress` or `getEUt`. This keeps the reader small, removes the
+    Adapter requirement for rates, and makes a line observable even when its
+    internal machines are invisible to OpenComputers.

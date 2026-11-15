@@ -1,14 +1,15 @@
 # Plant telemetry (GregTech ↔ TerraCorp)
 
 Research for reading plant state (power, machines, tanks) into TerraCorp.
-Target phase: **0.4.x (F3 plant readout)**, feeding the alarm registry, the
+Target phase: **0.4.x (F3 plant readout)**, feeding the local alarm engine, the
 stock readers and the alarm channel. Open work called out in `distributed.md`:
 "verify which GTCE inventories/tanks the Adapter exposes before factory
 telemetry work".
 
 **Status 2026-11-15: the probe is done** for items, fluids, energy and coarse
-redstone; a multiblock tank and one working machine remain (see checklist 3 and
-the machine driver names below). Every measurement is 50 ms per host call.
+redstone; a multiblock tank remains (see checklist 3). The working-machine probe
+is not needed for F3: a line is a black box and its rate comes from the boundary
+deltas (decision 24). Every measurement is 50 ms per host call.
 
 ## The integration landscape (1.12.2)
 
@@ -144,6 +145,6 @@ store, it enters here as one more read path, not as a new model.
 Gate **precision** on the verification session: if the bridge works,
 `tc.telemetry` is a small config-driven module inside F3; if not, stocks stay
 coarse and the phase still ships, because alarms and energy history run on
-master energy and node presence alone. The alarm registry (0.4.1) is
+master energy and node presence alone. The local alarm engine (0.4.1) is
 deliberately independent of GregTech integration, so it is built first, not
 last.
