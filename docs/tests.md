@@ -34,10 +34,34 @@ npm run test:cluster
 npm run test:faults
 npm run test:screens
 npm run test:line
+npm run test:plant
 ```
 
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
+
+## 0.4.1 Plant readout checks
+
+`npm run test:plant` loads the six plant modules and runs the casing hall
+against fake components. It requires:
+
+1. `tc.addr` parses `node:component:face`, records `first_seen`, rejects a
+   remote node, and persists `/var/plant/seen.tsv`.
+2. `tc.path` matches `*`/`**`, rejects unsafe names, and reports
+   `cardinality_mismatch` for two members under `single`.
+3. `tc.driver` classifies a machine face as inventory, a pipe as transport and a
+   drum as tank; descriptor calls are dot-style proxy functions and
+   `driver.dump` returns methods with docs.
+4. The stock scan costs one component call per tick: the five-stock hall uses
+   **9 calls**, an eight-ingot crate is `exact`, a pipe is `unbound` with a
+   transport reason, a missing member is `unbound`, a tank reports **1000 mB**,
+   and three idle ticks make **zero** calls.
+5. The plant raises `STARVED`/`FULL` from `/etc/plant.tsv`, `NO POWER` below
+   15%, `STALE` for an old cache, and reports version/cache age in `status`.
+
+`node tools/harness/simulate.js plant --strict` opens the eleventh app from the
+Terminal and requires the empty-configuration message. `npm run test:screens`
+runs the `plant` scenario at five resolutions (50 combinations total).
 
 ## 0.4.5a line parser checks
 
@@ -431,7 +455,8 @@ Manual in-game checks for 0.2.1:
 show exactly one window titled Files. `npm run test:screens` runs nine
 scenarios (System, desktop, Terminal, Files, Settings, Notes, updater, Nodes,
 Vault) across five resolutions (160x50, 120x40, 80x25, 60x20, 40x16), for 45
-combinations. GAIA has its own gate, `npm run test:gaia`, because the screen
+combinations. The list now includes Plant, for fifty combinations. GAIA has its
+own gate, `npm run test:gaia`, because the screen
 matrix does not open it.
 Each combination must adopt the requested resolution, finish without errors,
 and paint visible content.
@@ -453,7 +478,8 @@ Manual in-game checks add what the harness cannot prove:
 2. Reboot and time startup until the desktop appears.
 3. Read `/var/log/tc.log` from TerraCorp's boot volume. Record the `gpu` line's
    resolution/free-memory values and the uptime on `First render OK`.
-4. Run a 30-minute session. Open all ten apps by icon and by F1-F10; verify the
+4. Run a 30-minute session. Open all eleven apps by icon and the first ten by
+   F1-F10 (Plant is the eleventh); verify the
    desktop selection, Enter-to-open, and taskbar chips. Drag two icons to swap
    their cells, restart, and confirm the order remains. In System, verify uptime
    advances once per second and readings refresh every two seconds. In Update,
@@ -704,6 +730,24 @@ The output crate held 2 EV, 1 HV, 1 LV and 1 MV; ULV (wrought iron) was not in
 the crate. RecipeViewer's dataset agrees on the circuit (8), the 8 plates and
 the material-to-tier mapping; see [`recipes.md`](recipes.md#machine-casings-assembler-circuit-8).
 
+0.4.1 Plant readout (in-game 2026-11-15). The 0.4.1 tree was installed directly
+over the 0.4.0 installation (backup in `/var/plant-backup`) and the computer
+booted `version=0.4.1`, `memory=925KB/65536KB`, 15 components. The Plant app
+opened from the link (`app.open plant`) and its `draw` returned **true** with
+zero window failures. The live snapshot:
+
+- `casing/ingots` — **exact**, 744 items, four keys: Titanium 192, Stainless
+  Steel 184, Steel 184, Aluminium 184.
+- `casing/casings` — **exact**, 5 items, four keys: 2 EV, 1 HV, 1 LV, 1 MV.
+- No alarms at minimum 8 / maximum 64.
+
+With `/etc/plant.tsv` temporarily at minimum 800, the alarm read `STARVED
+casing/ingots · 744 below minimum 800`; restoring minimum 8 cleared it. Idle:
+`calls=6, nextScan=5.1s`, and after three seconds `calls=6` — **zero component
+calls between scans**. The log after the 0.4.1 boot had no new `ERR`; the only
+`ERR` is the pre-fix Plant draw from the previous boot, fixed in the installed
+app.
+
 Post-release work under development: an interrupted install could leave the
 EEPROM pointed at a half-written disk (the boot address is now set after a
 complete copy), re-preparing an already prepared floppy rewrote it (same
@@ -725,7 +769,7 @@ part of the published v0.3.0 release.
 | At least 250 KB free on Tier 2 | **Met**: recorded logs exceed the threshold; CPU/GPU tiers confirmed by the user's session |
 | First render within 2 seconds | **Met**: recorded values 1.05 s and 1.25 s are within budget; confirmed in-game |
 | Resolution adaptation and GPU retry tests | Verified by `npm run test:screens` and `npm run test:faults` |
-| Desktop icons, taskbar, and keyboard selection | `npm run test:desktop` clicks the Files icon and requires exactly one window; `npm run test:screens` covers 35 combinations; reported working in-game on 2026-10-25 |
+| Desktop icons, taskbar, and keyboard selection | `npm run test:desktop` clicks the Files icon and requires exactly one window; `npm run test:screens` covers 50 combinations; reported working in-game on 2026-10-25 |
 | Icon layout persists | `npm run test:icon-order` verifies swap, move-to-empty-slot, saving `iconLayout`/`iconOrder`, and loading both formats after boot; confirm in-game across a restart and update |
 | About → Update SYSTEM section shows live values | Harness screens pass; confirm values and R refresh in-game |
 | Updater detects, stages, installs, and restarts from a stable release | Modern/legacy response paths, full manifest filtering, backup recovery, rollback, and the boot-time applier (including a successful close with no return value) pass in the harness; the 0.1.9 → 0.1.11 repair path and the normal 0.1.11 → 0.2.0 update were confirmed in-game; keep log and pending-file evidence for F0 |

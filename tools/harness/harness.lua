@@ -613,10 +613,10 @@ if notesManyScenario then
   written["/var/version"] = "0.3.29\n"
 end
 if notesOneScenario then
-  written["/var/version"] = "0.3.33\n"
+  written["/var/version"] = "0.4.0\n"
 end
 if notesSameScenario then
-  written["/var/version"] = "0.4.0\n"
+  written["/var/version"] = "0.4.1\n"
 end
 local nodesFloppy = nodesScenario and newVolume(512 * 1024) or nil
 local modemPackets = 0
@@ -851,7 +851,7 @@ local function iconColumns()
   return math.max(1, fit)
 end
 
-local ICON_APPS = 10
+local ICON_APPS = 11
 
 local function iconRowsFor(tile)
   local desktopTop = 3
@@ -1084,6 +1084,14 @@ elseif scenario == "nodes" then
   idle(1)
   typeText("p")
   idle(2)
+elseif scenario == "plant" then
+  -- The Plant app is the eleventh icon; open it from the Terminal so the
+  -- scenario does not depend on a particular grid column.
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Console
+  idle(1)
+  typeText("open plant")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(6)
 elseif scenario == "vault" then
   -- F8 opens the Vault pool browser over an empty cluster namespace.
   ev("key_down", "screen-1", nil, 0x42, "tester") -- F8 opens Vault
@@ -1708,6 +1716,16 @@ if STRICT then
       print("FAIL: the pull bootstrap is missing tc.net")
     end
   end
+  if scenario == "plant" then
+    if not screen:find("Plant", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Terminal did not open the Plant app")
+    end
+    if not screen:find("No stocks configured", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Plant app did not show its empty configuration")
+    end
+  end
   if scenario == "vault" then
     if not screen:find("Vault pool", 1, true) then
       errors = errors + 1
@@ -1871,7 +1889,7 @@ if STRICT then
   end
   if scenario == "notes_many" then
     local notes = written["/var/whatsnew.md"] or ""
-    for _, version in ipairs({ "0.3.30", "0.3.31", "0.3.32", "0.3.33", "0.4.0" }) do
+    for _, version in ipairs({ "0.3.30", "0.3.31", "0.3.32", "0.3.33", "0.4.0", "0.4.1" }) do
       if not notes:find("## " .. version, 1, true) then
         errors = errors + 1
         print("FAIL: the release notes missed " .. version)
@@ -1885,18 +1903,18 @@ if STRICT then
       errors = errors + 1
       print("FAIL: the desktop did not announce the release notes")
     end
-    if (readReal("/var/version") or ""):gsub("%s+$", "") ~= "0.4.0" then
+    if (readReal("/var/version") or ""):gsub("%s+$", "") ~= "0.4.1" then
       errors = errors + 1
       print("FAIL: /var/version did not record the running build")
     end
   end
   if scenario == "notes_one" then
     local notes = written["/var/whatsnew.md"] or ""
-    if not notes:find("## 0.4.0", 1, true) then
+    if not notes:find("## 0.4.1", 1, true) then
       errors = errors + 1
       print("FAIL: the release notes did not include the new version")
     end
-    if notes:find("## 0.3.33", 1, true) then
+    if notes:find("## 0.4.0", 1, true) then
       errors = errors + 1
       print("FAIL: the release notes included the previous build")
     end

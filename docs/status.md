@@ -68,14 +68,21 @@ discovery.
 
 ## What exists today
 
-- **0.3.x is built and tagged** up to `v0.3.33`, and **0.4.0 is released**: `tc.net`,
-  netboot provisioning, node registry, Relay, waves, Vault, the desktop shell with
-  ten apps, the GAIA app and the external-link bridge (loopback verified in-game,
-  including remote writes, `link.interval` and `lua`), and the Lab with its Lua
-  interpreter, named sessions, clipboard paste and pane selection. Updates leave
-  the notes of every skipped release in `/var/whatsnew.md`.
-- **Harness green**: `npm run check` (51 files, 43-file manifest) plus the suites
-  the repo carries.
+- **0.3.x is built and tagged** up to `v0.3.33`, and **0.4.1 is built and
+  verified in-game** (2026-11-15): `tc.net`, netboot provisioning, node registry, Relay,
+  waves, Vault, the desktop shell with **eleven apps**, the GAIA app and the
+  external-link bridge (loopback verified in-game, including remote writes,
+  `link.interval` and `lua`), the Lab with its Lua interpreter, and the Plant
+  readout. Updates leave the notes of every skipped release in
+  `/var/whatsnew.md`.
+- **0.4.1 Plant readout**: `tc.addr`, `tc.path`, `tc.driver`, `tc.stock`,
+  `tc.tank`, `tc.plant` and the Plant app; boundary stocks, exact/coarse states,
+  level alarms and one component call per second. `npm run test:plant` covers
+  the casing hall against fake components. In-game: 744 input items and 5
+  casings read `exact`, the app drew with zero failures, `STARVED` fired and
+  cleared, and an idle line made zero calls across three seconds.
+- **Harness green**: `npm run check` (59 files, 50-file manifest), `test:plant`,
+  `test:line`, `sim`, `sim:oc` and the 50-combination screen matrix.
 - **0.4.5a parser written**: `tc.line` parses `/etc/lines/*.line` (`stock in/out`,
   multiple rules, multi-item/fluid terms, `ticks`/`limit`) without executing it;
   `npm run test:line` covers the casing fixture and malformed input. The planner

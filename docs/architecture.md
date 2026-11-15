@@ -92,7 +92,7 @@ The desktop is drawn under the windows. It contains a responsive full-screen ico
 grid and a one-row taskbar; windows are drawn over the grid.
 
 - Every app declares a 3-cell `icon` code (`SYS`, `FIL`, `TRM`, `SET`, `NTS`,
-  `UPD`, `NOD`, `VLT`, `GAI`, `LAB`) and a 9x5 `iconArt` pictogram. The desktop
+  `UPD`, `NOD`, `VLT`, `GAI`, `LAB`, `PLT`) and a 9x5 `iconArt` pictogram. The desktop
   tile is 9 cells wide and 5 rows tall, with the `short` label on the row below.
   `npm run check` rejects an app without a registered ID, a 3-cell code, a
   label, or five 9-cell art rows, so an app cannot ship without a visible

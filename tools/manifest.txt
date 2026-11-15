@@ -6,6 +6,7 @@ src/apps/gaia.lua
 src/apps/lab.lua
 src/apps/nodes.lua
 src/apps/notes.lua
+src/apps/plant.lua
 src/apps/settings.lua
 src/apps/update.lua
 src/apps/vault.lua
@@ -14,9 +15,11 @@ src/boot/kernel.lua
 src/boot/netboot.lua
 src/boot/netfetch.lua
 src/init.lua
+src/lib/tc/addr.lua
 src/lib/tc/changelog.lua
 src/lib/tc/cluster.lua
 src/lib/tc/config.lua
+src/lib/tc/driver.lua
 src/lib/tc/gfx.lua
 src/lib/tc/jobs.lua
 src/lib/tc/keys.lua
@@ -26,9 +29,13 @@ src/lib/tc/link.lua
 src/lib/tc/log.lua
 src/lib/tc/net.lua
 src/lib/tc/node.lua
+src/lib/tc/path.lua
+src/lib/tc/plant.lua
 src/lib/tc/provision.lua
 src/lib/tc/pull.lua
 src/lib/tc/registry.lua
+src/lib/tc/stock.lua
+src/lib/tc/tank.lua
 src/lib/tc/text.lua
 src/lib/tc/theme.lua
 src/lib/tc/ui.lua

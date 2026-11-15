@@ -280,6 +280,12 @@ component call is spent to decide an alarm.
   zero; the plant core fits comfortably in the 64 MB machine and the 30 Hz
   desktop loop shows no visible drop.
 
+> **0.4.1 built and verified in-game (2026-11-15):** `tc.addr`, `tc.path`,
+> `tc.driver`, `tc.stock`, `tc.tank`, `tc.plant` and the Plant app are in the
+> tree; `npm run test:plant` and the `plant` screen scenario pass. The casing
+> hall reported 744 input items and 5 casings `exact`, the app drew with zero
+> failures, `STARVED` fired and cleared, and an idle line made zero calls.
+
 ### 0.4.2 Mirror — the link exposes the local readout
 
 The external link carries the readout without requiring a service:

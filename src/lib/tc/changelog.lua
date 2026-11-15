@@ -23,6 +23,7 @@ return {
     "0.3.32",
     "0.3.33",
     "0.4.0",
+    "0.4.1",
   },
   notes = {
     ["0.3.21"] = {
@@ -81,6 +82,12 @@ return {
     ["0.4.0"] = {
       "No visible changes: this release records the in-game probe that opens the plant readout work.",
       "Items, fluids, energy and drawer redstone now read with measured formats and a 50 ms cost per call.",
+    },
+    ["0.4.1"] = {
+      "Plant: a local readout of line-boundary stocks with items, fluids and level alarms.",
+      "A line is a black box: one input and one output stock; the machines inside are not read.",
+      "The readout runs on one component call per second and makes none while the line is idle.",
+      "Groundwork: the data-only /etc/lines/<line>.line parser (stock in/out, rules, items and fluids).",
     },
   },
 }

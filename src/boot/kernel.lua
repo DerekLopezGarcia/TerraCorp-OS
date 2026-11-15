@@ -11,7 +11,7 @@ local MODULE_ROOTS = {
   apps = "/apps/",
 }
 
-local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes", "vault", "gaia", "lab" }
+local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes", "vault", "gaia", "lab", "plant" }
 
 local function packCall(fn, ...)
   local result = table.pack(pcall(fn, ...))
@@ -292,6 +292,9 @@ function kernel:loop()
         if self.link then
           self.link:close()
         end
+        if self.plant then
+          pcall(self.plant.stop, self.plant)
+        end
         return
       end
 
@@ -331,6 +334,12 @@ function kernel:loop()
         local ok, reason = pcall(self.cluster.tick, self.cluster)
         if not ok then
           self.log.error("cluster tick: " .. tostring(reason))
+        end
+      end
+      if self.plant then
+        local ok, reason = pcall(self.plant.tick, self.plant)
+        if not ok then
+          self.log.error("plant tick: " .. tostring(reason))
         end
       end
       pcall(self.ui.tick, self.ui)
@@ -641,6 +650,26 @@ function kernel.start(boot)
     instance.node = runtime
     runtime:run()
     return
+  end
+
+  -- The local plant readout starts before the desktop: the app only reads its
+  -- cache, and the first scan is one component call per second.
+  local okPlant, plantModule = pcall(requireModule, "tc.plant")
+  if okPlant and type(plantModule) == "table" then
+    local okNew, service = pcall(plantModule.new, {
+      kernel = instance,
+      vfs = vfs,
+      log = log,
+      version = version,
+    })
+    if okNew then
+      instance.plant = service
+      log.trace("Plant readout started")
+    else
+      log.error("Plant service failed: " .. tostring(service))
+    end
+  else
+    log.error("Plant service unavailable: " .. tostring(plantModule))
   end
 
   local gpuAddress = component.list("gpu")()
