@@ -22,6 +22,7 @@ return {
     "0.3.31",
     "0.3.32",
     "0.3.33",
+    "0.4.0",
   },
   notes = {
     ["0.3.21"] = {
@@ -76,6 +77,10 @@ return {
       "fs.write and fs.append over the External Link failed in-game because of a wrong argument order; fixed.",
       "link.interval sets the link polling cadence from the bridge (1-60 s); it needs no reboot.",
       "lua runs a chunk over the link with full control, with the Lab environment and its output.",
+    },
+    ["0.4.0"] = {
+      "No visible changes: this release records the in-game probe that opens the plant readout work.",
+      "Items, fluids, energy and drawer redstone now read with measured formats and a 50 ms cost per call.",
     },
   },
 }

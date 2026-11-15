@@ -613,10 +613,10 @@ if notesManyScenario then
   written["/var/version"] = "0.3.29\n"
 end
 if notesOneScenario then
-  written["/var/version"] = "0.3.32\n"
+  written["/var/version"] = "0.3.33\n"
 end
 if notesSameScenario then
-  written["/var/version"] = "0.3.33\n"
+  written["/var/version"] = "0.4.0\n"
 end
 local nodesFloppy = nodesScenario and newVolume(512 * 1024) or nil
 local modemPackets = 0
@@ -1871,7 +1871,7 @@ if STRICT then
   end
   if scenario == "notes_many" then
     local notes = written["/var/whatsnew.md"] or ""
-    for _, version in ipairs({ "0.3.30", "0.3.31", "0.3.32", "0.3.33" }) do
+    for _, version in ipairs({ "0.3.30", "0.3.31", "0.3.32", "0.3.33", "0.4.0" }) do
       if not notes:find("## " .. version, 1, true) then
         errors = errors + 1
         print("FAIL: the release notes missed " .. version)
@@ -1885,18 +1885,18 @@ if STRICT then
       errors = errors + 1
       print("FAIL: the desktop did not announce the release notes")
     end
-    if (readReal("/var/version") or ""):gsub("%s+$", "") ~= "0.3.33" then
+    if (readReal("/var/version") or ""):gsub("%s+$", "") ~= "0.4.0" then
       errors = errors + 1
       print("FAIL: /var/version did not record the running build")
     end
   end
   if scenario == "notes_one" then
     local notes = written["/var/whatsnew.md"] or ""
-    if not notes:find("## 0.3.33", 1, true) then
+    if not notes:find("## 0.4.0", 1, true) then
       errors = errors + 1
       print("FAIL: the release notes did not include the new version")
     end
-    if notes:find("## 0.3.32", 1, true) then
+    if notes:find("## 0.3.33", 1, true) then
       errors = errors + 1
       print("FAIL: the release notes included the previous build")
     end

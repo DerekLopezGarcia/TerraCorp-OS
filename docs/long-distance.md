@@ -7,8 +7,31 @@ operating a remote base and using tablets as mobile terminals.
 
 Redstone Control (Cd4017BE, Minecraft 1.12.2) supports signals beyond vanilla
 redstone levels, point-to-point sockets, interdimensional wireless, FPGA-style
-processing, and an OpenComputers Adapter. Its exact Adapter API and throughput
-must still be measured in the target instance.
+processing, and an OpenComputers Adapter. **The Adapter API is verified in-game
+(2026-11-15)**: the block registers as the `rsio` component with eight input and
+eight output **ports** numbered 0–7 — not the six block faces, so a bare rig
+reads 0 on every `getInput(side)`.
+
+| Method | Signature | Meaning |
+|---|---|---|
+| `getInput` | `(port[, time]):number` | signal at that port now, or at a buffered time |
+| `setOutput` | `(port[, time], value):boolean` | set an output for the next tick or a future time |
+| `bufferInput` | `(inputs, ticks)` | buffer the first N inputs over N ticks, for tick-precise reads |
+| `bufferOutput` | `(inputs, ticks)` | the same for outputs |
+| `registerEvent` | `(bitmask)` | receive `{"rs_change", port, value}` events for the masked ports |
+| `time` | `([setTime]):number` | internal timer in ticks, or reset it to a value |
+
+Throughput and the buffered-read behaviour still need measuring in the target
+instance.
+
+Verified in-game on the same date: a Redstone Port reading a Storage Drawer fed
+port 0, and `getInput(0)` mirrored the drawer's 0–15 signal exactly (4 → 3 → 4
+as 64 sponges left and returned). `registerEvent(1)` delivered
+`rs_change, <address>, 0, 3` to `computer.pullSignal` when the level changed, so
+the channel can be event-driven instead of polled. The OpenComputers **Redstone
+I/O** block also signals changes, as `redstone_changed, <address>, <side>, <value>`.
+Buffered reads (`bufferInput(inputs, ticks)` plus `getInput(port, time)`) are the
+next thing to measure.
 
 OpenComputers tablets are portable computers but cannot interact with the
 world or use a Redstone Card. They do not persist across dimension changes or

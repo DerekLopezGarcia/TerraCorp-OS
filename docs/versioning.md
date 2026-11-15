@@ -52,13 +52,13 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.3.33 Tempo, published as v0.3.33 on 2026-11-15. That is
+The current build is 0.4.0 Beacon, published as v0.4.0 on 2026-11-15. That is
 also the latest stable release, so an up-to-date installation has nothing to
-fetch. Versions through 0.3.32 update to it in-game as usual: no manifest or
-paths changed shape, and no files were added. 0.3.33 fixes `fs.write` and
-`fs.append` over the External Link, which failed in-game because the VFS call
-passed the instance as the path, and adds `link.interval` so the bridge can set
-the polling cadence (1-60 s) without a reboot.
+fetch. Versions through 0.3.33 update to it in-game as usual: no manifest or
+paths changed shape, and no files were added. 0.4.0 has no visible changes; it
+records the in-game probe (items, fluids, energy, drawer redstone, all at 50 ms
+per host call) that opens the plant readout work, and the results are in
+`docs/telemetry.md` and `docs/tests.md`.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected
 non-`src/` entries in the repository manifest; install 0.1.9 manually from OpenOS
 on those. Versions 0.1.7 and 0.1.8 can update to the latest release in-game, but

@@ -202,7 +202,7 @@ one sitting, and the Adapter probe from F3 is recorded in the same session — t
 probe needs the world running anyway, so it rides along instead of costing
 another run.
 
-## F3 — Plant readout (0.4) · next
+## F3 — Plant readout (0.4) · in progress
 
 **Goal:** turn the plant into numbers an operator can act on — items and fluids
 as named stocks, energy per node, an alarm list, and a plan that names its own
@@ -210,18 +210,30 @@ bottleneck. The phase has **two layers** (decision 14,
 [`plant-service.md`](plant-service.md)): the nodes read and hold, the service
 remembers, plans and explains. Neither layer is optional.
 
-### 0.4.0 The probe (no code, blocks everything precise)
+### 0.4.0 The probe · done 2026-11-15
 
 One in-game session answering what OpenComputers can actually see, recorded in
-[`telemetry.md`](telemetry.md#in-game-verification-checklist): an Adapter next
-to a **Storage Drawer**, a **GregTech crate**, a plain chest, a **multiblock
-tank**, an induction matrix and a single-block machine. Record kinds, methods,
-units, read cost, the **identifier format** for one item and one fluid, and
-whether the world host can reach an HTTP service on loopback.
+[`telemetry.md`](telemetry.md#in-game-verification-checklist) and the results
+log in [`tests.md`](tests.md#results-log). Measured with a Transposer, an Adapter
+(Tank Controller), a Power Substation controller and its hatches, a Storage
+Drawer with a Redstone Upgrade, a Redstone I/O and a Redstone Control `rsio`.
 
-If nothing reads, the phase ships coarse mode only (drawer redstone 0–15) and
-every precise stock item below stops there. Writing `tc.stock` before this
-probe is guessing.
+| Area | Answer |
+|---|---|
+| Item key | `name` + `damage` (+ `tag` only when `hasTag`); `size`, `label`, `maxSize`, `maxDamage` alongside |
+| Fluid key | `name` is the Forge registry name (`water`), `label` display-only, `hasTag` marks NBT; `getFluidInTank` returns an **array** of tanks |
+| Inventory | Transposer per face (`getInventoryName/Size`, `getStackInSlot`, `getAllStacks`); one entry per slot, empty slots are empty tables |
+| Tanks | Same shape with `getTankLevel/Capacity/Count`; an Adapter needs **Tank Controller** and appears as `tank_controller`, not `adapter` |
+| Energy | `power_substation` exposes `getStored`/`getCapacity` as **formatted strings** (BigInteger); the **input** hatch alone exposes numeric container reads, the output hatch exposes none |
+| Coarse | Drawer Redstone Upgrade gives a linear 0–15 (≈112 items per level on a 2-slot drawer); Redstone I/O or `rsio` reads it, and both signal changes as events |
+| Cost | **50 ms per host call**, uniformly — one server tick |
+
+Precision is viable: items and fluids read exactly, energy reads with a string
+normalizer and the 2^53 caveat, and coarse redstone is a working fallback. Two
+probes remain and do not block 0.4.1: a **multiblock tank** (several tanks behind
+one face) and a **working machine** (`getProgress`, `getMaxProgress`, `getEUt`,
+`getCurrentRecipe`), which decides whether rates come from the machine or from
+stock deltas.
 
 ### 0.4.1 Addressing, semantic paths and the middleware profile
 
@@ -521,7 +533,7 @@ action; the wall shows the same numbers as the panel.
 
 | # | Work item | Phase | Size |
 |---|---|---|---|
-| 1 | In-game 0.3.x verification + probe, identifiers and loopback (one session) | F2/F3 | L |
+| 1 | In-game 0.3.x verification + probe — **done 2026-11-15**; a multiblock tank and one working machine remain | F2/F3 | L |
 | 2 | Names (DNS), `node.status`, service skeleton, ingest, alarm engine, panel | 0.4.1 | L |
 | 3 | `tc.stock` reader, snapshot and delta verbs; service history | 0.4.2 | L |
 | 4 | Tanks as stocks | 0.4.3 | M |

@@ -551,6 +551,96 @@ chest came back as `count 27`, `#getAll() 27`, and 448 items summed over the
 seven stacks with a name: the array has one entry per slot, empty slots are
 empty tables, so the reader skips entries without `name`.
 
+0.3.x Tanks (in-game 2026-11-15, two GregTech drums on one Transposer): the
+tank API is the same shape as the inventory one, with a side. `getTankCount(side)`
+reported `1` on the two drum faces and `0` on the four empty ones — no error for
+"no tank". Capacity came back **1,024,000 mB** per drum and one held **11,000 mB**
+of water. `getFluidInTank(side)` returns an **array** of tank descriptions, so
+the reader takes `[1]`; each entry is
+`amount=11000 capacity=1024000 hasTag=false label=Water name=water` — the fluid
+key is the Forge registry name (`water`), the label is only for display, and
+`hasTag` marks NBT variants. That answers the identifier-format item for fluids
+in [`telemetry.md`](telemetry.md#in-game-verification-checklist). Cost is again
+**50 ms per call** (100 `getTankLevel` calls = 5,000 ms).
+`transferFluid(from, to, count)` returns `true, moved` (mB, `false, 0` when
+nothing moves) and pauses the transfer at 16 buckets per second: 1,000 mB moved
+between the two drums and back, with `getTankLevel` reflecting each step.
+
+The Adapter half is answered too (same session, after the block was wired and
+the **Tank Controller** upgrade fitted): the Adapter does **not** appear as an
+`adapter` component. `component.list()` shows a `tank_controller` component for
+the upgrade plus one `drum_tungstensteel` component per drum — the drums expose
+only `getCover`, `slot` and `type` (GregTech's machine API), so tank reads go
+through `tank_controller`. It answered exactly like the Transposer: tanks on
+faces 2 and 3, capacity 1,024,000 mB each, 14,000 mB of water on face 3, the
+same `name=water label=Water amount=14000 capacity=1024000 hasTag=false` entry,
+and 50 ms per call. The two paths are interchangeable for a stock reader, and
+the component kind to register is `tank_controller`, not `adapter`.
+
+0.3.x Energy (in-game 2026-11-15, Adapter on a Power Substation controller and on
+an energy block, one Transposer on an energy hatch): the Adapter exposes
+`power_substation` with `getStored`, `getCapacity`, `getAverageInLastSec`,
+`getAverageOutLastSec`, `getPassiveDrain` and `getMaintenanceProblems` — exactly
+the methods GT 2.8.10's own OpenComputers driver declares, minus
+`getNumMaintenanceProblems`. **The two size reads come back as formatted
+strings**, not numbers: `getStored()` = `"261,015,954,464"` and `getCapacity()` =
+`"83,010,348,331,692,982,263"`. The capacity exceeds a signed 64-bit integer, so
+GT formats a BigInteger; the reader must strip commas, and anything above 2^53
+is approximate in a Lua double, which matters for percentage maths but not for
+"is it full".
+
+The energy block read through the same adapter is `infinite_energy` (the jar's
+`gregtech.machine.infinite_energy`, the **Infinite GT Energy Unit Emitter**, a
+creative block) and returns numbers: stored 69, capacity 420, output voltage
+2,097,152, amperage 64, `getOutputPerSec` 2,684,354,560 = voltage × amperage ×
+20. Both paths cost 50 ms per call. A Transposer next to the energy block saw
+**no inventory or tank** on that face; the only inventory it found in the rig was
+the Adapter block itself (`opencomputers:adapter`, 1 slot, its upgrade slot).
+
+The substation's own hatches are asymmetric (same session). The **input** hatch
+(`substation_hatch_input_64a_uhv`) exposes the full container API with plain
+numbers: stored 0, capacity **2,147,483,648** (a 2^31 EU buffer), input
+2,097,152 V × 64 A, `perSec` 0 while idle, 50 ms per call. The **output** hatch
+(`substation_hatch_output_64a_uhv`) exposes only `getCover`, `slot` and `type` —
+no energy methods at all — so a reader has to target the input hatch; the output
+one is invisible to the driver on that face.
+
+0.3.x Coarse redstone (in-game 2026-11-15, Storage Drawers with a Redstone
+Upgrade, one Redstone I/O on the drawer, a second drawer on the same Transposer
+as the sink): the upgrade emits a **proportional 0–15 for total storage**, not
+the vanilla comparator curve. Sweeping 64 sponges out of a 2-slot basic drawer
+and back gave a symmetric, monotonic ladder: 0 items → 0, 64 and 128 → 1, 192
+and 256 → 2, 320 and 384 → 3, 448 → 4. That is `round(15 × fill / capacity)`
+with a capacity in the 1,650–1,920 range (≈112 items per level, so a full drawer
+should read 15); a vanilla comparator would have said 7 at 448. Coarse mode is
+therefore usable for "half full / nearly full", not for counts.
+
+Two rig facts from the same sweep. A computer's **Redstone Card only reads its
+own six sides**: the drawer touched the Adapter and the Transposer, so the card
+saw 0 on every side; a **Redstone I/O** block against the drawer, cabled to the
+computer, is what reads it (face 3 in this rig). And `transferItem` is
+`transferItem(from, to, count[, sourceSlot[, sinkSlot]])` — the fourth argument
+is a slot **integer**, not a boolean: passing `true` raises `bad argument #4
+(integer expected, got boolean)`. Between the two drawers it moved **64 items per
+call even when asked for 192**, so `move` has to loop once per stack.
+
+The **Redstone Control** Adapter (`rsio`) is a third path, with ports 0–7 instead
+of sides. A Redstone Port reading the same drawer fed port 0, and `getInput(0)`
+mirrored the ladder exactly (4 → 3 → 4 across a 64-item move). `registerEvent(1)`
+delivered `rs_change, <address>, 0, 3` to `computer.pullSignal` on the change, so
+this channel can be event-driven with no polling; the OpenComputers Redstone I/O
+also signals, as `redstone_changed, <address>, <side>, <value>`.
+
+0.4.0 Probe (in-game 2026-11-15). The 0.3.32 → 0.3.33 update ran in-world and
+wrote `/var/whatsnew.md` with a single section, which closed the 0.3.32 feature.
+The External Link then answered `status`, `log`, `fs.read`, `fs.write`,
+`link.interval` and `lua` at a 1 s cadence, and `lua` is what made the rest of
+the session possible: every probe above ran as a short chunk over the bridge
+instead of from the Lab. Items, fluids, energy and coarse redstone are answered
+here and in [`telemetry.md`](telemetry.md#in-game-verification-checklist); a
+multiblock tank and one working machine remain, to be measured during 0.4.2 and
+0.4.4.
+
 Stack shape read from the drawer (face 1, slot 2) and the chest (face 3, slots
 1..7): `name`, `damage`, `size`, `label`, `maxSize`, `maxDamage`, `hasTag`;
 `tag` only appears when `hasTag` is true. The drawer held 128

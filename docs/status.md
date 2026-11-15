@@ -57,13 +57,13 @@ discovery.
 
 ## What exists today
 
-- **0.3.x is built and tagged** up to `v0.3.33`: `tc.net`, netboot provisioning,
+- **0.3.x is built and tagged** up to `v0.3.33`, and **0.4.0 is released**: `tc.net`, netboot provisioning,
   node registry, Relay, waves, Vault, the desktop shell with ten apps, the GAIA
   app and the external-link bridge (loopback verified in-game, including remote
   writes and `link.interval`), and the Lab with its Lua interpreter, named
   sessions, clipboard paste and pane selection. Updates leave the notes of every
   skipped release in `/var/whatsnew.md`.
-- **Harness green**: `npm run check` (48 files, manifest synced) plus the suites
+- **Harness green**: `npm run check` (49 files, manifest synced) plus the suites
   the repo carries.
 - **Probe answers are arriving**: an Adapter face is a derived address (the same
   kind on the same face survives a re-place; a new kind or a new Adapter does
