@@ -16,10 +16,37 @@ end
 
 local net = assert(load(NET_SOURCE, "=net.lua"))()
 
+-- The link asks tc.lab for an environment; the test only needs the print
+-- capture, so this stands in for the module and keeps the check on the link.
+local fakeLab = {
+  new = function()
+    return {
+      environment = function(_, output)
+        return {
+          error = error,
+          math = math,
+          select = select,
+          string = string,
+          table = table,
+          tostring = tostring,
+          print = function(...)
+            local pieces = {}
+            for index = 1, select("#", ...) do
+              pieces[index] = tostring((select(index, ...)))
+            end
+            output[#output + 1] = table.concat(pieces, "\t")
+          end,
+        }
+      end,
+    }
+  end,
+}
+
 local BASE = {
   assert = assert,
   error = error,
   ipairs = ipairs,
+  load = load,
   math = math,
   pairs = pairs,
   pcall = pcall,
@@ -117,33 +144,51 @@ local function build(settings, replies, files, listings, hasCard)
     if id == "tc.net" then
       return net
     end
+    if id == "tc.lab" then
+      return fakeLab
+    end
     error("unexpected module: " .. tostring(id))
   end
   env.component = makeComponent(request, hasCard ~= false)
   env.computer = computer
-  env.config = { get = function(key) return settings[key] end }
+  local live = {}
+  for key, value in pairs(settings) do
+    live[key] = value
+  end
+  env.config = {
+    get = function(key) return live[key] end,
+    set = function(key, value)
+      if key == "linkInterval" and type(value) == "number" and value >= 1 then
+        live[key] = value
+        return true
+      end
+      return false
+    end,
+  }
   local capture = { writes = {}, poweroff = 0 }
 
   env.vfs = {
+    -- Dot-style like src/lib/tc/vfs.lua: `vfs.write(path, data)`. A fake that
+    -- accepts an instance first would hide a caller passing self by mistake.
     read = function(path) return files[path] end,
     list = function(path) return listings[path] end,
-    write = function(_, path, data)
+    write = function(path, data)
       capture.writes[#capture.writes + 1] = "w " .. path .. " " .. data
       return true
     end,
-    append = function(_, path, data)
+    append = function(path, data)
       capture.writes[#capture.writes + 1] = "a " .. path .. " " .. data
       return true
     end,
-    ensureDir = function(_, path)
+    ensureDir = function(path)
       capture.writes[#capture.writes + 1] = "d " .. path
       return true
     end,
-    remove = function(_, path)
+    remove = function(path)
       capture.writes[#capture.writes + 1] = "r " .. path
       return true
     end,
-    rename = function(_, from, to)
+    rename = function(from, to)
       capture.writes[#capture.writes + 1] = "m " .. from .. " " .. to
       return true
     end,
@@ -162,6 +207,10 @@ local function build(settings, replies, files, listings, hasCard)
     end,
     poweroff = function()
       capture.poweroff = capture.poweroff + 1
+      return true
+    end,
+    saveConfig = function()
+      capture.saved = (capture.saved or 0) + 1
       return true
     end,
     ui = {
@@ -389,6 +438,85 @@ elseif scenario == "reboot" then
   local result = posted(requests[2].body)
   check(result.text:find("reboot=scheduled", 1, true) ~= nil, "reboot acknowledges before restarting")
   check(capture.poweroff == 1, "poweroff was called once, got " .. tostring(capture.poweroff))
+elseif scenario == "interval" then
+  -- The interval is a link-level knob: available with linkControl off, because
+  -- it changes only this client's cadence and touches no user data.
+  local instance, requests, _, _, capture = build(
+    settings,
+    {
+      "TC1 LINK id=c1 token=tok cmd=link.interval n=abc\n",
+      "TC1 LINK id=c2 token=tok cmd=link.interval n=1\n",
+    },
+    files,
+    listings
+  )
+  drive(instance, 12)
+  local bad = posted(requests[2].body)
+  check(bad.state == "error", "a non-numeric interval is rejected")
+  check(bad.reason == "bad_interval", "reason is bad_interval, got " .. tostring(bad.reason))
+  local applied = posted(requests[3].body)
+  check(applied.state == "ok", "link.interval works with control off")
+  check(
+    applied.text:find("interval=1s", 1, true) ~= nil,
+    "the reply names the new interval, got " .. string.format("%q", applied.text)
+  )
+  check(instance.interval == 1, "the client polls every second, got " .. tostring(instance.interval))
+  check(capture.saved >= 1, "the new interval is persisted")
+elseif scenario == "interval_max" then
+  local instance, requests = build(
+    settings,
+    { "TC1 LINK id=c1 token=tok cmd=link.interval n=900\n" },
+    files,
+    listings
+  )
+  drive(instance, 6)
+  check(instance.interval == 60, "the interval is capped at 60 s, got " .. tostring(instance.interval))
+elseif scenario == "lua" then
+  local full = {
+    linkSink = settings.linkSink,
+    linkToken = settings.linkToken,
+    linkInterval = 5,
+    linkControl = "full",
+  }
+  local instance, requests = build(
+    full,
+    { "TC1 LINK id=c1 token=tok cmd=lua data=print(6%2A7)\n" },
+    files,
+    listings
+  )
+  drive(instance, 12)
+  local result = posted(requests[2].body)
+  check(result.state == "ok", "lua answers ok")
+  check(result.text == "42\n", "the chunk output comes back, got " .. string.format("%q", result.text))
+elseif scenario == "lua_error" then
+  local full = {
+    linkSink = settings.linkSink,
+    linkToken = settings.linkToken,
+    linkInterval = 5,
+    linkControl = "full",
+  }
+  local instance, requests = build(
+    full,
+    { "TC1 LINK id=c1 token=tok cmd=lua data=error(%27boom%27)\n" },
+    files,
+    listings
+  )
+  drive(instance, 12)
+  local result = posted(requests[2].body)
+  check(result.state == "ok", "a failing chunk still answers, with the text")
+  check(result.text:find("error:", 1, true) ~= nil, "the failure is reported, got " .. string.format("%q", result.text))
+  check(result.text:find("boom", 1, true) ~= nil, "the message is kept, got " .. string.format("%q", result.text))
+elseif scenario == "lua_refused" then
+  local instance, requests = build(
+    settings,
+    { "TC1 LINK id=c1 token=tok cmd=lua data=print(1)\n" },
+    files,
+    listings
+  )
+  drive(instance, 12)
+  local result = posted(requests[2].body)
+  check(result.state == "error", "lua needs full control")
+  check(result.reason == "needs_full_control", "reason is needs_full_control, got " .. tostring(result.reason))
 else
   errors = errors + 1
   print("  FAIL unknown scenario: " .. tostring(scenario))

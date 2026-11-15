@@ -149,7 +149,7 @@ async function call(options, method, route, body) {
 }
 
 // Mirrors the block format of /link/results:
-//   # id=<id> state=<state> size=<n>
+//   # id=<id> state=<state> [reason=<slug>] size=<n>
 //   <body>
 //   # end
 function parseResults(text) {
@@ -157,9 +157,15 @@ function parseResults(text) {
   let current = null;
 
   for (const line of text.split("\n")) {
-    const head = /^# id=(.*) state=(\S+) size=(\d+)$/.exec(line);
+    const head = /^# id=(.*) state=(\S+)(?: reason=(\S+))? size=(\d+)$/.exec(line);
     if (head) {
-      current = { id: head[1], state: head[2], size: Number(head[3]), lines: [] };
+      current = {
+        id: head[1],
+        state: head[2],
+        reason: head[3] || null,
+        size: Number(head[4]),
+        lines: [],
+      };
       blocks.push(current);
       continue;
     }
@@ -178,7 +184,11 @@ function parseResults(text) {
 }
 
 function printBlock(block) {
-  const header = "# " + block.id + " state=" + block.state + " size=" + block.size;
+  const header =
+    "# " + block.id +
+    " state=" + block.state +
+    (block.reason ? " reason=" + block.reason : "") +
+    " size=" + block.size;
   process.stdout.write(header + "\n");
   if (block.body !== "") process.stdout.write(block.body + "\n");
   process.stdout.write("# end\n");

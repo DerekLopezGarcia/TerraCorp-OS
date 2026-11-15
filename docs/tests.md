@@ -38,16 +38,39 @@ npm run test:screens
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
 
+## 0.3.33 external link checks
+
+`npm run test:link` covers the closed command set against a fake Internet Card.
+Two things changed with in-game evidence behind them:
+
+- `commandWrite` used to call the VFS with the instance as the first argument
+  (`self.vfs.write(self.vfs, path, data)`). The real module defines
+  `vfs.write(path, data)`, so in-game the card opened a table as a path and every
+  `fs.write`/`fs.append` answered `write_failed`; the fake VFS accepted the extra
+  argument, so the gate passed while the game failed. The fake now uses the same
+  dot-style signatures as `src/lib/tc/vfs.lua`, and `write_ok` would catch it.
+- `link.interval` (`n` in 1–60) changes the polling cadence from the bridge and
+  persists it. `interval` queues a bad value and a good one and requires
+  `bad_interval` then `interval=1s`, with `instance.interval == 1` and one config
+  save; it runs with `linkControl = off` on purpose, because the tier is allowed
+  at every level.
+- `lua` runs a chunk in the Lab environment and returns its captured output.
+  `lua` requires `print(6*7)` to answer `42` under `full`; `lua_error` requires a
+  failing chunk to answer `ok` with an `error:` line; `lua_refused` requires
+  `needs_full_control` under `write`. The fake Lab only provides `print` and a
+  few globals, so the check is on the link's dispatch, not on the Lab.
+
 ## 0.3.32 release notes checks
 
 `npm run test:release-notes` runs three boots against a seeded `/var/version`:
 
 1. `notes_many` starts from `0.3.29` and requires `/var/whatsnew.md` to contain
-   sections for `0.3.30`, `0.3.31` and `0.3.32` — every release skipped — and
-   not `0.3.29` itself. It also requires the `What's new: /var/whatsnew.md`
-   notice on screen and `/var/version` rewritten to `0.3.32`.
-2. `notes_one` starts from `0.3.31`: only the `0.3.32` section.
-3. `notes_same` starts from `0.3.32`: no notes file at all.
+   sections for `0.3.30`, `0.3.31`, `0.3.32` and `0.3.33` — every release
+   skipped — and not `0.3.29` itself. It also requires the
+   `What's new: /var/whatsnew.md` notice on screen and `/var/version` rewritten
+   to the running build.
+2. `notes_one` starts from the previous release: only the current section.
+3. `notes_same` starts from the running build: no notes file at all.
 
 The bootstrap write path is covered by `boot-update` too: the applier records
 the replaced version in `/var/version`, which is what gives the kernel a range

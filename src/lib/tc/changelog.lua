@@ -21,6 +21,7 @@ return {
     "0.3.30",
     "0.3.31",
     "0.3.32",
+    "0.3.33",
   },
   notes = {
     ["0.3.21"] = {
@@ -70,6 +71,11 @@ return {
     ["0.3.32"] = {
       "After an update the OS writes the notes of every version you skipped to /var/whatsnew.md.",
       "A notice points at it and Files opens it with the pager.",
+    },
+    ["0.3.33"] = {
+      "fs.write and fs.append over the External Link failed in-game because of a wrong argument order; fixed.",
+      "link.interval sets the link polling cadence from the bridge (1-60 s); it needs no reboot.",
+      "lua runs a chunk over the link with full control, with the Lab environment and its output.",
     },
   },
 }

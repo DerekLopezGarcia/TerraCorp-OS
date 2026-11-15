@@ -262,6 +262,7 @@ function applyResultFrame(node, frame) {
 
   if (frame.verb === "LREP") {
     record.state = frame.fields.state;
+    if (Object.hasOwn(frame.fields, "reason")) record.reason = frame.fields.reason;
     if (Object.hasOwn(frame.fields, "size")) record.replySize = Number(frame.fields.size);
   } else if (frame.verb === "LDATA") {
     record.chunks.push({ off: Number(frame.fields.off), data: frame.fields.data });
@@ -293,6 +294,7 @@ function renderResults(node) {
     blocks.push(
       "# id=" + printable(record.id) +
       " state=" + printable(record.state) +
+      (record.reason ? " reason=" + printable(record.reason) : "") +
       " size=" + size + "\n" +
       terminated +
       "# end\n",

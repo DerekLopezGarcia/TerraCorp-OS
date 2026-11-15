@@ -31,6 +31,11 @@ const scenarios = [
   "boot_full",
   "app_close",
   "reboot",
+  "interval",
+  "interval_max",
+  "lua",
+  "lua_error",
+  "lua_refused",
 ];
 
 function runScenario(scenario) {

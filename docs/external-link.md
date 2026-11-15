@@ -27,8 +27,12 @@ Let a process outside the game read what a running TerraCorp computer sees and
 act on it, so an external agent can automate the OS: pull logs, run diagnostics,
 read status, write files, close and open apps, restart the computer.
 
-It is not a remote shell. A frame names one command from a closed table; no
-frame carries code, and nothing is loaded from the bridge.
+It is not a general remote shell. A frame names one command from a closed table.
+`full` control has one deliberate exception, `lua`, added for in-game
+diagnosis: the operator already owns the volume at that tier (rewrite `/lib`,
+reboot), so running a chunk adds no reach, only one exchange instead of a
+reboot cycle. At `off` and `write` no frame carries code and nothing is loaded
+from the bridge.
 
 Scope is one computer: the commands run inside the computer that received the
 frame. There is no verb that reaches another machine, the cluster, or the host
@@ -107,6 +111,7 @@ know, and the existing peers never send these.
 | `check` | read | — | Status, component kinds and the log tail |
 | `fs.list` | read | `path` | Directory listing |
 | `fs.read` | read | `path` | File body, sliced |
+| `link.interval` | link | `n` (seconds, 1–60) | `interval=<n>s` |
 | `fs.write` | write | `path`, `data` | `wrote=<bytes>` |
 | `fs.append` | write | `path`, `data` | `wrote=<bytes>` |
 | `fs.mkdir` | write | `path` | `mkdir=<path>` |
@@ -115,6 +120,7 @@ know, and the existing peers never send these.
 | `app.open` | write | `arg` (app id) | `opened=<id>` |
 | `app.close` | write | `arg` (app id) | `closed=<id>` |
 | `reboot` | write | — | `reboot=scheduled`, then a restart two intervals later |
+| `lua` | full | `data` (source) | Captured `print` output, or `error: <message>` |
 
 A command that the current tier does not allow answers `LREP` with
 `state=error reason=needs_<tier>_control` and touches nothing.
@@ -157,7 +163,16 @@ this and cannot: the OS is the only side that knows the tier.
 |---|---|---|
 | `off` (default) | `read` commands only | Watching a machine |
 | `write` | `read` + user data: `/etc`, `/var`, apps, `reboot` | Automating a machine |
-| `full` | everything, including the OS tree | Repairing a machine |
+| `full` | everything, including the OS tree and `lua` | Repairing a machine |
+
+`link.interval` sits in its own `link` tier and is allowed at **every** control
+level, including `off`. It changes only this client's polling cadence, reads and
+writes no user data, and is the same knob the GAIA window exposes; refusing it
+would not protect anything the bridge operator cannot already do. The value is
+clamped to 1–60 seconds, persisted in `/etc/terracorp.cfg`, and applied on the
+next scheduling decision, so a reboot keeps it. Use it to make a test session
+responsive (`n=1`) and put it back when finished: a one-second poll is 60
+requests a minute on the world host.
 
 The OS tree — `/init.lua`, `/boot/`, `/lib/`, `/apps/` — needs `full` even when
 `write` is on, because a bad write there leaves a computer that cannot boot.
@@ -165,10 +180,16 @@ Everything else on the volume is reachable at `write`.
 
 Every mutating command is logged to `/var/log/tc.log` with its path or app id.
 
-No `eval`, no `load`, no remote code. A command that is not in the table is
-rejected with `LREP state=error cmd=unknown`, never executed.
+A command that is not in the table is rejected with `LREP state=error
+cmd=unknown`, never executed. `lua` is the only verb that carries code, it needs
+`full`, and it is documented as a diagnosis tool rather than a protocol feature:
+the chunk runs on the desktop loop with the kernel in reach, has no instruction
+budget, and a runaway loop freezes the node until it reboots — the same rule as
+the Lab. Its reply is the captured `print` output (capped at 16 KB); a compile or
+runtime failure comes back as an `error:` line in the body, because `LREP` only
+has room for a reason slug.
 
-Phase 2 may add `app.open`, `node.ping`, `update.check` — still named entries,
+Phase 2 may add `app.open`, `node.ping`, `update.check` - still named entries,
 still not code.
 
 ## Configuration
@@ -217,6 +238,28 @@ Java world ── POST 127.0.0.1:8787 ──► bridge.js
 
 The Internet Card issues its request from the server process, so `127.0.0.1` is
 the machine running the world, not the computer inside it.
+
+**OpenComputers refuses private addresses by default.** `settings.conf` ships
+with `deny private` ahead of `allow default`, and the `private` rule matches
+`isLoopbackAddress()`, so the card rejects `127.0.0.1` before it opens a socket.
+The OS reports `timeout`, not an explicit error, because the failure stays inside
+the card's thread pool. Open loopback and restart the game — Forge reads these
+rules at startup, not on a world reload:
+
+```ini
+filteringRules=[
+  removeme,
+  "allow ip:127.0.0.1",
+  "deny private",
+  "deny bogon",
+  "allow default"
+]
+```
+
+Only loopback is opened; public hosts (GitHub, the updater) keep working through
+`allow default`. Verified in-game with OpenComputers 1.8.9a: without the rule the
+bridge saw zero requests, with it `nodes=1` and `status` answered in one
+interval.
 
 1. `node tools/bridge/bridge.js --token <secret>` — add `--port` only if 8787 is
    taken.
@@ -301,7 +344,8 @@ once it does not.
 2. The computer has an Internet Card; `component.list("internet")` returns an
    address.
 3. The server permits outbound HTTP/S. OpenComputers may also restrict hosts in
-   its own config; confirm before assuming the bridge is at fault.
+   its own config; its default `filteringRules` deny every private address,
+   including `127.0.0.1` (see [Deployment on one machine](#deployment-on-one-machine-current-target)).
 4. WAN only: the WireGuard peer is up on that host and `ping <bridge-host>`
    answers.
 5. `bridge.js` runs bound to `<bridge-host>` with a token; `/link/state` answers

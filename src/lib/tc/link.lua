@@ -22,16 +22,22 @@ link.MAX_COMMANDS = 8
 link.LOG_LINES = 40
 link.LOG_MAX_LINES = 200
 link.TIMEOUT = 30
+link.MIN_INTERVAL = 1
+link.MAX_INTERVAL = 60
+link.MAX_LUA_OUTPUT = 16384
 link.LOG_PATH = "/var/log/tc.log"
 
 -- Closed command set with the tier each one needs. A frame names one of these;
 -- nothing else runs, and `linkControl` decides how far a command can reach.
+-- `link.interval` uses the "link" tier: it changes only this client's cadence,
+-- touches no user data, and is allowed at every control level.
 local COMMANDS = {
   status = "read",
   log = "read",
   check = "read",
   ["fs.list"] = "read",
   ["fs.read"] = "read",
+  ["link.interval"] = "link",
   ["fs.write"] = "write",
   ["fs.append"] = "write",
   ["fs.mkdir"] = "write",
@@ -40,9 +46,12 @@ local COMMANDS = {
   ["app.open"] = "write",
   ["app.close"] = "write",
   reboot = "write",
+  -- Remote Lua. `full` already allows rewriting /lib and rebooting, which is
+  -- the same reach; this just makes diagnosis one exchange instead of a cycle.
+  lua = "full",
 }
 
-local TIER_RANK = { off = 1, read = 1, write = 2, full = 3 }
+local TIER_RANK = { link = 0, off = 1, read = 1, write = 2, full = 3 }
 
 -- Files that belong to the running OS. Touching them needs `linkControl = full`
 -- because a bad write there leaves a computer that cannot boot.
@@ -412,6 +421,8 @@ function link:run(cmd, fields)
     return self:commandCheck()
   elseif cmd == "fs.list" then
     return self:commandList(fields.path)
+  elseif cmd == "link.interval" then
+    return self:commandInterval(fields.n)
   elseif cmd == "fs.read" then
     return self:commandRead(fields.path)
   elseif cmd == "fs.write" then
@@ -430,6 +441,8 @@ function link:run(cmd, fields)
     return self:commandClose(fields.arg)
   elseif cmd == "reboot" then
     return self:commandReboot()
+  elseif cmd == "lua" then
+    return self:commandLua(fields.data)
   end
   return nil, "unknown_cmd"
 end
@@ -521,6 +534,74 @@ function link:commandList(path)
   return table.concat(names, "\n") .. "\n"
 end
 
+-- Change this client's polling cadence from the bridge. Clamped to
+-- MIN/MAX_INTERVAL, persisted in the preferences file and applied on the next
+-- scheduling decision, so it survives a reboot.
+function link:commandInterval(value)
+  local seconds = math.floor(tonumber(value) or 0)
+  if seconds < link.MIN_INTERVAL then
+    return nil, "bad_interval"
+  end
+  if seconds > link.MAX_INTERVAL then
+    seconds = link.MAX_INTERVAL
+  end
+
+  local previous = self.interval
+  if not self.config.set("linkInterval", seconds) then
+    return nil, "refused"
+  end
+  if type(self.kernel.saveConfig) == "function" then
+    pcall(self.kernel.saveConfig, self.kernel)
+  end
+  self:refresh()
+  self.log.info(string.format(
+    "link: interval %ss -> %ss",
+    tostring(previous),
+    tostring(self.interval)
+  ))
+  return "interval=" .. tostring(self.interval) .. "s\n"
+end
+
+-- Run a Lua chunk in the same environment the Lab gives a script, so a probe
+-- typed from the bridge behaves like one typed in-game. The transcript is the
+-- reply body; a compile or runtime failure is reported as an `error:` line
+-- because the protocol's LREP only carries a reason slug.
+--
+-- This is `full` control: the chunk runs on the desktop loop with the kernel in
+-- reach, has no instruction budget, and a runaway loop freezes the node until
+-- it reboots, exactly like the Lab.
+function link:commandLua(source)
+  if type(source) ~= "string" or source == "" then
+    return nil, "missing_source"
+  end
+
+  local okLab, labModule = pcall(require, "tc.lab")
+  if not okLab or type(labModule) ~= "table" then
+    return nil, "lab_unavailable"
+  end
+
+  local output = {}
+  local env = labModule.new(self.kernel):environment(output)
+  local chunk, compileError = load(source, "=link", "t", env)
+  if not chunk then
+    return "error: " .. tostring(compileError) .. "\n"
+  end
+
+  local passed, failure = pcall(chunk)
+  local body = table.concat(output, "\n")
+  if not passed then
+    body = body .. (body ~= "" and "\n" or "") .. "error: " .. tostring(failure)
+  end
+
+  if #body > link.MAX_LUA_OUTPUT then
+    body = body:sub(1, link.MAX_LUA_OUTPUT) .. "\n... truncated\n"
+  end
+  if body == "" then
+    return "ok\n"
+  end
+  return body .. "\n"
+end
+
 function link:commandRead(path)
   if type(path) ~= "string" or path == "" then
     return nil, "missing_path"
@@ -592,7 +673,9 @@ function link:commandWrite(path, data, mode)
   if type(writer) ~= "function" then
     return nil, "unsupported"
   end
-  local ok = writer(self.vfs, path, data)
+  -- The VFS methods are dot-style (`vfs.write(path, data)`), not methods that
+  -- take the instance first. Passing self here made open() receive the table.
+  local ok = writer(path, data)
   if not ok then
     return nil, "write_failed"
   end
