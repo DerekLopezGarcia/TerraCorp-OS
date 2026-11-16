@@ -26,6 +26,21 @@ The tag must match `version` in `version.lua`. The updater checks this before
 installing anything. Release source files and `tools/manifest.txt` are fetched
 from the release tag, not from the moving `main` branch.
 
+## Cuts and releases
+
+A **cut** is a bump of `version` in `version.lua` plus its entry in
+`src/lib/tc/changelog.lua`. A **release** is a tag. They are not one to one:
+work done and tested somewhere else, such as against the local bridge on another
+machine, can cut several versions before anything is published, and those cuts
+then land in one commit under the tag of the build that finally ships. 0.4.2,
+0.4.4, 0.4.5 and 0.4.7 were cut that way and went out with v0.4.8.
+
+The notes stay per cut, so a node that updates still reads everything it
+skipped: the kernel writes every entry between `/var/version` and the running
+build into `/var/whatsnew.md`. Only tagged versions exist in the history and on
+the Releases page, and the one thing the updater enforces is that the running
+`version.lua` matches the tag its files came from.
+
 ## What the updater does
 
 The Update app's **Check for updates** button queries GitHub's latest-release
@@ -52,15 +67,19 @@ installation remains in place.
 
 ## Initial stable release
 
-The current build is 0.4.8 Keystone, built on 2026-11-15; v0.4.1 remains the
-latest published release until v0.4.8 is tagged. Versions through 0.4.1 update
-in place: 0.4.8 adds six files (`tc.history`, `tc.book`, `tc.plan`, `tc.halls`,
-`tc.gate`, `tc.move`), so the manifest grows to 56 files and the updater creates
-them. 0.4.1 introduced the Plant app and the local line-boundary readout: items
-and fluids, exact or coarse states, level alarms, and one component call per
-second. 0.4.2 exposes that readout over the External Link with `plant.status`,
-`plant.snapshot`, `plant.delta` and `plant.alarms`, paged with the existing
-`LREP`/`LDATA`/`LEND` slicing. 0.4.4 adds a bounded sample ring per stock
+The current build is 0.4.9 Flint, built on 2026-11-16; v0.4.8 remains the latest
+published release until v0.4.9 is tagged. 0.4.9 removes the cluster and the Vault
+app, so the manifest shrinks from 62 to 53 entries. The updater only adds and
+replaces files, so a module left behind on an updated machine is inert: the
+kernel no longer loads it. A line node is installed from its floppy, not through
+this path ([`line-node.md`](line-node.md)). Earlier versions: 0.4.8 added six
+files (`tc.history`, `tc.book`, `tc.plan`, `tc.halls`, `tc.gate`, `tc.move`) and
+a manifest of 56. 0.4.1 introduced the
+Plant app and the local line-boundary readout: items and fluids, exact or coarse
+states, level alarms, and one component call per second. 0.4.2 exposes that
+readout over the External Link with `plant.status`, `plant.snapshot`,
+`plant.delta` and `plant.alarms`, paged with the existing `LREP`/`LDATA`/`LEND`
+slicing. 0.4.4 adds a bounded sample ring per stock
 (`/var/plant/history.tsv`), items/min and mB/min, and the `STALLED`/`TREND`
 alarms. 0.4.5 adds the operated book (`/etc/recipes.tsv`, `/etc/recipe-io.tsv`,
 line rules), `plan()` with bottleneck and shortfall, and calibration exposed as

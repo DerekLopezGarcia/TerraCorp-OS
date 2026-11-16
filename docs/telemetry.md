@@ -44,6 +44,13 @@ store, it enters here as one more read path, not as a new model.
   kind, read method, scale) declared in config, not code.
 - Sampling discipline (per `distributed.md`): event-driven or ≥1 s polls;
   batch into one Relay state job; the dashboard reads cached values.
+- Bulk reads and moves: reading a container is already one call (`getAllStacks`,
+  in-game 2026-11-14), so a sweep of twenty containers is twenty calls ≈ 1 s and an
+  index is affordable. Moving is not: `transferItem` carries one stack per call, so
+  a forty-stack transfer is forty calls ≈ 2 s. The sidecar adds a scanner — one
+  call for items, fluids and energy — and a bus — one call per move, at any
+  distance ([`sidecar.md`](sidecar.md), [`bus.md`](bus.md)). The identifiers do not
+  change, only the number of calls.
 - The alarm channel (`long-distance.md` RC protocol `STATE` frames) carries
   compact probes: 2-byte id, 4-byte value, sequence — telemetry survives
   interdimensional links at 80 B/s.

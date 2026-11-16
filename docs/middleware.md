@@ -1,10 +1,13 @@
 # TerraCorp Middleware — leaves, gateways and the minimal profile
 
-Status: **design; deferred to 0.4.3 (second hall)**. The first F3 slice runs on
-one computer: the plant core reads locally and the Plant app shows the result.
+Status: **design, deferred and off the plan**. The first F3 slice runs on one
+computer: the plant core reads locally and the Plant app shows the result.
 **TerraCorp Middleware** is the multi-hall profile — the part of the OS that
 exposes components to other computers, with no desktop and no apps — and it
-arrives only when a second hall exists.
+arrives only when a second hall exists. Since 2026-11-16 the racks are gone and
+the gateway tier is not on any phase: a line node publishes straight to its
+master, which owns the names ([`line-node.md`](line-node.md), decisions 25 and
+26). This document stays as the deferred design, not as a plan.
 
 Name and roles agreed with the pack's co-operator on 2026-11-13.
 

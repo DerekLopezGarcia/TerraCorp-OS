@@ -16,6 +16,13 @@ Status: **phase 1 and 2 implemented**, merged for 0.3.20. What exists today:
 the link, and the link does not need the service: the four verbs read the
 service cache, so a missing bridge leaves the readout untouched.
 
+**2026-11-16: a second transport is decided, not built** ([`sidecar.md`](sidecar.md)).
+Option A stays shipped and stays the default. The sidecar replaces only the route
+from the computer to the bridge — a card component instead of the Internet Card —
+and adds a bulk inventory read. The protocol, the command table, the control tiers
+and the body format are unchanged, and `linkTransport = "http"` keeps the stock
+pack working.
+
 The harness proves the state machine against a fake Internet Card. In-game,
 0.3.33 verified `status`, `log`, `fs.read`, `fs.write`, `link.interval` and
 `lua` at a 1 s cadence; see [`tests.md`](tests.md#results-log).
@@ -47,12 +54,13 @@ own commands: the link itself has no notion of a cluster.
 
 ## What OpenComputers allows
 
-The transport is constrained by the mod, not by preference:
+The transport is constrained by the **mod's configuration**, not by preference.
+On the server this project targets — Internet Card, stock `settings.conf` — there
+are no sockets and no inbound ports:
 
-- There are no sockets and no inbound ports. The `internet` component offers
-  HTTP requests only, and this repository already uses the verified path:
-  `component.invoke(internetAddress, "request", url, postData, headers)`
-  returning a handle that is read in chunks and closed
+- The `internet` component answers HTTP requests, and this repository uses the
+  verified path: `component.invoke(internetAddress, "request", url, postData,
+  headers)` returning a handle that is read in chunks and closed
   (`src/lib/tc/updater.lua`).
 - It needs an Internet Card and server permission for HTTPS requests
   (`docs/versioning.md`).
@@ -63,21 +71,41 @@ The transport is constrained by the mod, not by preference:
   Anything larger travels as slices keyed by `off`, exactly like the existing
   `FETCH` / `DATA` pair (`src/lib/tc/pull.lua`).
 
-Because of the first point, **the OS is always the client**. A bridge cannot
-push into a running computer; it queues work and the OS collects it on its
-interval. Any design that assumes inbound connections is not implementable in
-this mod.
+**Pending verification: TCP sockets.** The pack's co-operator raised on
+2026-11-16 that the `internet` API also documents TCP — `connect` for a client
+socket, `open` for a listening one, and `isTcpEnabled` — gated by the mod's own
+config (`enableTcp`, off in the stock configuration). Nobody here has probed it,
+and this document previously claimed the API had no sockets at all, which was
+wrong above the level of the deployment. One call settles it on any computer
+with a card:
+
+```lua
+component.invoke(component.list("internet")(), "isTcpEnabled")
+```
+
+If it answers `true` on a given server, then "no sockets" describes this
+deployment and not the mod, and the next in-game session should record the answer
+in [`opencomputers.md`](opencomputers.md). The design does not depend on the
+outcome: the OS speaks to the bridge with `request` only, and the verb set stays
+closed either way.
+
+Because of the first point, **the OS is always the client**. A bridge cannot push
+into a running computer; it queues work and the OS collects it on its interval.
+Any design that assumes inbound connections needs the server owner to open TCP,
+which this project does not ask for and does not rely on.
 
 ## Options
 
 | Option | Transport | Reach | Verdict |
 |---|---|---|---|
-| A | Outbound HTTP poll to a bridge | Any server, no port forwarding | **Recommended** |
-| B | TC1 frames over the rack bus / modem | Only computers inside the world | Good for in-world agents, not for an external AI |
+| A | Outbound HTTP poll to a bridge | Any server, no port forwarding | **Shipped; default** |
+| B | TC1 frames over the rack bus / modem | Only computers inside the world | **Retired** with the racks (decision 25); in-world publishing is the master link in [`line-node.md`](line-node.md) |
 | C | Written bundle on a floppy or disk | Manual swap | Fine as a fallback, not a channel |
+| D | Sidecar card component, outbound from a mod thread | Same as A, without the Internet Card or the `settings.conf` exception | **Decided 2026-11-16; not built** ([`sidecar.md`](sidecar.md)) |
 
-A and B are not exclusive: B can reuse the same command surface, so an in-world
-agent and an external agent speak the same verbs.
+A, B and D are not exclusive: they share the same command surface, so an in-world
+agent, an external agent and a sidecar client speak the same verbs. D changes how
+a frame leaves the computer and nothing else.
 
 ## Shape (option A)
 

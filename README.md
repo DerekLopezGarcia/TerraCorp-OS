@@ -243,6 +243,10 @@ designed, and what blocks what — is kept in [`docs/status.md`](docs/status.md)
   are not supported.
 - TerraCorp is a fictional megacorporation focused on human continuity and
   expansion beyond the Earth-Luna system. See [`docs/teracorp-lore.md`](docs/teracorp-lore.md).
+- The plant's route to the bridge is decided to move from the Internet Card to a
+  small Forge mod: a bridge card plus a bulk inventory scanner. See
+  [`docs/sidecar.md`](docs/sidecar.md). The same mod is where a metered bus for
+  moving stock between named endpoints would live ([`docs/bus.md`](docs/bus.md)).
 
 ## License and credits
 

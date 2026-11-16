@@ -66,7 +66,15 @@ prototype.
 originally planned for 0.2.x is folded into F4 Sessions; 0.3.x only adds the
 `tc.net` transport and cluster modules needed for nodes.
 
-## F2 — Cluster (0.3.x) · built; partial in-game verification
+## F2 — Cluster (0.3.x) · dropped (racks removed 2026-11-16)
+
+> **Dropped, not lost.** The cluster was built and partly verified in-game, then
+> removed from the product when the plant chose a small line node instead of a
+> rack fleet (decision 25). What follows records what was built, so the code and
+> the in-game findings stay traceable. None of it ships in a line node. The
+> transport (`tc.net`), the node registry and the Nodes app survive, because a
+> line node still publishes its status to a master
+> ([`line-node.md`](line-node.md)).
 
 **Goal:** discover cable-connected racks, install a slave system on each server,
 delegate work, and delegate storage. This phase is the substrate the plant
@@ -308,7 +316,14 @@ app keeps working with the bridge down.
 > cursor resynced with a complete snapshot, and 50 s with the bridge down left
 > the scan, cache and Plant window untouched.
 
-### 0.4.3 Second hall — one computer per hall, a simple merge
+### 0.4.3 Second hall — one computer per hall, a simple merge · superseded
+
+> **Superseded 2026-11-16 (decision 26):** the merge survives, the table does
+> not. `tc.halls` and `/etc/halls.tsv` go with the racks; the master merges the
+> snapshots it receives from its line nodes and keys the paths on the **node
+> name** in `/var/nodes.tsv`, which is the DNS. The prefix rule and the
+> `offline`/`stale` marking below are the behaviour being kept
+> ([`line-node.md`](line-node.md)).
 
 A hall is one computer plus its config. The **aggregator** — the bridge when
 every hall has an Internet Card, or the master over TC1 when they are wired —
@@ -483,6 +498,67 @@ the hologram wall, sessions.
 > the 100-casing plan from the real rig (1128 exact, 592 missing, bottleneck
 > 0.0204 targets/s), each with its source line.
 
+## F3.5 — Line nodes (0.4.9) · shipped 2026-11-16
+
+> Shipped as 0.4.9 "Flint". `tc.naming`, `tc.installer` with
+> `boot/install.lua`, the `role = "line"` runtime, `tc.report`, `tc.master`, the
+> Nodes app as the DNS, the Lines app with configuration push and `tc.flash` to
+> write the installer medium from the master (**Nodes**, key **I**). The rack layer
+> (cluster, node, netboot, netfetch, provision, vault, pull, jobs, the Vault app
+> and the console's vault commands) is gone; the manifest went from 62 to 53
+> files. `npm run size` holds the installer image at 156 KB of the 512 KB floppy
+> and `test:naming`, `test:installer`, `test:report`, `test:master` and
+> `test:apps` cover the new code. Pending in-game: a never-booted computer
+> booting the floppy, and `setBootAddress` on a plain computer.
+
+**Goal:** replace the cluster with the smallest OS that keeps one line observable
+and publishes it. A line node boots from a floppy, reads its two boundary stocks,
+raises its own level alarms and sends its status to the master, which owns the
+merged view and the names. Racks go with it: no provisioning, no Relay, no waves,
+no Vault, no netboot and no desktop on the node
+([`line-node.md`](line-node.md)).
+
+Slices: the installer image and the `role = "line"` boot; `tc.naming` with the
+name as the root of the paths and guessed from the output label; `tc.master`, the
+registry columns and `ASSIGN` on rename; the Nodes app as the DNS view; the Lines
+app with config push to the node; `npm run size` as the budget gate.
+
+**Exit criteria:** the installer image fits the 512 KB floppy, installs onto the
+computer's HDD and never writes to the floppy, so one floppy commissions every
+node; two simulated nodes publish under their own names and the master merges
+them by path; a rename from the app changes every path and lists the references
+that break; Lines edits a line's stocks and alarms, the master pushes them, and
+the node keeps them locally so it still alarms with the master gone; the rack
+modules and their tests are gone and `npm run check`, `npm run sim` and
+`npm run sim:oc` stay green.
+
+## F3.6 — Sidecar (0.4.10) · decided 2026-11-16, not built
+
+**Goal:** take the Internet Card out of the plant's critical path, read a container
+without giving it a Transposer, and move stock between named endpoints that a pipe
+cannot reach. A small Forge mod supplies three components: `tc_bridge`, a card that
+moves frames to `bridge.js` from its own thread; `tc_scanner`, a block that returns
+a whole container in one host call; and the bus, a port per container plus a core
+that moves items and fluids between any two ports by name. The protocol, the closed
+command table, the control tiers and the body format do not change; the transport
+and the price of a sweep and a move do ([`sidecar.md`](sidecar.md),
+[`bus.md`](bus.md)).
+
+Slices: `linkTransport` with two backends behind one `tc.link` interface and a
+fake card in the harness (0.4.10a); `snapshot()` behind `tc.stock` with the
+20-container budget test (0.4.10b); the bus — ports and core, `move` behind the
+existing `transfer` capability, then fluids, power and rate (0.4.11) — whose
+policy wiring lands in F7 ([`bus.md`](bus.md)).
+
+**Exit criteria:** `npm run test:link` passes every scenario on both transports;
+switching `linkTransport` back to `http` needs no code change; a 27-slot crate
+sweep costs one call instead of 27; a missing card reports `no_transport` and
+leaves the readout untouched; a full queue is counted by `stats().dropped`, never
+silent; a 40-stack bus move costs one call instead of 40 and refuses with
+`no_power` or `throttled` when the meters say so; the sidecar is a separate,
+MIT-licensed jar that this repository does not vendor, and the release notes say
+the pack is no longer stock.
+
 ## F4 — Sessions and displays (0.5) · moved after the readout
 
 > **Memory note (2026-11-15).** The 64 MB change removes the original
@@ -622,7 +698,7 @@ action; the wall shows the same numbers as the panel.
 | 1 | In-game 0.3.x verification + probe — **done 2026-11-15**; a multiblock tank and one working machine remain | F2/F3 | L |
 | 2 | Local plant core: `tc.addr`, `tc.path`, drivers, stock/tank/energy readers, cache, level alarms, Plant app, `node.status` | 0.4.1 | L |
 | 3 | Mirror: `plant.status/snapshot/delta/alarms` over the link, paged and never truncated | 0.4.2 | M |
-| 4 | Second hall: one computer per hall, `halls.tsv`, merged view, no gateway | 0.4.3 | M |
+| 4 | ~~Second hall: one computer per hall, `halls.tsv`, merged view, no gateway~~ — dropped with the racks (decision 25); the node registry is the DNS | — | — |
 | 5 | Local history ring, rates, `STALLED`/`TREND` | 0.4.4 | M |
 | 6 | Local book and `plan()`; the reference dataset stays optional and outside | 0.4.5 | L |
 | 7 | `gate.set`, desired state, local interlocks, refusals | 0.4.6 | M |
@@ -635,6 +711,10 @@ action; the wall shows the same numbers as the panel.
 | 14 | Hologram wall | 0.8 | M |
 | 15 | Redstone Control measurement spike and transport | F5.5 | M |
 | 16 | Resumable tablet client | F5.5 | M |
+| 17 | Line node payload: `role = "line"`, readout, level alarms and a status publisher, no desktop | 0.4.9 | L |
+| 18 | Naming: `tc.naming`, the name in `/etc/terracorp.cfg`, `ASSIGN` from the master, `conflict` state | 0.4.9 | M |
+| 19 | `tc.master`, registry columns and the Nodes app as the DNS view | 0.4.9 | M |
+| 20 | `npm run size`: the node payload budget as a failing gate | 0.4.9 | S |
 
 ## Decisions
 
@@ -792,3 +872,42 @@ action; the wall shows the same numbers as the panel.
     from `getProgress` or `getEUt`. This keeps the reader small, removes the
     Adapter requirement for rates, and makes a line observable even when its
     internal machines are invisible to OpenComputers.
+25. **Racks are dropped; a line node replaces them (2026-11-16).** The cluster
+    layer — rack discovery, netboot provisioning, Relay, waves, Vault and the
+    worker and storage roles — is removed from the product. What replaces it is
+    the opposite of density: one ordinary computer per line, booting from a
+    512 KB floppy that is the whole install, reading its two boundary stocks,
+    raising its own level alarms and publishing its status to a master. Decisions
+    20 and 23 already said why: a rack server's internals are
+    `Visibility.Neighbors`, so a rack never widens what a node can read, and
+    servers do not boot after a world reload. A line node is commissioned by
+    putting a floppy in a computer. This supersedes decisions 1, 3–7, 14 (the
+    service tiers), 20 and phase F2. It keeps `tc.net`, the node registry, the
+    Nodes app and the desired-state rule for gates, because a line node still
+    reports to a master. See [`line-node.md`](line-node.md).
+26. **The node registry is the DNS (2026-11-16).** A line node is named, and its
+    name is the root of its paths: `casing/ingots`. The master's registry in
+    `/var/nodes.tsv` is the table of names that feed it, and the Nodes app is the
+    view and the editor of that table. The node proposes the name it carries in
+    `/etc/terracorp.cfg`; the master answers with the name it holds. So the master
+    assigns and the node adopts: a rename is one frame, not a trip to the floppy.
+    A node with no master keeps its local name and can be commissioned alone, and
+    a duplicate name is a `conflict`, never a silent merge of two nodes' stocks.
+    Renaming a node that already published lists the thresholds, recipes and line
+    rules that still mention the old prefix. This amends 17 and 21: there is no
+    gateway and no separate `halls.tsv` — the live registry is the DNS. See
+    [`names.md`](names.md).
+27. **The sidecar replaces the card, not the protocol (2026-11-16).** The plant's
+    route to the bridge moves to a mod component that runs its HTTP exchange on its
+    own thread. Three measured facts force it: the Internet Card refuses loopback
+    until a server file is edited, an exchange blocks the desktop loop while its
+    handle is read, and a host call costs 50 ms of tick while `transferItem` moves
+    one stack per call, which is what prices a base-wide move loop out of
+    existence. `push`/`pull` carry the same 1024-byte bodies, so
+    `bridge.js`, the closed command table, the control tiers and the desired-state
+    rule do not change, and `linkTransport = "http"` stays as the fallback for a
+    stock pack. The same mod adds a scanner block whose single `snapshot()` replaces
+    27 reads — that, and not the card, is what makes an index over the base's
+    containers affordable. It is a mod, so the pack is no longer stock: an operator
+    decision recorded in the release notes, with the mod kept in its own repository
+    and never vendored here. See [`sidecar.md`](sidecar.md).

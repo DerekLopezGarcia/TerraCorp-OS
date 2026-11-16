@@ -1,7 +1,11 @@
 # Cluster Build and Node Protocol
 
-Status: 0.3.0, shipped 2026-10-26. This document covers the physical build of a
-TerraCorp cluster and the node protocol used by 0.3.x.
+Status: 0.3.0, shipped 2026-10-26, **dropped 2026-11-16** (decision 25). This
+document is kept as the record of the physical cluster build and the 0.3.x node
+protocol. Nothing here ships in a line node, which replaced the cluster with one
+small OS per line ([`line-node.md`](line-node.md)); the transport (`tc.net`), the
+node registry and the Nodes app do survive, because a line node still publishes
+its status to a master.
 
 - **0.3.0 Rack:** discover cable-connected racks, provision slave systems, keep
   a node registry, and add the Nodes app.

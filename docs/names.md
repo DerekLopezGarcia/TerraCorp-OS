@@ -1,12 +1,15 @@
 # Component addressing and the semantic registry
 
-Status: **0.4.1, local first; the gateway merge is 0.4.3**. Two namespaces,
+Status: **0.4.1, local first; since 2026-11-16 there is no gateway and the node
+registry is the DNS** ([`line-node.md`](line-node.md)). Two namespaces,
 deliberately separate: an opaque **physical address** for routing, and a
 **semantic path** for search and grouping. Nothing outside the game ever handles
 the physical one by hand; the link exposes plant snapshots, not UUIDs.
 
 Design agreed with the pack's co-operator on 2026-11-13; it supersedes the
-earlier single-name registry.
+earlier single-name registry. The gateway and plant-service tiers described below
+were dropped with the racks (decision 25): a line node and the master are the
+only two levels.
 
 ## Two namespaces, one job each
 
@@ -119,26 +122,44 @@ as `member=` — the proxy keeps no intent (decision 18).
 
 ## Who is authoritative
 
-The rule the co-operator set: **each local proxy manages its own copy, and a
-combined view of all proxies is offered to the app.**
+The rule the co-operator set: **each local node manages its own copy, and a
+combined view of all nodes is offered to the app.**
 
 | Level | Authority | Contents |
 |---|---|---|
-| **Proxy** (one per computer, leaf or gateway) | Authoritative | Its components, faces, first-seen, and the paths that mention them |
-| **Gateway** | Merged copy of its leaves | The segment's view; the only one with an Internet Card |
-| **Plant service** | Merged copy of the gateways | The combined view apps and the agent consume |
+| **Line node** (one per computer) | Authoritative | Its components, faces, first-seen, the paths that mention them, and its own name |
+| **Master** (the desktop that receives them) | Merged copy | The names it assigns, the merged view, and everything that reasons over it |
 
-For 0.4.1 there is no gateway: the plant computer is the authority for its own
-components and paths, and the Plant app reads that local copy. The gateway and
-service rows describe 0.4.3+.
+Two levels, not three: the gateway tier went with the racks (decision 25), and a
+line node publishes its status straight to the master (decision 26).
 
-- No peer-to-peer DNS protocol between computers inside the game. A leaf asks its
-  gateway; the gateway asks the service or answers from its copy. Anything more
-  becomes Relay with a different name.
+- The master's node registry in `/var/nodes.tsv` **is** the DNS: the table of
+  names that feed it, each with its state, worst alarm and stock count. The Nodes
+  app is that table's view and its editor.
+- No peer-to-peer DNS protocol between computers inside the game. A node asks the
+  master only for what the master owns — its name — and never asks it to resolve
+  another node's paths.
 - A path may span nodes: each proxy resolves the members it owns and reports the
   rest as `unreachable_members`, so a partial view is always marked as partial.
 - Every member keeps `first_seen` (OpenComputers has no placement timestamp; see
   [the registration flow](#first-seen-the-registration-flow)).
+
+### Naming the nodes
+
+A node's name is the root of its paths: `casing/in`, `casing/out`. It must be a
+path segment — `[A-Za-z0-9_-]`, at most 24 characters — and it is normalised once
+instead of being kept in two spellings.
+
+**The master assigns and the node adopts.** On contact a node proposes the name it
+carries in `/etc/terracorp.cfg`; the master answers with the name it holds,
+registering the proposal when the name is free and suffixing it (`casing-2`) when
+it is not. Renaming from the Nodes app is therefore one frame, and the node
+re-qualifies its paths on the next scan. A node with no master keeps its local
+name, so it can be commissioned alone; if the operator renames it locally while a
+master is present, the master wins and the node says so on screen and in
+`/var/log/tc.log`. A duplicate name is a `conflict`, visible in the app, never a
+silent merge of two nodes' stocks. Renaming a node that has already published
+lists the thresholds, recipes and line rules that still mention the old prefix.
 
 ## First seen: the registration flow
 
@@ -182,6 +203,11 @@ that feeds it). The machine buffers inside the line are not named and not read
    GT pipe is a valid sink; verify the route, not just the face.
 4. Return what actually moved, per member: `moved=<n> slots=<k>`, or
    `moved=0 reason=<why>` — never a cheerful `ok`.
+
+The transport is any component that declares `transfer` ([`drivers.md`](drivers.md)).
+A Transposer is what exists today; a bus port anywhere on the network is the same
+capability with a longer reach ([`bus.md`](bus.md)). Nothing in the command
+changes: only the price of a move and the endpoints it can name.
 
 Honest limits: cost is per slot **examined**, not per item moved, so a narrow
 selector on a 40-slot chest costs 40 reads to move three stacks. Drawers group
@@ -238,9 +264,12 @@ Verified facts used above (`component.list()` shape, address stability,
 2. **`tc.path`** — local paths, wildcards, assign/query, cardinality.
 3. **Local readers, cache and Plant app** — 0.4.1.
 4. **`plant.*` mirror** — 0.4.2.
-5. **Gateway and merge** — 0.4.3, when a second hall exists
-   ([`middleware.md`](middleware.md)).
-6. **`move` and `gate.set`** — 0.4.6, on the verified transposer and cache.
+5. **Line node, names and the master's merge** — 0.4.9 (F3.5), one small OS per
+   line that publishes under its own name ([`line-node.md`](line-node.md)). The
+   gateway is gone with the racks; [`middleware.md`](middleware.md) stays as a
+   deferred design, not a plan.
+6. **`move` and `gate.set`** — on the verified transposer and cache, and only
+   when a real gate or transport exists.
 
 Cross-links: [`middleware.md`](middleware.md) (leaf, gateway, profiles),
 [`plant-service.md`](plant-service.md) (combined view, verbs),

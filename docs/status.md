@@ -1,6 +1,6 @@
 # Status — where the plan stands
 
-Last updated: 2026-11-15. This is the "pick it up cold" page: what we decided,
+Last updated: 2026-11-16. This is the "pick it up cold" page: what we decided,
 what exists, what is only on paper, and what blocks what. The authoritative
 detail lives in the linked documents; this page is the index and the honest
 ledger.
@@ -17,6 +17,12 @@ dataset, planning at scale and the MCP agent. With 64 MB in the computer (verifi
 in-game on 2026-11-15) the operated book and a short history fit; the first
 number never waits for the bridge (decision 23, amending 14, 16, 17 and 21).
 
+Since 2026-11-16 the cluster is gone (decision 25). Each line runs a **line
+node**: a small OS on a floppy that reads its two boundary stocks, raises its own
+level alarms and publishes its status to a master. The master's node registry is
+the plant's DNS — names, not addresses, on the outside (decision 26). See
+[`line-node.md`](line-node.md).
+
 ## The stack
 
 ```text
@@ -29,7 +35,7 @@ OS de planta (OC)    ──  lee, cachea, alarma, muestra; gates y setpoints
 The first three rows are optional. The fourth row is the product: it must show
 exact stocks and raise its own alarms with nothing else running.
 
-## Decisions, 1-24
+## Decisions, 1-27
 
 1-7 are the original frame: system model (app server + terminals), no accounts,
 native Remote Terminals, data-center autonomy, core apps, 0.3.x split, rack
@@ -65,9 +71,47 @@ discovery.
 24. **Lines are black boxes with an input and an output (2026-11-15).**
     Transposers sit only at the boundary stocks; the machines inside are not
     read; the line's rate comes from the input/output deltas.
+25. **Racks dropped, line nodes instead (2026-11-16).** The cluster layer — rack
+    discovery, netboot, Relay, waves, Vault, worker and storage roles — leaves the
+    product. One ordinary computer per line, booting from a 512 KB floppy that is
+    the whole install, reading, alarming and publishing to a master. Supersedes
+    1, 3–7, 14 (service tiers), 20 and phase F2; keeps `tc.net`, the registry, the
+    Nodes app and gate desired-state. See [`line-node.md`](line-node.md).
+26. **The node registry is the DNS (2026-11-16).** A node's name is the root of
+    its paths (`casing/ingots`); `/var/nodes.tsv` is the table of names feeding
+    the master and the Nodes app is its view and editor. The master assigns, the
+    node adopts; a node alone keeps its local name; a duplicate is a `conflict`,
+    never a silent merge. Amends 17 and 21: no gateway, no `halls.tsv`.
+    See [`names.md`](names.md).
+27. **The sidecar replaces the card, not the protocol (2026-11-16), not built.**
+    A Forge card moves the same 1024-byte frames off the desktop loop, which the
+    Internet Card cannot: it refuses loopback until `settings.conf` is edited and
+    blocks while its request handle is read. A scanner block reads a container for
+    items, fluids and energy in one call without giving it a Transposer, because 50
+    ms per host call also prices the hardware density of a base-wide readout out.
+    `bridge.js`, the command table, the tiers and the desired-state rule are
+    untouched, and `linkTransport = "http"` stays as the stock fallback.
+    See [`sidecar.md`](sidecar.md).
+28. **A bus may move stock between named endpoints (2026-11-16), not built.** This
+    amends 10: TerraCorp still does not run the plant's logistics, but it may
+    execute one metered, reported move between two bindings, which is what a
+    decentralised warehouse needs. `move` keeps its contract; only the transport
+    behind it changes — a port anywhere on the network instead of an adjacent
+    Transposer face, one call per move instead of one per stack, energy and a rate
+    cap per core, no force-loading, and no cross-dimension unless a quantum link
+    pair is enabled. Where a pipe reaches, the pipe wins.
+    See [`bus.md`](bus.md).
 
 ## What exists today
 
+- **0.4.9 "Flint" is built**: the line node (installer, `role = "line"`, status
+  publisher, status page), `tc.master` with the registry as the DNS, and the
+  Nodes and Lines apps. The cluster layer and its apps are gone (decision 25);
+  the manifest is 53 files and the installer image is 156 KB of the 512 KB
+  floppy. Harness: `check`, `sim`, `sim:oc`, `test:naming`, `test:installer`,
+  `test:report`, `test:master`, `test:apps`, `test:plant`, `test:link`,
+  `test:bridge`, `test:history`, `test:book`, `test:mcp`, `test:field`,
+  `test:line` and the screen matrix.
 - **0.3.x is built and tagged** up to `v0.3.33`, and **0.4.1 is built and
   verified in-game** (2026-11-15): `tc.net`, netboot provisioning, node registry, Relay,
   waves, Vault, the desktop shell with **eleven apps**, the GAIA app and the
@@ -162,6 +206,8 @@ discovery.
 | Area | Document | Slice |
 |---|---|---|
 | Reference dataset (SuSy Factory Flow) | [`research-susy-planner.md`](research-susy-planner.md) | optional |
+| Sidecar transport (bridge card) and bulk reads (scanner) | [`sidecar.md`](sidecar.md) | 0.4.10 |
+| Bus: ports, core and metered moves between named endpoints | [`bus.md`](bus.md) | 0.4.11 |
 | Multi-hall gateway/DNS (leaf, gateway, TC1 merge) | [`middleware.md`](middleware.md) | deferred |
 
 Nothing here has a line of code yet, and none of it is required for F3: the

@@ -10,7 +10,7 @@ OpenComputers BIOS or optional EEPROM manager
   -> load core modules from /lib/tc
   -> read /etc/terracorp.cfg and draw the splash
   -> desktop role: create the desktop and load /apps modules
-     node role: start the headless node loop instead
+     line role: start the plant readout and the status publisher instead
   -> process computer.pullSignal events
 ```
 
@@ -338,35 +338,30 @@ nodes get the file too, because it is written before the role split.
 last. It is Lua because the updater only installs `src/**/*.lua`; a Markdown
 file would be rejected as an unsafe OS path by older clients.
 
-## Cluster
+## Roles
 
-The kernel reads `role` from `/etc/terracorp.cfg`. `desktop` starts the UI and
-`cluster` service; `node` skips GPU setup and starts the headless runtime.
+The kernel reads `role` from `/etc/terracorp.cfg`. `desktop` starts the UI and the
+master service; `line` starts the plant readout and the status publisher with no
+desktop and no GPU ([`line-node.md`](line-node.md)).
 
-The cluster is the storage/density layer: provisioning, Relay, waves and Vault.
-The plant readout is **self-contained**: the computer that sees the components
-reads, caches, evaluates its local level alarms and shows them in the Plant app
-([`plant-service.md`](plant-service.md)); a service outside the game is optional
-and owns long history, the reference dataset, planning at scale and the agent.
-The external link (`docs/external-link.md`) mirrors the local readout, one
-polling computer at a time.
+The master owns the node registry, which is the plant's DNS: it assigns the name
+a node answers to, marks a silent node offline and merges what the nodes publish
+into a view keyed by path. A line node reads its own boundary stocks, caches the
+answers, evaluates its local level alarms and publishes its status over the wired
+modem; with no master it keeps reading, alarming and writing
+`/var/status/last.tsv`. The external link (`docs/external-link.md`) mirrors the
+readout, one polling computer at a time.
 
 | Module | Responsibility |
 |---|---|
 | `tc.net` | `TC1` text framing, validation, percent escaping, modem transport |
-| `tc.registry` | `/var/nodes.tsv` load/save, merging, state and role updates |
-| `tc.provision` | Floppy safety/capacity checks, payload copy, install guard, config serialization |
-| `tc.cluster` | Master modem, installer window, HELLO/ASSIGN, ACK/STATUS/PONG, offline tracking |
-| `tc.node` | Node boot loop, identity adoption, STATUS and PING/PONG, runtime ASSIGN |
-| `boot.netboot` | Floppy installer: HELLO/ASSIGN, first-HDD copy, boot-address write, ACK, reboot |
+| `tc.registry` | `/var/nodes.tsv` load/save, merging, node state |
+| `tc.master` | `ASSIGN`/`STATUS`/`PING`/`CFG`, unique names, offline marking, merged view |
+| `tc.report` | The node's side: name resolution, heartbeat, backoff, status page |
+| `tc.installer`, `boot/install.lua` | The floppy installer: copy to the HDD, write the configuration, set the boot address |
 
-The kernel forwards `modem_message` signals to the cluster before the desktop
-sees them. A node never requires a GPU, but if a screen is present it may show a
-small status page. The installer window is gated by both a token and a
-ten-minute expiry on the master, so a stale floppy cannot overwrite a node that
-already has a valid install. The floppy also writes `/var/install-incomplete`
-before copying and removes it only after a complete install; a retry may
-overwrite an incomplete target, but never a finished one.
+The cluster (rack discovery, provisioning, Relay, waves, Vault) was removed in
+0.4.9 with decision 25; [`cluster.md`](cluster.md) is kept as the record.
 
 ## Power and known limits
 

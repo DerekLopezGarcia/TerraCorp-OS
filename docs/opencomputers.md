@@ -114,6 +114,14 @@ Verified against `master-MC1.12` (1.8.x) and the pack's 1.8.9a build.
   own deadline is the only bound.
 - Handles expose `finishConnect`, `response`, `read`, and `close`. `read` returns
   `nil` at end of stream and `""` when no bytes are ready yet.
+- **TCP sockets: pending verification (raised 2026-11-16).** The API also
+  documents `connect(address, port)` for a client socket, `open(address, port)`
+  for a listening one, and `isTcpEnabled()`, gated by the mod's configuration
+  (`enableTcp`, off in the stock config). This project has only ever exercised
+  `request` and has not probed TCP here. `component.invoke(component.list(
+  "internet")(), "isTcpEnabled")` answers it in one call; record the result
+  against the pack version before relying on either behaviour. See
+  [`external-link.md`](external-link.md#what-opencomputers-allows).
 
 ## Racks and servers
 

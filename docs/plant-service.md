@@ -12,7 +12,7 @@ service is no longer a precondition for the readout.
 
 | Constraint | Consequence |
 |---|---|
-| The Internet Card only makes outbound requests; there are no inbound ports | A service outside is always the client: it polls and collects queued work. The OS does not need it to read |
+| The Internet Card only makes outbound requests; there are no inbound ports on a stock server (TCP availability is [pending verification](external-link.md#what-opencomputers-allows)) | A service outside is always the client: it polls and collects queued work. The OS does not need it to read |
 | `linkInterval` is 5 s by default and 10 s in the checklist | A control loop driven from outside is blind between messages. The fast loop (gates, level alarms) lives in the OS |
 | 64 MB now, 1 MB when this was written | The operated book and a short sample ring fit in the OS; the full reference dataset and months of history do not |
 | Only the computer next to a component can read it | Sensors and gates cannot move out; they are physical |
