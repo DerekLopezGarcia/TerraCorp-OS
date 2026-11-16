@@ -26,6 +26,10 @@ local VERBS = {
   STATUS = { "id", "state" },
   PING = { "id" },
   PONG = { "id", "state" },
+  -- Line node configuration pushed by the master. The node validates the file
+  -- name against its own whitelist, writes it and reloads.
+  CFG = { "id", "file", "body" },
+  CFGACK = { "id", "file", "state" },
   LIST = { "id", "path" },
   FETCH = { "id", "path" },
   DIRS = { "id", "path" },

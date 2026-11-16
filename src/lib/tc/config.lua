@@ -12,16 +12,13 @@ config.defaults = {
   clock24 = true,
   splash = true,
   logLevel = "info",
+  name = "",
   hostname = "",
   iconOrder = "",
   iconLayout = "",
   role = "desktop",
-  nodeRole = "worker",
   master = "",
   masterId = "",
-  nodeFloppyPayload = true,
-  nodeAutoUpdate = true,
-  nodeFloppyAddress = "",
   linkSink = "",
   linkToken = "",
   linkInterval = 5,
@@ -33,14 +30,12 @@ config.data = {}
 local ACCENTS = { "cyan", "orange", "lime", "lightblue", "yellow", "purple" }
 local CHARSETS = { "unicode", "ascii" }
 local LOG_LEVELS = { "debug", "info", "warn", "error" }
-local ROLES = { desktop = true, node = true }
-local NODE_ROLES = { worker = true, storage = true, node = true }
+local ROLES = { desktop = true, line = true }
 
 config.accents = ACCENTS
 config.charsets = CHARSETS
 config.logLevels = LOG_LEVELS
 config.roles = ROLES
-config.nodeRoles = NODE_ROLES
 
 local function copyDefaults()
   local data = {}
@@ -98,20 +93,19 @@ local function accepted(key, value)
   if key == "clock24" or key == "splash" then
     return type(value) == "boolean"
   end
-  if key == "nodeFloppyPayload" or key == "nodeAutoUpdate" then
-    return type(value) == "boolean"
-  end
   if key == "role" then
     return ROLES[value] == true
-  end
-  if key == "nodeRole" then
-    return NODE_ROLES[value] == true
   end
   if key == "linkInterval" then
     return type(value) == "number" and value >= 1
   end
   if key == "linkControl" then
     return value == "off" or value == "write" or value == "full"
+  end
+  -- A node's name is stored as typed: a wrong name is reported by the node when
+  -- it publishes, so the one rule that decides a legal name stays in tc.naming.
+  if key == "name" then
+    return type(value) == "string" and #value <= 64
   end
   return type(value) == "string"
 end

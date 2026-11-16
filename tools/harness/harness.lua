@@ -1078,12 +1078,10 @@ elseif scenario == "notes" then
   ev("key_down", "screen-1", nil, 0x3F, "tester") -- reopen the same note
   idle(2)
 elseif scenario == "nodes" then
-  -- F7 opens the seventh app. Preparing writes the runtime to the rack floppy
-  -- and arms the ten-minute installer window.
+  -- F7 opens the DNS table. With no line node on the wire it says so instead of
+  -- showing an empty list with no explanation.
   ev("key_down", "screen-1", nil, 0x41, "tester") -- F7 opens Nodes
   idle(1)
-  typeText("p")
-  idle(2)
 elseif scenario == "plant" then
   -- The Plant app is the eleventh icon; open it from the Terminal so the
   -- scenario does not depend on a particular grid column.
@@ -1092,16 +1090,14 @@ elseif scenario == "plant" then
   typeText("open plant")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(6)
-elseif scenario == "vault" then
-  -- F8 opens the Vault pool browser over an empty cluster namespace.
-  ev("key_down", "screen-1", nil, 0x42, "tester") -- F8 opens Vault
+elseif scenario == "lines" then
+  -- The Lines app opens from the Terminal: with no node on the wire it explains
+  -- what it needs instead of drawing an empty table.
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Console
   idle(1)
-  typeText("p") -- switch to the local inbox and back
-  idle(1)
-  typeText("p")
-  idle(1)
-  typeText("r") -- refresh
-  idle(1)
+  typeText("open lines")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(4)
 elseif scenario == "lab" or scenario == "lab_error" then
   -- F10 opens Lab with /var/lab/script.lua loaded. Type at the end of the
   -- script, then click [ Run ]: it saves, executes, and switches to Output.
@@ -1623,7 +1619,7 @@ if STRICT then
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
     if not preferences:find(
-      'iconOrder = "files,dashboard,console,settings,notes,update,nodes,vault,gaia,lab,plant"',
+      'iconOrder = "files,dashboard,console,settings,notes,update,nodes,gaia,lab,plant"',
       1,
       true
     ) then
@@ -1631,7 +1627,7 @@ if STRICT then
       print("FAIL: the desktop icon order was not saved")
     end
     if not preferences:find(
-      'iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,gaia@9,lab@10,plant@11"',
+      'iconLayout = "files@1,dashboard@2,console@3,settings@4,notes@5,update@6,nodes@7,gaia@9,lab@10,plant@11"',
       1,
       true
     ) then
@@ -1667,7 +1663,7 @@ if STRICT then
     end
     local preferences = written["/etc/terracorp.cfg"] or ""
     if not preferences:find(
-      'iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,nodes@7,vault@8,gaia@9,lab@10,plant@11,files@32"',
+      'iconLayout = "dashboard@1,console@3,settings@4,notes@5,update@6,nodes@7,gaia@9,lab@10,plant@11,files@32"',
       1,
       true
     ) then
@@ -1699,21 +1695,13 @@ if STRICT then
     end
   end
   if scenario == "nodes" then
-    if not screen:find("Rack nodes", 1, true) then
+    if not screen:find("Node registry", 1, true) then
       errors = errors + 1
       print("FAIL: F7 did not open the Nodes app")
     end
-    if not screen:find("Installer armed", 1, true) then
+    if not screen:find("No line node has reported", 1, true) then
       errors = errors + 1
-      print("FAIL: the Nodes app did not arm the installer")
-    end
-    if not nodesFloppy.exists("/ready.txt") then
-      errors = errors + 1
-      print("FAIL: the pull bootstrap was not written to the floppy")
-    end
-    if not nodesFloppy.exists("/net.lua") then
-      errors = errors + 1
-      print("FAIL: the pull bootstrap is missing tc.net")
+      print("FAIL: the Nodes app did not explain the empty registry")
     end
   end
   if scenario == "plant" then
@@ -1726,14 +1714,14 @@ if STRICT then
       print("FAIL: the Plant app did not show its empty configuration")
     end
   end
-  if scenario == "vault" then
-    if not screen:find("Vault pool", 1, true) then
+  if scenario == "lines" then
+    if not screen:find("Lines", 1, true) then
       errors = errors + 1
-      print("FAIL: F8 did not open the Vault app")
+      print("FAIL: the Terminal did not open the Lines app")
     end
-    if not screen:find("Enter read", 1, true) then
+    if not screen:find("No stocks reported", 1, true) then
       errors = errors + 1
-      print("FAIL: the Vault app did not show its action hints")
+      print("FAIL: the Lines app did not explain the empty view")
     end
   end
   if scenario == "lab" or scenario == "lab_error" then

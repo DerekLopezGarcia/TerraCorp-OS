@@ -104,6 +104,43 @@ end
 
 bindScreen()
 
+-- An installer medium carries /installer.lua: it copies the runtime onto this
+-- computer's disk and never writes to itself, so the same floppy commissions
+-- every node. The kernel never starts from an installer medium.
+local function runInstaller()
+  local entry, entryReason = read(address, "/installer.lua")
+  if not entry then
+    return false
+  end
+
+  local source, installerReason = read(address, "/boot/install.lua")
+  if not source then
+    error("TerraCorp OS: " .. tostring(installerReason or entryReason), 0)
+  end
+  local chunk, compileError = load(source, "=boot/install.lua", "t")
+  if not chunk then
+    error("TerraCorp OS: invalid installer: " .. tostring(compileError), 0)
+  end
+
+  local installer = chunk()
+  local ok, why = pcall(installer.run, {
+    address = address,
+    component = component,
+    computer = computer,
+    read = function(path)
+      return read(address, path)
+    end,
+  })
+  if not ok then
+    error("TerraCorp OS: the installer failed: " .. tostring(why), 0)
+  end
+  return true
+end
+
+if runInstaller() then
+  return
+end
+
 -- A pending update is applied here, before the kernel starts, so the desktop is
 -- never responsible for installing it. The applier owns the screen and rolls
 -- back on failure; boot continues either way.

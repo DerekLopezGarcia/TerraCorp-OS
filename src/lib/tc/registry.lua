@@ -11,9 +11,9 @@
 local registry = {}
 
 registry.path = "/var/nodes.tsv"
-registry.columns = { "id", "name", "role", "modem", "state", "mem", "disk", "lastSeen", "v", "jobs", "drain" }
-registry.states = { online = true, offline = true, provisioning = true }
-registry.roles = { worker = true, storage = true, node = true }
+registry.columns = { "id", "name", "role", "modem", "state", "mem", "disk", "lastSeen", "v", "jobs", "drain", "stocks", "alarms", "uptime" }
+registry.states = { online = true, offline = true, provisioning = true, conflict = true }
+registry.roles = { worker = true, storage = true, node = true, line = true }
 registry.MAX_NAME = 24
 
 local function split(line)
@@ -87,6 +87,9 @@ function registry.upsert(nodes, record)
       v = "",
       jobs = 0,
       drain = "",
+      stocks = 0,
+      alarms = 0,
+      uptime = 0,
     }
     nodes[#nodes + 1] = node
     created = true
@@ -126,6 +129,15 @@ function registry.upsert(nodes, record)
       node.drain = ""
     end
   end
+  if record.stocks ~= nil then
+    node.stocks = number(record.stocks)
+  end
+  if record.alarms ~= nil then
+    node.alarms = number(record.alarms)
+  end
+  if record.uptime ~= nil then
+    node.uptime = number(record.uptime)
+  end
 
   return node, created
 end
@@ -158,6 +170,9 @@ function registry.load(vfs)
           v = columns[9],
           jobs = columns[10],
           drain = columns[11],
+          stocks = columns[12],
+          alarms = columns[13],
+          uptime = columns[14],
         })
       end
     end
@@ -194,6 +209,9 @@ function registry.save(vfs, nodes)
       clean(node.v),
       tostring(number(node.jobs)),
       clean(node.drain),
+      tostring(number(node.stocks)),
+      tostring(number(node.alarms)),
+      tostring(number(node.uptime)),
     }, "\t")
   end
 

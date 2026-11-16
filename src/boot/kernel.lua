@@ -11,7 +11,7 @@ local MODULE_ROOTS = {
   apps = "/apps/",
 }
 
-local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes", "vault", "gaia", "lab", "plant" }
+local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes", "gaia", "lab", "plant", "lines" }
 
 local function packCall(fn, ...)
   local result = table.pack(pcall(fn, ...))
@@ -286,8 +286,8 @@ function kernel:loop()
     elseif pack[2] then
       local name = pack[2]
       if name == "shutdown" or name == "reboot" then
-        if self.cluster then
-          self.cluster:shutdown()
+        if self.master then
+          self.master:close()
         end
         if self.link then
           self.link:close()
@@ -304,14 +304,14 @@ function kernel:loop()
 
       if name ~= "interrupted" then
         local handled = false
-        if name == "modem_message" and self.cluster then
+        if name == "modem_message" and self.master then
           local ok, routed = pcall(
-            self.cluster.handle,
-            self.cluster,
+            self.master.handle,
+            self.master,
             table.unpack(pack, 2, pack.n)
           )
           if not ok then
-            self.log.error("cluster event: " .. tostring(routed))
+            self.log.error("master event: " .. tostring(routed))
           else
             handled = routed == true
           end
@@ -330,10 +330,10 @@ function kernel:loop()
     pcall(self.tickClock, self)
     if now - lastTick >= 1 then
       lastTick = now
-      if self.cluster then
-        local ok, reason = pcall(self.cluster.tick, self.cluster)
+      if self.master then
+        local ok, reason = pcall(self.master.tick, self.master)
         if not ok then
-          self.log.error("cluster tick: " .. tostring(reason))
+          self.log.error("master tick: " .. tostring(reason))
         end
       end
       if self.plant then
@@ -630,25 +630,42 @@ function kernel.start(boot)
   -- starts so a headless server gets the file too.
   instance.notesPath = writeReleaseNotes(instance, requireModule)
 
-  -- A node has no desktop and may not have a GPU. Start the headless runtime
-  -- before any screen work so a rack server can boot without a monitor.
-  if config.get("role") == "node" then
-    log.trace("Node role: starting the headless cluster runtime")
-    local nodeModule = requireModule("tc.node")
-    local runtime = nodeModule.new({
-      kernel = instance,
-      config = config,
-      vfs = vfs,
-      log = log,
-      version = version,
-      theme = theme,
-      gfxModule = gfxModule,
-      component = component,
-      computer = computer,
-      os = os,
-    })
-    instance.node = runtime
-    runtime:run()
+  -- A line node has no desktop and reads its own line: the plant service, its
+  -- own level alarms and the status publisher. It never needs a GPU.
+  if config.get("role") == "line" then
+    log.trace("Line role: starting the line node runtime")
+    local linePlant = nil
+    local okPlant, plantModule = pcall(requireModule, "tc.plant")
+    if okPlant and type(plantModule) == "table" then
+      local okNew, service = pcall(plantModule.new, {
+        kernel = instance,
+        vfs = vfs,
+        log = log,
+        version = version,
+      })
+      if okNew then
+        linePlant = service
+        instance.plant = service
+        log.trace("Plant readout started")
+      else
+        log.error("Plant service failed: " .. tostring(service))
+      end
+    else
+      log.error("Plant service unavailable: " .. tostring(plantModule))
+    end
+
+    local okReport, reportModule = pcall(requireModule, "tc.report")
+    if okReport and type(reportModule) == "table" then
+      return reportModule.run({
+        kernel = instance,
+        vfs = vfs,
+        log = log,
+        config = config,
+        version = version,
+        plant = linePlant,
+      })
+    end
+    log.error("Report module unavailable: " .. tostring(reportModule))
     return
   end
 
@@ -808,9 +825,11 @@ function kernel.start(boot)
     instance.ui:notify("info", "What's new: " .. instance.notesPath)
   end
 
-  local okCluster, clusterModule = pcall(requireModule, "tc.cluster")
-  if okCluster and type(clusterModule) == "table" then
-    instance.cluster = clusterModule.new({
+  -- The master owns the node registry, which is the plant's DNS: it receives the
+  -- line nodes' status, keeps their names and merges their stocks by path.
+  local okMaster, masterModule = pcall(requireModule, "tc.master")
+  if okMaster and type(masterModule) == "table" then
+    instance.master = masterModule.new({
       kernel = instance,
       vfs = vfs,
       config = config,
@@ -819,9 +838,27 @@ function kernel.start(boot)
       component = component,
       computer = computer,
     })
-    instance.cluster:start()
+    instance.master:start()
   else
-    log.error("Cluster service unavailable: " .. tostring(clusterModule))
+    log.error("Master service unavailable: " .. tostring(masterModule))
+  end
+
+  -- The flasher writes a node installer medium from this runtime: the tree, the
+  -- marker that makes /init.lua run the installer, and a configuration that
+  -- already names this master. Nothing happens until the operator asks for it.
+  local okFlash, flashModule = pcall(requireModule, "tc.flash")
+  if okFlash and type(flashModule) == "table" then
+    instance.flash = flashModule.new({
+      kernel = instance,
+      vfs = vfs,
+      log = log,
+      config = config,
+      version = version,
+      component = component,
+      computer = computer,
+    })
+  else
+    log.error("Flasher unavailable: " .. tostring(flashModule))
   end
 
   if splash then

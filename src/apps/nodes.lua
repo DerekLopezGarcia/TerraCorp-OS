@@ -1,9 +1,8 @@
--- Rack nodes: discovered servers, provisioning, and the node registry.
+-- Nodes: the plant's DNS.
 --
--- The master owns the cluster service; this app is a window onto it. It can
--- arm the netboot installer, watch a node install, ping a silent server, rename
--- a node, and change its assigned role. Everything shown here comes from
--- /var/nodes.tsv and the live cluster state.
+-- One row per line node that talks to the master, with the name it answers to.
+-- This app is the registry's view and its editor; the master service owns the
+-- registry and the wire, so nothing here talks to a component directly.
 
 local keys = require("tc.keys")
 
@@ -13,789 +12,338 @@ nodes.__index = nodes
 nodes.id = "nodes"
 nodes.title = "Nodes"
 nodes.short = "Nodes"
-nodes.icon = "NOD"
+nodes.icon = "NTS"
 nodes.iconArt = {
-  "┌───────┐",
-  "│ ███ • │",
-  "│ ███ • │",
-  "│ ███ • │",
-  "└───────┘",
+  "╔═══════╗",
+  "║ name  ║",
+  "║ ▪ ▪ ▪ ║",
+  "║ ▪ ▪ ▪ ║",
+  "╚═══════╝",
 }
 nodes.order = 7
-
-local ROLES = { "worker", "storage", "node" }
-
-local function kilobytes(value)
-  local number = tonumber(value) or 0
-  if number < 0 then
-    number = 0
-  end
-  return number
-end
-
-local function humanKB(value)
-  local number = kilobytes(value)
-  if number >= 1048576 then
-    return string.format("%.1fG", number / 1048576)
-  elseif number >= 1024 then
-    return string.format("%dM", math.floor(number / 1024 + 0.5))
-  end
-  return string.format("%dK", math.floor(number + 0.5))
-end
 
 local function stateColor(colors, state)
   if state == "online" then
     return colors.ok
+  elseif state == "stale" then
+    return colors.warn
+  elseif state == "conflict" then
+    return colors.danger
   end
   return colors.dim
 end
 
-local function tail(value)
-  local last
-  for line in tostring(value or ""):gmatch("[^\r\n]+") do
-    if line:match("%S") then
-      last = line
-    end
-  end
-  return last
-end
-
-local function clock(seconds)
-  seconds = math.max(0, math.floor(tonumber(seconds) or 0))
-  return string.format("%d:%02d", math.floor(seconds / 60), seconds % 60)
-end
-
 function nodes.create()
   local self = setmetatable({}, nodes)
-  self.hits = {}
-  self.selectedId = nil
+  self.index = 1
   self.top = 0
-  self.editor = nil
-  self.editId = nil
+  self.editing = nil
+  self.buffer = ""
+  self.forgetArmed = nil
   return self
 end
 
-function nodes:cluster(ctx)
-  return ctx.kernel.cluster
+function nodes:service(ctx)
+  return ctx.kernel.master
 end
 
-function nodes:list(ctx)
-  local cluster = self:cluster(ctx)
-  return cluster and cluster:nodesList() or {}
-end
-
-function nodes:selectedIndex(ctx)
-  local list = self:list(ctx)
-  for index, node in ipairs(list) do
-    if node.id == self.selectedId then
-      return index, node
-    end
+function nodes:rows(ctx)
+  local service = self:service(ctx)
+  if not service then
+    return {}
   end
-  if list[1] then
-    self.selectedId = list[1].id
-    return 1, list[1]
-  end
-  return nil, nil
+  return service:snapshot().nodes
 end
 
 function nodes:selected(ctx)
-  local index, node = self:selectedIndex(ctx)
-  local _ = index
-  return node
-end
-
--- Compact screens keep two summary rows and spend the rest on the node list.
--- Taller screens add an installer log row and two-line node cards.
-function nodes:layout(ctx)
-  local twoLine = ctx.h >= 12 and ctx.w >= 54
-  local listTop = ctx.h >= 10 and 4 or 3
-  local listBottom = ctx.h - 1
-  local perNode = twoLine and 2 or 1
-  local visible = math.max(1, math.floor((listBottom - listTop + 1) / perNode))
-  return {
-    twoLine = twoLine,
-    listTop = listTop,
-    listBottom = listBottom,
-    perNode = perNode,
-    visible = visible,
-  }
-end
-
-function nodes:ensureVisible(ctx)
-  local list = self:list(ctx)
-  local layout = self:layout(ctx)
-  local index = self:selectedIndex(ctx) or 1
-  local top = self.top or 0
-
-  if index <= top then
-    top = index - 1
-  elseif index > top + layout.visible then
-    top = index - layout.visible
+  local rows = self:rows(ctx)
+  if #rows == 0 then
+    return nil
   end
-
-  self.top = math.max(0, math.min(top, math.max(0, #list - layout.visible)))
-end
-
-function nodes:notify(ctx, level, message)
-  ctx.ui:notify(level, message)
-end
-
-function nodes:prepare(ctx)
-  local cluster = self:cluster(ctx)
-  if not cluster then
-    return self:notify(ctx, "error", "Cluster service is unavailable.")
-  end
-
-  local ok, message = cluster:prepareInstaller()
-  if ok then
-    self:notify(ctx, "info", message)
-  else
-    self:notify(ctx, "warn", tostring(message or "Could not prepare the installer."))
-  end
-end
-
-function nodes:stop(ctx)
-  local cluster = self:cluster(ctx)
-  if not cluster then
-    return self:notify(ctx, "error", "Cluster service is unavailable.")
-  end
-
-  local ok, message = cluster:stopInstaller()
-  self:notify(ctx, ok and "warn" or "error", tostring(message))
-end
-
-function nodes:startRename(ctx)
-  local node = self:selected(ctx)
-  if not node then
-    return self:notify(ctx, "warn", "Select a node first.")
-  end
-
-  self.editId = node.id
-  self.editor = node.name
-  return true
-end
-
-function nodes:commitRename(ctx)
-  if not self.editor then
-    return false
-  end
-
-  local cluster = self:cluster(ctx)
-  local id = self.editId
-  local name = self.editor
-  self.editor = nil
-  self.editId = nil
-
-  if not cluster then
-    return self:notify(ctx, "error", "Cluster service is unavailable.")
-  end
-
-  local ok, message = cluster:rename(id, name)
-  if ok then
-    self:notify(ctx, "info", tostring(message))
-  else
-    self:notify(ctx, "warn", tostring(message or "Could not rename the node."))
-  end
-  return true
-end
-
-function nodes:cancelRename()
-  if not self.editor then
-    return false
-  end
-  self.editor = nil
-  self.editId = nil
-  return true
-end
-
-function nodes:editKey(ctx, char, code)
-  if code == keys.enter then
-    return self:commitRename(ctx)
-  elseif code == keys.tab then
-    return self:cancelRename()
-  elseif code == keys.back then
-    self.editor = ctx.text.slice(self.editor, 1, math.max(0, ctx.text.width(self.editor) - 1))
-    return true
-  end
-
-  if char and #char > 0 and not char:match("^%c$") then
-    if ctx.text.width(self.editor) < 24 then
-      self.editor = self.editor .. char
-    end
-    return true
-  end
-  return true
-end
-
-function nodes:cycleRole(ctx)
-  local node = self:selected(ctx)
-  if not node then
-    return self:notify(ctx, "warn", "Select a node first.")
-  end
-
-  local cluster = self:cluster(ctx)
-  if not cluster then
-    return self:notify(ctx, "error", "Cluster service is unavailable.")
-  end
-
-  local nextRole = ROLES[1]
-  for index, role in ipairs(ROLES) do
-    if role == node.role then
-      nextRole = ROLES[index % #ROLES + 1]
-      break
-    end
-  end
-
-  local ok, message = cluster:setRole(node.id, nextRole)
-  if ok then
-    self:notify(ctx, "info", tostring(message))
-  else
-    self:notify(ctx, "warn", tostring(message or "Could not change the role."))
-  end
-end
-
-function nodes:ping(ctx)
-  local node = self:selected(ctx)
-  if not node then
-    return self:notify(ctx, "warn", "Select a node first.")
-  end
-
-  local cluster = self:cluster(ctx)
-  if not cluster then
-    return self:notify(ctx, "error", "Cluster service is unavailable.")
-  end
-
-  local ok, message = cluster:ping(node.id)
-  if ok then
-    self:notify(ctx, "info", "Ping sent to " .. tostring(node.name) .. ".")
-  else
-    self:notify(ctx, "warn", tostring(message or "Could not ping the node."))
-  end
-end
-
-function nodes:refresh(ctx)
-  local cluster = self:cluster(ctx)
-  if not cluster then
-    return self:notify(ctx, "error", "Cluster service is unavailable.")
-  end
-
-  local ok, message = cluster:refreshNodes()
-  if ok then
-    self:notify(ctx, "info", tostring(message))
-  else
-    self:notify(ctx, "warn", tostring(message or "Could not refresh the nodes."))
-  end
-end
-
-function nodes:checkJobs(ctx)
-  local cluster = self:cluster(ctx)
-  if not cluster then
-    return self:notify(ctx, "error", "Cluster service is unavailable.")
-  end
-
-  -- Queue the full diagnostic set: integrity, disk space, component census,
-  -- and the node's own log tail (which carries the boot applier's verdict on
-  -- a failed update). Results land in the master's log as each job completes.
-  local queued, failed = 0, nil
-  for _, task in ipairs({ "fs.check", "disk.report", "comp.count" }) do
-    local job, reason = cluster:publishJob(task, "")
-    if job then
-      queued = queued + 1
-    else
-      failed = reason
-    end
-  end
-  -- 30 lines of the node's own log: it carries the boot applier's verdict
-  -- after a failed update.
-  do
-    local job, reason = cluster:publishJob("log.tail", "30")
-    if job then
-      queued = queued + 1
-    else
-      failed = reason
-    end
-  end
-  if queued > 0 then
-    self:notify(ctx, "info", queued .. " diagnostic job(s) queued; watch the log.")
-  else
-    self:notify(ctx, "warn", tostring(failed or "Could not queue the check."))
-  end
-end
-
-function nodes:toggleDrain(ctx)
-  local cluster = self:cluster(ctx)
-  if not cluster then
-    return self:notify(ctx, "error", "Cluster service is unavailable.")
-  end
-  local node = self:list(ctx)[self:selectedIndex(ctx)] or nil
-  if not node or node.state ~= "online" then
-    return self:notify(ctx, "warn", "Select an online node to drain.")
-  end
-
-  local ok, reason = cluster:drainNode(node.id, node.drain ~= "true")
-  if ok then
-    self:notify(ctx, "info",
-      (node.drain ~= "true" and "Draining " or "Undraining ") .. tostring(node.name) .. "...")
-  else
-    self:notify(ctx, "warn", tostring(reason or "Could not reach the node."))
-  end
-end
-
-function nodes:armUpdate(ctx)
-  local cluster = self:cluster(ctx)
-  if not cluster then
-    return self:notify(ctx, "error", "Cluster service is unavailable.")
-  end
-
-  local ok, message = cluster:armUpdate()
-  if ok then
-    self:notify(ctx, "info", tostring(message))
-  else
-    self:notify(ctx, "warn", tostring(message or "Could not arm the update."))
-  end
-end
-
-function nodes:forget(ctx)
-  local node = self:selected(ctx)
-  if not node then
-    return self:notify(ctx, "warn", "Select a node first.")
-  end
-  if node.state ~= "offline" then
-    return self:notify(ctx, "warn", "Only offline nodes can be forgotten.")
-  end
-
-  local cluster = self:cluster(ctx)
-  if not cluster then
-    return self:notify(ctx, "error", "Cluster service is unavailable.")
-  end
-
-  local ok, message = cluster:forget(node.id)
-  if ok then
-    self.selectedId = nil
-    self:notify(ctx, "info", tostring(message))
-  else
-    self:notify(ctx, "warn", tostring(message or "Could not forget the node."))
-  end
-end
-
-function nodes:move(ctx, delta)
-  local list = self:list(ctx)
-  if #list == 0 then
-    return false
-  end
-
-  local index = self:selectedIndex(ctx) or 1
-  index = math.max(1, math.min(#list, index + delta))
-  self.selectedId = list[index].id
-  self:ensureVisible(ctx)
-  return true
-end
-
-function nodes:drawInstaller(ctx, installer, row)
-  local c = ctx.colors
-  local v = ctx.view
-  local update = self:cluster(ctx) and self:cluster(ctx):updateState() or nil
-
-  if update and update.active and update.phase ~= "ready" then
-    local label
-    if update.phase == "checking" then
-      label = "Checking for the latest release..."
-    elseif update.phase == "downloading" then
-      label = string.format(
-        "Downloading %s %d/%d for the nodes",
-        tostring(update.latest),
-        update.files or 0,
-        update.total or 0
-      )
-    else
-      label = "Update running"
-    end
-    v:put(1, row, ctx.text.truncate(label, ctx.w), c.warn, c.deep)
-    return
-  end
-
-  if update and update.active and update.phase == "ready" and update.remaining > 0
-    and (not installer or not installer.active) then
-    local label
-    if update.complete then
-      label = string.format(
-        "Update %s finished · %d/%d node(s) updated%s",
-        tostring(update.target),
-        update.updated or 0,
-        update.waveTotal or 0,
-        (update.skipped or 0) > 0 and " · " .. update.skipped .. " skipped" or ""
-      )
-    else
-      label = string.format(
-        "Update %s · wave %d · %d/%d updated · %d queued",
-        tostring(update.target),
-        update.waves or 0,
-        update.updated or 0,
-        update.waveTotal or 0,
-        update.queued or 0
-      )
-    end
-    v:put(1, row, ctx.text.truncate(label, ctx.w), c.warn, c.deep)
-    return
-  end
-
-  if not installer or not installer.active then
-    local label = "Installer idle · Prepare to start"
-    local cluster = self:cluster(ctx)
-    local usage = cluster and cluster:vaultUsage() or nil
-    if usage and usage.total > 0 then
-      label = string.format(
-        "Installer idle · Pool %d/%d KB · %d file(s) · %d disk(s)",
-        usage.used,
-        usage.total,
-        usage.files,
-        #usage.disks
-      )
-    end
-    v:put(1, row, ctx.text.truncate(label, ctx.w), c.dim, c.deep)
-    return
-  end
-
-  local who = installer.lastName and (" · " .. installer.lastName) or ""
-  local label = string.format(
-    "Installer armed %s · %d files%s",
-    clock(installer.remaining),
-    tonumber(installer.files) or 0,
-    who
-  )
-  v:put(1, row, ctx.text.truncate(label, ctx.w), c.warn, c.deep)
-end
-
-function nodes:drawLog(ctx, installer, row)
-  local c = ctx.colors
-  local v = ctx.view
-
-  if not installer or not installer.active then
-    v:put(1, row, "Insert a floppy, then prepare the installer.", c.dim, c.deep)
-    return
-  end
-
-  local line = tail(installer.log)
-  if line then
-    v:put(1, row, ctx.text.truncate("Log: " .. line, ctx.w), c.dim, c.deep)
-  else
-    v:put(1, row, "Waiting for a server to netboot...", c.dim, c.deep)
-  end
-end
-
-function nodes:drawNode(ctx, node, selected, x, y, width, twoLine, servable)
-  local c = ctx.colors
-  local v = ctx.view
-
-  local fg = selected and c.onSelected or c.text
-  local bg = selected and c.selected or c.deep
-  local detailFg = selected and c.onSelected or c.dim
-
-  v:fill(1, y, ctx.w, twoLine and 2 or 1, " ", fg, bg)
-
-  local marker = selected and ctx.glyphs.arrow or " "
-  local state = tostring(node.state or "offline")
-  local stateFg = selected and c.onSelected or stateColor(c, state)
-  local right = state
-  if width >= 40 then
-    right = tostring(node.role or "worker") .. " · " .. state
-  end
-
-  local nameWidth = math.max(1, width - ctx.text.width(right) - 3)
-  local name = ctx.text.truncate(tostring(node.name or node.id:sub(1, 8)), nameWidth)
-  v:put(x, y, marker .. " " .. name, fg, bg)
-  v:textRight(width, y, right, stateFg, bg)
-
-  if twoLine then
-    local version = ""
-    if node.v and node.v ~= "" then
-      version = " · v" .. tostring(node.v)
-      if servable and node.v ~= servable then
-        version = version .. " (update)"
-      end
-    end
-    local running = tonumber(node.jobs) or 0
-    if running > 0 then
-      version = version .. " · " .. running .. " job" .. (running > 1 and "s" or "")
-    end
-    if node.drain == "true" then
-      version = version .. " · drain"
-    end
-    local detail = string.format(
-      "%s · %s RAM · %s disk%s",
-      tostring(node.role or "worker"),
-      humanKB(node.mem),
-      humanKB(node.disk),
-      version
-    )
-    if width >= 66 and node.modem and node.modem ~= "" then
-      detail = detail .. " · " .. tostring(node.modem):sub(1, 8)
-    end
-    v:put(2, y + 1, ctx.text.truncate(detail, width - 1), detailFg, bg)
-  end
-end
-
-function nodes:drawEditor(ctx)
-  local c = ctx.colors
-  local v = ctx.view
-
-  v:fill(1, ctx.h - 1, ctx.w, 1, " ", c.dim, c.panel)
-  v:put(1, ctx.h - 1, "Enter saves · Tab cancels", c.text, c.panel)
-  v:fill(1, ctx.h, ctx.w, 1, " ", c.onAccent, c.accent)
-  v:put(1, ctx.h, ctx.text.truncate("Name: " .. self.editor .. "_", ctx.w), c.onAccent, c.accent)
-end
-
-function nodes:drawButtons(ctx, installer, node)
-  local c = ctx.colors
-  local v = ctx.view
-
-  local lead = installer and installer.active and "Stop" or "Prepare"
-  local actions = {
-    { label = lead, method = lead == "Stop" and "stop" or "prepare" },
-    { label = "Refresh", method = "refresh" },
-    { label = "Check", method = "checkJobs" },
-    { label = "Drain", method = "toggleDrain" },
-    { label = "Update", method = "armUpdate" },
-    { label = "Rename", method = "startRename" },
-    { label = "Role", method = "cycleRole" },
-    { label = "Ping", method = "ping" },
-    { label = "Forget", method = "forget" },
-  }
-
-  local x = 1
-  for _, action in ipairs(actions) do
-    local label = " " .. action.label .. " "
-    if action.method == "toggleDrain" and node and node.drain == "true" then
-      label = " Undrain "
-    end
-    local width = ctx.text.width(label)
-    if x + width - 1 > ctx.w then
-      break
-    end
-
-    local method = action.method
-    local enabled = true
-    if method == "startRename" or method == "cycleRole" or method == "ping" then
-      enabled = node ~= nil
-    elseif method == "toggleDrain" then
-      enabled = node ~= nil and node.state == "online"
-    elseif method == "forget" then
-      enabled = node ~= nil and node.state == "offline"
-    end
-
-    local fg, bg = c.onAccent, c.accent
-    if not enabled then
-      fg, bg = c.dim, c.panel
-    else
-      self.hits[#self.hits + 1] = {
-        x = x,
-        y = ctx.h,
-        w = width,
-        h = 1,
-        method = method,
-      }
-    end
-    v:put(x, ctx.h, label, fg, bg)
-    x = x + width + 1
-  end
+  self.index = math.max(1, math.min(self.index, #rows))
+  return rows[self.index]
 end
 
 function nodes:draw(ctx)
   local c = ctx.colors
   local v = ctx.view
-  local cluster = self:cluster(ctx)
-  local list = self:list(ctx)
-  local layout = self:layout(ctx)
-  local installer = cluster and cluster:installerState() or nil
-  local summary = cluster and cluster:summary() or nil
-
   v:clear(" ", c.text, c.deep)
-  self.hits = {}
 
-  v:put(1, 1, "Rack nodes", c.accent, c.deep)
-  local servable = cluster and select(2, cluster:serveTree()) or nil
-  local stale = 0
-  if servable then
-    for _, node in ipairs(list) do
-      if node.state == "online" and node.v and node.v ~= "" and node.v ~= servable then
-        stale = stale + 1
-      end
-    end
-  end
-  if summary then
-    local right = string.format("%d/%d up", summary.online, summary.total)
-    local color = c.dim
-    if summary.total > 0 then
-      color = summary.online == summary.total and c.ok or c.warn
-    end
-    local jobCounts = cluster and cluster:jobsSummary() or nil
-    if jobCounts and (jobCounts.queued > 0 or jobCounts.granted > 0) then
-      right = string.format("%s · %dq/%dg", right, jobCounts.queued, jobCounts.granted)
-      color = c.warn
-    end
-    local drains = 0
-    for _, node in ipairs(list) do
-      if node.state == "online" and node.drain == "true" then
-        drains = drains + 1
-      end
-    end
-    if drains > 0 then
-      right = string.format("%s · %d drain", right, drains)
-      color = c.warn
-    end
-    if stale > 0 then
-      right = string.format("%s · %d to update", right, stale)
-      color = c.warn
-    end
-    v:textRight(ctx.w, 1, right, color, c.deep)
+  local service = self:service(ctx)
+  if not service then
+    v:put(2, 2, "Master service unavailable.", c.danger, c.deep)
+    return
   end
 
-  if not cluster then
-    v:put(1, 2, "Cluster service unavailable.", c.danger, c.deep)
+  local status = service:status()
+  local view = service:snapshot()
+
+  local title = "Node registry"
+  v:put(1, 1, title, c.accent, c.deep)
+  local counts = string.format("%d online · %d offline", status.online, status.offline)
+  if ctx.w >= #title + #counts + 2 then
+    v:textRight(ctx.w, 1, counts, status.offline > 0 and c.warn or c.dim, c.deep)
+  end
+  local wire = string.format("%s · %d frame%s · %d assign%s",
+    status.opened and "modem open" or "no modem",
+    status.received, status.received == 1 and "" or "s",
+    status.assigned, status.assigned == 1 and "" or "s")
+  v:put(1, 2, ctx.text.truncate(wire, ctx.w), c.dim, c.deep)
+
+  -- On a short window the detail pane is the first thing to go: the table and
+  -- the key hints matter more than the selected node's uptime.
+  local compact = ctx.h < 14
+  local bodyTop = 4
+  local detailRows = compact and 2 or 5
+  local bodyBottom = math.max(bodyTop, ctx.h - 1 - detailRows)
+  local visible = math.max(1, bodyBottom - bodyTop + 1)
+  local rows = view.nodes
+  local maximum = math.max(0, #rows - visible)
+  self.index = math.max(1, math.min(self.index, math.max(1, #rows)))
+  if self.index - 1 > self.top + visible - 1 then
+    self.top = self.index - visible
+  elseif self.index - 1 < self.top then
+    self.top = self.index - 1
+  end
+  self.top = math.max(0, math.min(self.top, maximum))
+
+  if #rows == 0 then
+    v:put(2, bodyTop, "No line node has reported yet.", c.text, c.deep)
+    if not compact then
+      v:put(2, bodyTop + 1, "Install a node from its floppy and power it on.", c.dim, c.deep)
+    end
+  end
+
+  for index = 1, visible do
+    local node = rows[self.top + index]
+    if not node then
+      break
+    end
+    local selected = (self.top + index) == self.index
+    local marker = selected and ">" or " "
+    local alarm = node.alarm ~= "" and (":" .. node.alarm:match("^([^:]+)")) or ""
+    local text = string.format("%s %-16s %-8s %2d stock%s %s",
+      marker, tostring(node.name):sub(1, 16), tostring(node.state),
+      node.stocks or 0, (node.stocks or 0) == 1 and "" or "s", alarm)
+    local color = selected and c.text or stateColor(c, node.state)
+    if selected then
+      v:fill(1, bodyTop + index - 1, ctx.w, 1, " ", c.deep, c.panel)
+    end
+    v:put(1, bodyTop + index - 1, ctx.text.truncate(text, ctx.w), color,
+      selected and c.panel or c.deep)
+  end
+
+  local node = self:selected(ctx)
+  local detail = ctx.h - detailRows
+  v:fill(1, detail, ctx.w, 1, " ", c.text, c.panel)
+  if node then
+    v:put(1, detail, ctx.text.truncate(string.format("%s · %s · v%s · up %s · %s",
+      tostring(node.name), tostring(node.id):sub(1, 8), tostring(node.v or "?"),
+      ctx.util.humanTime(node.uptime or 0),
+      node.age and string.format("%.0fs ago", node.age) or "silent"), ctx.w),
+      c.text, c.panel)
+    local extra = node.alarm ~= "" and ("alarm " .. node.alarm .. " on " .. tostring(node.alarmPath))
+      or "no alarms"
+    if not compact then
+      v:put(1, detail + 1, ctx.text.truncate(extra, ctx.w),
+        node.alarm ~= "" and c.warn or c.dim, c.panel)
+    end
   else
-    self:drawInstaller(ctx, installer, 2)
-    if layout.listTop > 3 then
-      self:drawLog(ctx, installer, 3)
-    end
+    v:put(1, detail, "Select a node.", c.dim, c.panel)
   end
 
-  self:selectedIndex(ctx)
-  self:ensureVisible(ctx)
-
-  if #list == 0 then
-    local row = layout.listTop
-    v:put(2, row, "No nodes registered yet.", c.text, c.deep)
-    if row + 1 <= layout.listBottom then
-      v:put(2, row + 1, "Prepare a floppy, then start each server.", c.dim, c.deep)
-    end
-    if row + 2 <= layout.listBottom then
-      v:put(2, row + 2, "The installer window lasts ten minutes.", c.dim, c.deep)
-    end
+  if self.editing then
+    v:fill(1, detail + 2, ctx.w, 1, " ", c.text, c.deep)
+    v:put(1, detail + 2, string.format("New name for %s: %s▏", tostring(node and node.name or "?"),
+      self.buffer), c.accent, c.deep)
+  elseif self.forgetArmed then
+    v:put(1, detail + 2, string.format("Press F again to forget %s.", tostring(self.forgetArmed)),
+      c.danger, c.deep)
   else
-    local first = (self.top or 0) + 1
-    local last = math.min(#list, first + layout.visible - 1)
-    for index = first, last do
-      local node = list[index]
-      local y = layout.listTop + (index - first) * layout.perNode
-      self:drawNode(
-        ctx,
-        node,
-        node.id == self.selectedId,
-        1,
-        y,
-        ctx.w,
-        layout.twoLine,
-        servable
-      )
-    end
-  end
-
-  if self.editor then
-    self:drawEditor(ctx)
-  else
-    self:drawButtons(ctx, installer, self:selected(ctx))
+    v:put(1, detail + 2, "↑↓ select · R rename · P ping · F forget · I installer",
+      c.dim, c.deep)
   end
 end
 
-function nodes:handleTouch(ctx, x, y)
-  for _, hit in ipairs(self.hits) do
-    if x >= hit.x and x < hit.x + hit.w and y >= hit.y and y < hit.y + hit.h then
-      self[hit.method](self, ctx)
-      return true
-    end
-  end
-
-  local layout = self:layout(ctx)
-  if y >= layout.listTop and y <= layout.listBottom then
-    local offset = math.floor((y - layout.listTop) / layout.perNode)
-    local index = (self.top or 0) + offset + 1
-    local node = self:list(ctx)[index]
-    if node then
-      self.selectedId = node.id
-      self:ensureVisible(ctx)
-      return true
-    end
-  end
-
-  return false
+function nodes:notify(ctx, kind, message)
+  ctx.ui:notify(kind, message)
+  return true
 end
 
-function nodes:handle(ctx, name, a, b, c)
-  if name == "touch" then
-    return self:handleTouch(ctx, a, b)
+function nodes:startRename(ctx)
+  local node = self:selected(ctx)
+  if not node then
+    return self:notify(ctx, "warn", "No node selected.")
+  end
+  self.editing = node.id
+  self.buffer = tostring(node.name or "")
+  self.forgetArmed = nil
+  return true
+end
+
+function nodes:commitRename(ctx)
+  local service = self:service(ctx)
+  local id = self.editing
+  self.editing = nil
+  if not service or not id then
+    return true
   end
 
-  if name == "scroll" then
-    return self:move(ctx, (tonumber(c) or 0) > 0 and -1 or 1)
+  local result, reason = service:rename(id, self.buffer)
+  if not result then
+    local text = reason == "name_taken" and "That name already belongs to another node."
+      or reason == "invalid_name" and "A name is lowercase letters, digits, - and _."
+      or tostring(reason)
+    return self:notify(ctx, "error", text)
   end
 
+  local references = result.references or {}
+  if #references > 0 then
+    return self:notify(ctx, "warn", string.format(
+      "Renamed to %s. %d file%s still mention the old prefix.",
+      result.name, #references, #references == 1 and "" or "s"))
+  end
+  return self:notify(ctx, "info", "Renamed to " .. tostring(result.name) .. ".")
+end
+
+function nodes:ping(ctx)
+  local service = self:service(ctx)
+  local node = self:selected(ctx)
+  if not service or not node then
+    return self:notify(ctx, "warn", "No node selected.")
+  end
+  local ok, reason = service:ping(node.id)
+  if not ok then
+    return self:notify(ctx, "error", "Ping failed: " .. tostring(reason))
+  end
+  return self:notify(ctx, "info", "Ping sent to " .. tostring(node.name) .. ".")
+end
+
+function nodes:forget(ctx)
+  local service = self:service(ctx)
+  local node = self:selected(ctx)
+  if not service or not node then
+    return self:notify(ctx, "warn", "No node selected.")
+  end
+  if self.forgetArmed ~= node.id then
+    self.forgetArmed = node.id
+    return self:notify(ctx, "warn", "Press F again to forget " .. tostring(node.name) .. ".")
+  end
+  self.forgetArmed = nil
+  local removed, reason = service:forget(node.id)
+  if not removed then
+    return self:notify(ctx, "error", "Forget failed: " .. tostring(reason))
+  end
+  self.index = math.max(1, self.index - 1)
+  return self:notify(ctx, "info", "Forgot " .. tostring(node.name) .. ".")
+end
+
+--- Flash the installer onto the floppy in the drive. Two presses: the first
+-- names the medium, the second writes it.
+function nodes:installer(ctx)
+  local flasher = ctx.kernel.flash
+  if not flasher then
+    return self:notify(ctx, "error", "The flasher is unavailable.")
+  end
+  local mediums = flasher:mediums()
+  if #mediums == 0 then
+    return self:notify(ctx, "warn", "Put a floppy in a disk drive first.")
+  end
+
+  local medium = mediums[1]
+  if self.flashArmed ~= medium.address then
+    self.flashArmed = medium.address
+    return self:notify(ctx, "warn", string.format(
+      "Press I again to write the installer to %s (%d KB free).",
+      tostring(medium.address):sub(1, 8),
+      math.floor(((medium.total or 0) - (medium.used or 0)) / 1024)))
+  end
+
+  self.flashArmed = nil
+  local summary, reason = flasher:write(medium, {})
+  if not summary then
+    return self:notify(ctx, "error", "Installer not written: " .. tostring(reason))
+  end
+  return self:notify(ctx, "info", string.format(
+    "Installer written to %s: %d files, %d KB.",
+    tostring(medium.address):sub(1, 8), summary.files, math.floor(summary.bytes / 1024)))
+end
+
+function nodes:handle(ctx, name, a, b)  if name == "scroll" then
+    local delta = (tonumber(b) or 0)
+    self.index = math.max(1, self.index + (delta < 0 and 1 or -1))
+    return true
+  end
   if name ~= "key" then
     return false
   end
-
   local char, code = a, b
-  if self.editor then
-    return self:editKey(ctx, char, code)
-  end
 
-  local layout = self:layout(ctx)
-  if code == keys.up then
-    return self:move(ctx, -1)
-  elseif code == keys.down then
-    return self:move(ctx, 1)
-  elseif code == keys.pageUp then
-    return self:move(ctx, -layout.visible)
-  elseif code == keys.pageDown then
-    return self:move(ctx, layout.visible)
-  elseif code == keys.home then
-    local list = self:list(ctx)
-    if list[1] then
-      self.selectedId = list[1].id
-      self:ensureVisible(ctx)
+  if self.editing then
+    if code == keys.esc then
+      self.editing = nil
+      return true
+    elseif code == keys.enter then
+      return self:commitRename(ctx)
+    elseif code == keys.back then
+      self.buffer = self.buffer:sub(1, math.max(0, #self.buffer - 1))
+      return true
+    elseif type(char) == "string" and #char == 1 and char:match("[%w_%-]") then
+      if #self.buffer < 24 then
+        self.buffer = self.buffer .. char:lower()
+      end
       return true
     end
-  elseif code == keys["end"] then
-    local list = self:list(ctx)
-    if list[#list] then
-      self.selectedId = list[#list].id
-      self:ensureVisible(ctx)
-      return true
-    end
+    return true
   end
 
-  if char == "p" then
-    self:prepare(ctx)
-    return true
-  elseif char == "s" then
-    self:stop(ctx)
-    return true
+  if char == "r" then
+    return self:startRename(ctx)
+  elseif char == "p" then
+    return self:ping(ctx)
   elseif char == "f" then
-    self:refresh(ctx)
+    return self:forget(ctx)
+  elseif char == "i" then
+    return self:installer(ctx)
+  elseif code == keys.up then
+    self.index = math.max(1, self.index - 1)
     return true
-  elseif char == "c" then
-    self:checkJobs(ctx)
+  elseif code == keys.down then
+    self.index = self.index + 1
     return true
-  elseif char == "d" then
-    self:toggleDrain(ctx)
+  elseif code == keys.pageUp then
+    self.index = math.max(1, self.index - 6)
     return true
-  elseif char == "u" then
-    self:armUpdate(ctx)
+  elseif code == keys.pageDown then
+    self.index = self.index + 6
     return true
-  elseif char == "r" then
-    self:startRename(ctx)
+  elseif code == keys.home then
+    self.index = 1
     return true
-  elseif char == "o" then
-    self:cycleRole(ctx)
-    return true
-  elseif char == "g" then
-    self:ping(ctx)
-    return true
-  elseif char == "x" then
-    self:forget(ctx)
+  elseif code == keys["end"] then
+    self.index = 999
     return true
   end
-
+  self.forgetArmed = nil
+  self.flashArmed = nil
   return false
+end
+
+function nodes:tick(ctx)
+  local service = self:service(ctx)
+  if not service then
+    return false
+  end
+  local status = service:status()
+  local signature = string.format("%d/%d/%d", status.received, status.online, #service.nodes)
+  if self.signature ~= signature then
+    self.signature = signature
+    return true
+  end
+  return false
+end
+
+function nodes:close()
 end
 
 return nodes

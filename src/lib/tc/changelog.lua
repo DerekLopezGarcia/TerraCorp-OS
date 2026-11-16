@@ -29,6 +29,7 @@ return {
     "0.4.5",
     "0.4.7",
     "0.4.8",
+    "0.4.9",
   },
   notes = {
     ["0.3.21"] = {
@@ -121,6 +122,14 @@ return {
       "Gates: desired setpoints in /var/gates.tsv, local interlocks for empty input and full output, and DISOBEDIENT LINE after repeated refusals.",
       "Move: a bounded transfer by item name through a transposer, reporting what actually moved.",
       "The second hall, the gate and the transport are not built yet: these modules ship harness-tested and their in-game run is pending.",
+    },
+    ["0.4.9"] = {
+      "Line node: a small OS on a floppy installs itself onto a hard disk and never writes to the floppy, so one floppy commissions every computer.",
+      "Flash the installer from the master: open Nodes, put a floppy in a disk drive and press I twice. The medium leaves with the master's address already configured.",
+      "The cluster is gone: no racks, no provisioning, no Relay, no waves and no Vault. A node reads its line, raises its own alarms and publishes its status to the master.",
+      "A line names itself after what it produces (EV Machine Casing becomes ev-machine-casing) and the master's node registry is the DNS: rename it in Nodes and the node adopts the name.",
+      "Nodes shows the DNS table with rename, ping and forget; Lines edits a line's level thresholds and pushes them to the node, which keeps them and still alarms with the master gone.",
+      "Configuration over the link: the node only accepts plant.tsv, stocks.tsv and paths.tsv, never a path, and reloads the plant after writing.",
     },
   },
 }
