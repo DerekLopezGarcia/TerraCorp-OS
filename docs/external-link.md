@@ -320,6 +320,22 @@ next scheduling decision, so a reboot keeps it. Use it to make a test session
 responsive (`n=0.5`) and put it back when finished: a half-second poll is 120
 requests a minute on the world host.
 
+**Locking yourself out.** `off` and `read` allow no writes, so they cannot be
+undone over the link: the only tier that can raise the tier is `write`, and it
+needs a write. Before lowering it on a machine you cannot walk to, know two
+things:
+
+- The configuration is read **once, at boot**. Writing `/etc/terracorp.cfg` from
+  outside does not change the running tier — it applies on the next boot either
+  way (`config.load` is called once in `kernel.lua`).
+- The way back is out-of-band: stop the world, edit
+  `…/opencomputers/<address>/etc/terracorp.cfg` on the server volume, start it.
+  The computer reads the new value when it boots.
+
+For testing a refusal, lower to `write` rather than `read`: everything except
+`lua` and the OS tree still works, and `write` can restore `full` with a config
+write plus `reboot`, since both are allowed at that tier.
+
 The OS tree — `/init.lua`, `/boot/`, `/lib/`, `/apps/` — needs `full` even when
 `write` is on, because a bad write there leaves a computer that cannot boot.
 Everything else on the volume is reachable at `write`.
