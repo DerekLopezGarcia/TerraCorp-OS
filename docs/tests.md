@@ -1025,6 +1025,54 @@ the master stages the latest GitHub release for its nodes before offering
 updates, and node versions are tracked in the registry. These changes are not
 part of the published v0.3.0 release.
 
+0.4.9 sub-second link intervals (in-game 2026-11-23). Driven from a workstation
+through the bridge on the Pterodactyl node (`http://100.74.31.102:8787` over
+Tailscale, `linkControl = "full"`), against the computer that was already
+running: node `81dd02d0-91ef-4c9b-8b22-273979f1e637`, uptime 191,070 s before the
+first command, `memory=1072KB/32768KB`, 13 components. Nothing was rebooted.
+
+- `fs.read /etc/terracorp.cfg` — the rig runs `linkSink =
+  "http://100.74.31.102:8787"`, `linkInterval = 5`, `linkControl = "full"`.
+- `fs.read /lib/tc/config.lua` — the rig's own copy reads
+  `if key == "linkInterval" then return type(value) == "number" and value >= 0.5`,
+  so the 0.5 s floor is live on that machine, not only in the harness.
+- `link.interval n=0.5` — `state=ok`, **`interval=0.5s`**. The reply keeps the
+  fraction, which only `plantSeconds` produces; 0.4.8's formatter would have
+  shown a whole second.
+- `link.interval n=5` — `interval=5s`, and `/etc/terracorp.cfg` reads
+  `linkInterval = 5` again. The cadence was restored.
+- `link.interval n=9999` — no answer within 60 s, consistent with the value being
+  capped at 60 s and the next exchange simply falling outside the window. Not a
+  proof of the cap; the harness covers it (`interval_max`).
+
+What this does and does not settle:
+
+- **Settled in-game:** both ends accept a fractional interval — the bridge queued
+  the frame, the OS applied it and reported `0.5s` — and the value round-trips
+  back to the configured 5 s.
+- **The stamp on that rig is deliberate.** `version.lua` says `0.4.8 "Keystone"`
+  although `config.lua` and `link.lua` carry the 0.4.9 code, because 0.4.9 is
+  intentionally **not tagged** in the repository. `updater.check` offers an
+  update only when the installed version is lower than the latest GitHub Release
+  (`available = compareVersions(current, latest) < 0`, `src/lib/tc/updater.lua:375`),
+  so stamping the rig `0.4.9` while the newest release is `v0.4.8` would leave it
+  claiming to be ahead of GitHub. Holding the stamp at 0.4.8 keeps every OC quiet
+  until a real tag exists. **The rig is the 0.4.9 code, frozen at the 0.4.8
+  label on purpose.**
+- The consequence to keep in mind when diagnosing: **a stamp cannot distinguish
+  the release from an untagged build.** `fs.read /lib/tc/version.lua` is not a
+  reliable answer to "what is this machine running"; a behaviour the old build
+  could not produce is. That is the gap behind F01, and this rig is the reason it
+  matters in practice rather than in theory.
+- `fs.read /lib/tc/link.lua` did not answer within 60 s — 47 KB needs many
+  exchanges and the result is posted on a later one. The floor constant was
+  therefore confirmed through observable behaviour, not by reading that file.
+
+Harness for the same change: `npm run test:link` is 47 scenarios (the new
+`interval_floor` asserts `interval=0.5s` and `instance.interval == 0.5`), and
+`npm run test:bridge` asserts a fractional `n` is accepted for `link.interval`
+and still refused for `fs.read`. Both fail when the change is reverted.
+
 ## F0 exit checklist
 
 | Criterion | Status |
