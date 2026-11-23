@@ -97,9 +97,10 @@ const retired = [
   { word: "netboot.lua", why: "netboot was removed with the rack cluster" },
   { word: "linkTransport", why: "config.lua has never had that key" },
   { word: "others=", why: "the status frame overflow key is more=<n>" },
+  { word: "off=", why: "the status frame overflow is more=<n>; link reply paging is a different rule" },
   { word: "MAX_STOCKS = 10", why: "report.lua caps at 8 (s1..s8)" },
 ];
-const retirement = /removed|dropped|retired|historical|no longer|never|deleted|banner|not built|absent|gone|superseded|planned|no such|does not exist|used to|is no\b|\(\d{4}-\d{2}-\d{2}|\bdid\b/i;
+const retirement = /removed|dropped|retired|historical|no longer|never|deleted|banner|not built|absent|gone|superseded|planned|no such|does not exist|used to|is no\b|\(\d{4}-\d{2}-\d{2}/i;
 
 // The roadmap, the finding ledger and the deferred designs exist to discuss
 // removed, deferred and planned things — that is their job. The documents that

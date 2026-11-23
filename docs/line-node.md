@@ -85,9 +85,9 @@ ask, so it refuses and leaves the computer alone. An interrupted install carries
 `/var/install-incomplete` on the target and is resumed, never mistaken for a
 finished one.
 
-No OpenOS, no `fetch.lua`, no netboot, no EEPROM write, no rack. What
-`boot/netboot.lua` did for a rack server, this does locally, minus the network: no
-master has to be up for a computer to become a node.
+No OpenOS, no `fetch.lua`, no netboot, no EEPROM write, no rack. The whole
+install happens locally, minus the network: no master has to be up for a
+computer to become a node.
 
 **Two BIOS facts are on the critical path, and neither is verified in-game:**
 

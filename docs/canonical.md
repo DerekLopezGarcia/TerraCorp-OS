@@ -199,18 +199,17 @@ normalisation), `plant` (readout, cache, alarms), `history` (bounded ring),
 
 ## 6. Data on disk
 
-Config is a serialized Lua table in `/etc/terracorp.cfg`, 16 keys, all written on
-every save (`config.lua:9-26,48-71`):
+Config is a serialized Lua table in `/etc/terracorp.cfg`, 15 keys, all written on
+every save (`config.lua:9-25,47-70`):
 
 `accent`, `charset`, `clock24`, `splash`, `logLevel`, `name`, `hostname`,
-`iconOrder`, `iconLayout`, `role`, `master`, `masterId`, `linkSink`, `linkToken`,
+`iconOrder`, `iconLayout`, `role`, `master`, `linkSink`, `linkToken`,
 `linkInterval`, `linkControl`.
 
-Two of those are dead: **`masterId` is never read or written** by any code path
-(the only `masterId` in `src/` is an `ASSIGN` frame field, `net.lua:24`), and
-**`hostname` is read (`kernel.lua:597`) but never written** — Settings has no row
-for it. `linkTransport` appears in `status.md:93` and **does not exist** in
-`config.lua`, and `config.set` rejects unknown keys, so it could never be stored.
+**`hostname` is read (`kernel.lua:594`) but never written** — Settings has no row
+for it, so the operator sets it by hand in the configuration file. `linkTransport`
+appears in `status.md:93` and **does not exist** in `config.lua`, and
+`config.set` rejects unknown keys, so it could never be stored.
 
 **`/etc` (operator-authored, survives updates):**
 
@@ -278,8 +277,8 @@ TC1 STATUS id=<address> name=casing state=online mem=863 disk=420 uptime=612
 - **At most 8 stocks per frame** (`report.lua:20 MAX_STOCKS = 8`), keys
   `s1`…`s8` (`report.lua:190`), overflow reported as **`more=<n>`**
   (`report.lua:193`).
-  `line-node.md:157-159` claims ten stocks, `off=<n>`, and `others=<n>`: all
-  three are wrong.
+  The old `line-node.md` text claimed ten stocks, `off=<n>` and `others=<n>`:
+  all three were wrong.
 - Cadence: heartbeat every 30 s plus an immediate frame when an alarm changes or
   a stock disappears. Never per scan — each component call costs ~50 ms of
   server tick (`line-node.md:154-157`, `tests.md` probe answers).
@@ -571,21 +570,20 @@ and the four documents that listed the 0.4.8 app set were corrected.
 
 ## P4 — Roles, registry, master (7)
 
-**F17, F18, F19, F21, F22, F23 fixed 2026-11-23**; F20 stays open on purpose —
-the registry still offers a `role` column and no app edits it, which is P9's
-question (does the file keep the column) rather than a documentation fix.
-`masterId` was removed from `config.lua`; `hostname` stays because the
-configuration file is hand-editable and the kernel reads it.
+**F17, F18, F19, F20, F21, F22 and F23 fixed 2026-11-23.** The registry is
+eleven columns with no `role` column; `masterId` was removed from `config.lua`;
+`hostname` stays because the configuration file is hand-editable and the kernel
+reads it (`kernel.lua:594`).
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F17 | H | Status frame: docs say 10 stocks, `off=<n>`, `others=<n>`; code caps at 8 with `more=<n>` | `line-node.md:157-159` vs `report.lua:20,190-193` |
+| F17 | H | **Fixed 2026-11-23.** Status frame docs said 10 stocks, `off=<n>` and `others=<n>`; the code caps at 8 with `more=<n>`, and the docs now say so | `line-node.md:156-160` vs `report.lua:20,190-193` |
 | F18 | H | **Fixed 2026-11-23.** The registry is 11 columns: `role`, `jobs` and `drain` are removed, `modem` stays (the master reads it). A 14-column or 8-column file loads by width and is rewritten once at first boot | `line-node.md:172-182`, `registry.lua:14-30,170-210` |
-| F19 | M | `line-node.md` says `tc.master` has a "token"; there is no handshake, the frame carries `token=none` because the field is required | `line-node.md:165-166` vs `master.lua:9-10,157-159` |
+| F19 | M | **Fixed 2026-11-23.** `line-node.md` said `tc.master` had a "token"; there is no handshake — the frame carries `token=none` because `net.lua:24` requires the field | `line-node.md:164-170` vs `master.lua:9-10,157-159` |
 | F20 | M | **Fixed 2026-11-23.** `setRole` and `aggregate` are deleted with the `role` column; `rename` stays as the registry's own API; no document offers role cycling | `registry.lua`, `line-node.md:172` |
-| F21 | M | `masterId` config key is dead; `hostname` is read but never written | `config.lua:16,21`, `kernel.lua:597` |
-| F22 | M | Role cycling, jobs and drain remain documented as user-facing in `nodes`/`line-node`/README | `line-node.md:168-178` |
-| F23 | L | `line-node.md:89-90` still explains the floppy by reference to `boot/netboot.lua`, a file deleted with the racks | `line-node.md:89-91` |
+| F21 | M | **Fixed 2026-11-23.** `masterId` is removed from `config.lua`; `hostname` stays because the file is hand-editable and the kernel reads it | `config.lua:9-25,16`, `kernel.lua:594` |
+| F22 | M | **Fixed 2026-11-23.** Role cycling, jobs and drain were documented as user-facing in `nodes`/`line-node`/README; no document offers them now | `line-node.md:172-192` |
+| F23 | L | **Fixed 2026-11-23.** `line-node.md` explained the floppy by reference to `boot/netboot.lua`, a file deleted with the racks; the paragraph now explains the local install directly | `line-node.md:62-90` |
 
 ## P5 — External link contract (9)
 
