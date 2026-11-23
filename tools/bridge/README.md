@@ -104,6 +104,37 @@ node tools/bridge/linkctl.js results
 counts; that is the only way to learn a computer's UUID from outside the game,
 since the bridge keys everything by the address the OS sends.
 
+## The read-only MCP server
+
+`mcp.js` speaks the Model Context Protocol over stdio and exposes the plant to an
+agent. Every tool **reads**: it serves the cached mirror while that is fresh and
+otherwise queues one `plant.*` verb and waits for the answer. It never sends a
+write-tier command. A missing reading comes back as an error, never as a zero —
+every number it states names the verb behind it.
+
+```text
+node tools/bridge/mcp.js --bridge http://127.0.0.1:8787 --token <secret> --node <address>
+```
+
+`--node` and `--token` are required; with neither, the server falls back to the
+`.link/` files `linkctl.js` writes.
+
+| Tool | Answers |
+|---|---|
+| `plant_situation` | One paragraph: version, hall, stocks with levels and rates, alarm count |
+| `stock_query` | One stock by path or pattern: total, state, members, age |
+| `alarm_list` | Current local level alarms, with severity, source and first/last seen |
+| `history` | Rate, trend and recent samples for a stock |
+| `plan` | Steps, bottleneck and shortfall for a target |
+| `path_list` | Semantic paths with cardinality and member count |
+| `path_query` | One path or wildcard, resolved to its members |
+| `recipe_query` | One recipe from the operated book |
+| `audit_tail` | The tail of the node's `/var/log/tc.log` |
+
+Register it in the MCP client with the same token the bridge uses. `npm run
+test:mcp` covers the whole path against a fake node: the handshake, the tool list
+and one call per tool.
+
 ## State
 
 Everything is held in memory. A restart drops the queues and the results, and the
