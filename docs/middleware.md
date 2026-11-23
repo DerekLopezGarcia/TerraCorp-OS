@@ -1,13 +1,16 @@
 # TerraCorp Middleware — leaves, gateways and the minimal profile
 
-Status: **design, deferred and off the plan**. The first F3 slice runs on one
+> **Dropped 2026-11-16 (decisions 25 and 26).** The multi-hall gateway was
+> removed with the racks, not deferred: this page is the design record of what
+> was dropped, and nothing in it is scheduled.
+
+Status: **dropped design, kept as the record.** The first F3 slice runs on one
 computer: the plant core reads locally and the Plant app shows the result.
-**TerraCorp Middleware** is the multi-hall profile — the part of the OS that
-exposes components to other computers, with no desktop and no apps — and it
-arrives only when a second hall exists. Since 2026-11-16 the racks are gone and
-the gateway tier is not on any phase: a line node publishes straight to its
-master, which owns the names ([`line-node.md`](line-node.md), decisions 25 and
-26). This document stays as the deferred design, not as a plan.
+**TerraCorp Middleware** was the multi-hall profile — the part of the OS that
+exposes components to other computers, with no desktop and no apps — designed for
+a second hall that decision 25 removed. Since 2026-11-16 the racks are gone and
+decision 26 removed the gateway tier: a line node publishes straight to its
+master, which owns the names ([`line-node.md`](line-node.md)).
 
 Name and roles agreed with the pack's co-operator on 2026-11-13.
 
@@ -24,9 +27,9 @@ So the plant is built from **plain computers**, not rack servers. Racks, Vault,
 waves and Relay were **removed** in 0.4.9 (decision 25), not parked: they answered
 density and pooled disks, not component access.
 
-For 0.4.1 the computer is both the reader and its own authority; no gateway is
-needed. **There is no gateway either** (decision 26): the node registry is the
-DNS, and the multi-hall profile below is kept as a deferred design, not as a plan.
+For 0.4.1 the computer is both the reader and its own authority. **There is no
+gateway** (decision 26): the node registry is the DNS, and the multi-hall profile
+below is kept as the record of what was dropped, not as a plan or a phase.
 
 ## Two roles
 
@@ -53,7 +56,8 @@ DNS, and the multi-hall profile below is kept as a deferred design, not as a pla
 | **Gateway** | internet + wired + wireless | The only HTTP egress; forwards frames to its leaves; merges their registry copies; serves the tablet over wireless | Read components it cannot see, decide anything |
 
 For 0.4.1 there is no gateway: the plant computer owns its components, paths and
-cache. The gateway row describes 0.4.3+.
+cache. The gateway row describes the 0.4.3 tier that was dropped on 2026-11-16 —
+it is here so the design can be read, not revived.
 
 Each computer runs a **proxy**: the local authority for its own addresses and
 paths, a translator from named requests to component calls, and a **driver
@@ -145,11 +149,12 @@ dies and the brain has leaked back into the game (decision 16).
 
 ## Sequencing
 
-Nothing here is scheduled. The three slices that did happen are recorded in
-[`status.md`](status.md): the single-computer plant core (0.4.1), the link mirror
-(0.4.2), and the line node with the registry as the DNS (0.4.9). The second hall,
-the leaf/gateway merge and service ingest are **not** on any phase — the gateway
-went with the halls model (decision 26).
+Nothing here is scheduled, and nothing here was deferred: the second hall went
+with the racks (decision 25) and the gateway with the halls model (decision 26),
+so the leaf/gateway merge and service ingest were **removed**. The three slices
+that did happen are recorded in [`status.md`](status.md): the single-computer
+plant core (0.4.1), the link mirror (0.4.2), and the line node with the registry
+as the DNS (0.4.9).
 
 Cross-links: [`names.md`](names.md) (addresses and paths),
 [`plant-service.md`](plant-service.md) (combined view), `docs/opencomputers.md`

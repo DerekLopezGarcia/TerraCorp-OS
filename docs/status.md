@@ -35,7 +35,7 @@ OS de planta (OC)    ──  lee, cachea, alarma, muestra; gates y setpoints
 The first three rows are optional. The fourth row is the product: it must show
 exact stocks and raise its own alarms with nothing else running.
 
-## Decisions, 1-27
+## Decisions, 1-28
 
 1-7 are the original frame: system model (app server + terminals), no accounts,
 native Remote Terminals, data-center autonomy, core apps, 0.3.x split, rack
@@ -45,9 +45,12 @@ discovery.
 9. External link deploys **on one machine** first; WAN is parked.
 10. TerraCorp is the **control plane**, not the transport.
 11. AE2 is a crafting terminal, **not the store**.
-12. Vault holds **files**, not goods.
+12. Vault holds **files**, not goods. **Moot since 2026-11-16 (25):** the Vault was
+    removed with the racks, so the rule survives without its subject — the OS
+    never stores goods, the world's containers do.
 13. Recipes are **calibrated before trusted**; declared and imported are
-    provenances, neither is verified.
+    provenances, neither is verified. **Re-pointed 2026-11-16:** the book is local
+    to the node that uses it; the reference dataset outside it is optional.
 14. The long-lived brain lives **outside** the world; amended: the readout,
     cache, level alarms and app live in the OS (23).
 15. The decision-maker is a **local agent on MCP**, with deterministic tools and
@@ -60,14 +63,16 @@ discovery.
     exception: a gate's desired state persists.
 19. Recipes may be **imported**, never redistributed; the SuSy devs' dataset is
     the reference library and their schema is the one to adopt.
-20. The plant runs on **plain computers, not rack servers**.
+20. The plant runs on **plain computers, not rack servers**. **Part-amended
+    2026-11-16:** 25 removed the racks, Vault, waves and Relay that this kept
+    shipped and off the plant path; the rule itself stands.
 21. **Two namespaces**: addresses route, paths search; authority inside, merge
-    outward; amended: no gateway until a second hall exists.
+    outward; amended: no gateway — 26 removed the tier.
 22. Component kinds are **plugins, and a plugin is data** — declarative
     descriptors over a closed capability vocabulary, never executable config.
 23. **Self-contained readout first (2026-11-15).** The OS reads, caches, alarms
-    and shows its own hall; the service is optional; the gateway/DNS split waits
-    for a second hall.
+    and shows its own hall; the service is optional; the gateway/DNS split went
+    with the second hall (25, 26).
 24. **Lines are black boxes with an input and an output (2026-11-15).**
     Transposers sit only at the boundary stocks; the machines inside are not
     read; the line's rate comes from the input/output deltas.
@@ -75,24 +80,35 @@ discovery.
     discovery, netboot, Relay, waves, Vault, worker and storage roles — leaves the
     product. One ordinary computer per line, booting from a 512 KB floppy that is
     the whole install, reading, alarming and publishing to a master. Supersedes
-    1, 3–7, 14 (service tiers), 20 and phase F2; keeps `tc.net`, the registry, the
-    Nodes app and gate desired-state. See [`line-node.md`](line-node.md).
+    1, 3–7, 14 (service tiers) and phase F2 — not 20, which asked for exactly
+    this; 12 goes moot and 13 keeps its rule with the book moved local. Keeps
+    `tc.net`, the registry, the Nodes app and gate desired-state. See
+    [`line-node.md`](line-node.md).
 26. **The node registry is the DNS (2026-11-16).** A node's name is the root of
     its paths (`casing/ingots`); `/var/nodes.tsv` is the table of names feeding
     the master and the Nodes app is its view and editor. The master assigns, the
     node adopts; a node alone keeps its local name; a duplicate is a `conflict`,
     never a silent merge. Amends 17 and 21: no gateway, no `halls.tsv`.
     See [`names.md`](names.md).
+
+    **26-A (2026-11-23) — the hall module is kept, the file is not.** Decision 26
+    removed a file and a gateway, not the merge function. A node's hall is its own
+    name, merged in memory: `plant.lua:316-321` builds a one-row registry from the
+    configured name, `/etc/halls.tsv` is never read, and `halls.load`,
+    `halls.save` and `halls.PATH` were deleted in `6236f99`. The payload still
+    ships `halls.lua` because the plant requires it (`payload.lua:27`), and
+    `plant.halls` stays a read verb (`link.lua:48`). A second hall would be a new
+    decision, not a new table format.
 27. **The sidecar replaces the card, not the protocol (2026-11-16), not built.**
-    A Forge card moves the same 1024-byte frames off the desktop loop, which the
-    Internet Card cannot: it refuses loopback until `settings.conf` is edited and
-    blocks while its request handle is read. A scanner block reads a container for
-    items, fluids and energy in one call without giving it a Transposer, because 50
-    ms per host call also prices the hardware density of a base-wide readout out.
+    A Forge card moves the same frames off the desktop loop, which the Internet
+    Card cannot: it refuses loopback until `settings.conf` is edited and blocks
+    while its request handle is read. A scanner block reads a container for items,
+    fluids and energy in one call without giving it a Transposer, because 50 ms
+    per host call also prices the hardware density of a base-wide readout out.
     `bridge.js`, the command table, the tiers and the desired-state rule are
-    untouched, and `linkTransport = "http"` stays as the stock fallback (planned: the
-key does not exist in `config.lua` until the sidecar lands, and `config.set`
-rejects anything a default does not name).
+    untouched, and HTTP stays the stock transport. No setting selects a
+    transport yet: the selector arrives with the sidecar, because `config.set`
+    rejects a name no default declares.
     See [`sidecar.md`](sidecar.md).
 28. **A bus may move stock between named endpoints (2026-11-16), not built.** This
     amends 10: TerraCorp still does not run the plant's logistics, but it may
@@ -212,11 +228,12 @@ rejects anything a default does not name).
 | Reference dataset (SuSy Factory Flow) | [`research-susy-planner.md`](research-susy-planner.md) | optional |
 | Sidecar transport (bridge card) and bulk reads (scanner) | [`sidecar.md`](sidecar.md) | 0.4.10 |
 | Bus: ports, core and metered moves between named endpoints | [`bus.md`](bus.md) | 0.4.11 |
-| Multi-hall gateway/DNS (leaf, gateway, TC1 merge) | [`middleware.md`](middleware.md) | deferred |
 
 Nothing here has a line of code yet, and none of it is required for F3: the
-reference dataset is optional and the gateway is deferred. The 0.4.3 and 0.4.6
-modules exist but their in-game halves need hardware the rig does not have.
+reference dataset is optional. The gateway was **removed**, not deferred
+(decisions 25 and 26); [`middleware.md`](middleware.md) is the record of that
+design. The 0.4.3 and 0.4.6 modules exist but their in-game halves need hardware
+the rig does not have.
 
 ## What is missing, in dependency order
 
@@ -253,13 +270,11 @@ computer booting the flashed floppy, and `setBootAddress` on a plain computer.
 - A dead service means no long history or cross-hall plan: the OS keeps reading,
   alarming and holding gates.
 - No in-world redundancy for the readout; a dead computer is silence.
-- The gateway is a single ingress per segment when it arrives; two gateways will
-  be allowed later.
 
 ## Resuming cold
 
 Read in this order: this page → [`roadmap.md`](roadmap.md) →
 [`plant-service.md`](plant-service.md) → [`names.md`](names.md) →
 [`crafting.md`](crafting.md) → [`recipes.md`](recipes.md) → [`agent.md`](agent.md).
-[`middleware.md`](middleware.md) is the deferred multi-hall design; read it
-before 0.4.3, not before 0.4.1. Everything else is supporting material.
+[`middleware.md`](middleware.md) is the record of the removed multi-hall design;
+nothing in it ships. Everything else is supporting material.

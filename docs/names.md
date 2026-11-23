@@ -138,8 +138,9 @@ combined view of all nodes is offered to the app.**
 | **Line node** (one per computer) | Authoritative | Its components, faces, first-seen, the paths that mention them, and its own name |
 | **Master** (the desktop that receives them) | Merged copy | The names it assigns, the merged view, and everything that reasons over it |
 
-Two levels, not three: the gateway tier went with the racks (decision 25), and a
-line node publishes its status straight to the master (decision 26).
+Two levels, not three: the gateway tier went with the racks and the halls model
+(decisions 25 and 26), and a line node publishes its status straight to the
+master (decision 26).
 
 - The master's node registry in `/var/nodes.tsv` **is** the DNS: the table of
   names that feed it, each with its state, worst alarm and stock count. The Nodes
@@ -283,8 +284,8 @@ Verified facts used above (`component.list()` shape, address stability,
 4. **`plant.*` mirror** — 0.4.2.
 5. **Line node, names and the master's merge** — 0.4.9 (F3.5), one small OS per
    line that publishes under its own name ([`line-node.md`](line-node.md)). The
-   gateway is gone with the racks; [`middleware.md`](middleware.md) stays as a
-   deferred design, not a plan.
+   gateway is gone with the racks; [`middleware.md`](middleware.md) stays as the
+   record of that dropped design, not a plan.
 6. **`move` and `gate.set`** — on the verified transposer and cache, and only
    when a real gate or transport exists.
 

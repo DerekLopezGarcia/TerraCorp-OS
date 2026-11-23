@@ -374,7 +374,8 @@ The cluster (rack discovery, provisioning, Relay, waves, Vault) was removed in
 
 - One screen cell per Unicode code point; wide CJK characters and emoji are not
   supported.
-- The plant readout is local-first; the multi-hall gateway and the service are optional/design.
+- The plant readout is local-first; the multi-hall gateway was removed (decisions
+  25 and 26) and the service is optional.
 - No accounts or session locking.
 - Windows can be moved but not resized with the pointer.
 - Terminal history and in-memory logs do not survive reboot; warnings/errors are

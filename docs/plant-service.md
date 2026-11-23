@@ -82,9 +82,10 @@ inside "reader" because the service still decides *what* the limit is.
 ## The protocol between them
 
 The transport is the external link ([`external-link.md`](external-link.md)):
-one POST per interval, results down, commands up, 1 KB per frame. The link
-carries the **plant readout**, not component addresses: the service never needs
-a UUID to show a stock.
+one POST per interval, results down, commands up. Frames are sent under the
+**1 KB send policy** (`net.lua:3`); the receive guard is `net.MAX_FRAME = 8192`.
+The link carries the **plant readout**, not component addresses: the service
+never needs a UUID to show a stock.
 
 ### Commands the link exposes (0.4.2+)
 
@@ -226,7 +227,7 @@ Link and service:
 |---|---|---|
 | 0.4.1 | OS | Local registry, readers, cache, level alarms, Plant app, `node.status` |
 | 0.4.2 | OS + bridge | `plant.status/snapshot/delta/alarms`; the mirror |
-| 0.4.3 | OS | Second hall, `halls.tsv`, merged view; no gateway |
+| 0.4.3 | OS | Removed with the racks (25, 26): no second hall, no `halls.tsv`. The merge survives as the node's own in-memory hall |
 | 0.4.4 | OS | Bounded ring, rates, `STALLED`/`TREND`; long history stays optional |
 | 0.4.5 | OS (+ service) | Local book and `plan()`; the reference dataset/optimizer outside |
 | 0.4.6 | OS | `gate.set`, local interlocks, setpoint persistence, refusals; `move` |
@@ -236,7 +237,7 @@ F7 then builds restock orders and cross-hall coordination on top, and the wall
 ([`holo.md`](holo.md)) renders what the panel already knows.
 
 Cross-links: [`external-link.md`](external-link.md) (transport and verbs),
-[`middleware.md`](middleware.md) (the multi-hall profile, deferred),
+[`middleware.md`](middleware.md) (the record of the removed multi-hall profile),
 [`names.md`](names.md) (addresses and paths), [`agent.md`](agent.md) (decision
 layer), [`recipes.md`](recipes.md) (book and planner), [`crafting.md`](crafting.md)
 (gate loop and its interlocks), [`roadmap.md`](roadmap.md) (decision 23),

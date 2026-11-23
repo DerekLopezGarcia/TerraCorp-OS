@@ -225,9 +225,10 @@ scale and the MCP agent (decision 23, amending 14, 16, 17 and 21). The 64 MB
 memory change verified in-game on 2026-11-15 is what makes the local layer
 affordable; the 50 ms per host call still governs every read.
 
-> **Revision 2026-11-15:** F3 is local-first (decision 23). The service and the
-> gateway are optional; 0.4.1 delivers the readout, 0.4.2 the mirror, and 0.4.3
-> the second hall.
+> **Revision 2026-11-15:** F3 is local-first (decision 23). The service is
+> optional; 0.4.1 delivers the readout, 0.4.2 the mirror. The second hall and the
+> gateway this revision still expected were **removed on 2026-11-16** (decisions
+> 25 and 26).
 
 ### 0.4.0 The probe · done 2026-11-15
 
@@ -309,7 +310,7 @@ app keeps working with the bridge down.
 
 > **0.4.2 built and verified in-game (2026-11-15):** the four verbs are in
 > `tc.link`, the bridge parses completed plant bodies into `GET /link/mirror`,
-> `npm run test:link` covers 32 scenarios (including a 40-stock body split
+> `npm run test:link` covered 32 scenarios then (including a 40-stock body split
 > across pages) and `npm run test:bridge` proves the mirror parser and its
 > truncation guard. The delta cursor is the stock revision, so an idle scan does
 > not force a resync. In-game: the real 1232-byte snapshot paged intact, an old
@@ -336,9 +337,12 @@ leaf/gateway, no TC1 DNS protocol, no service required.**
   not dropped; adding a hall is one computer and one config row, with no new app
   or module.
 
-> **0.4.3 module built, in-game pending (2026-11-15):** `tc.halls` loads
-> `/etc/halls.tsv`, resolves the local hall, prefixes merged stocks and marks
-> missing/old halls `offline`/`stale`; `plant.halls` exposes the view. In-game
+> **0.4.3 module built, in-game pending (2026-11-15; corrected 2026-11-23):**
+> `tc.halls` resolves the local hall from the configured name and merges the
+> snapshots it is given; it no longer loads `/etc/halls.tsv` (decision 26-A), and
+> `halls.load`/`save`/`PATH` were deleted in `6236f99`. It prefixes merged
+> stocks and marks missing/old halls `offline`/`stale`; `plant.halls` exposes
+> the view. In-game
 > the 0.4.8 build reports one online hall with the two prefix-stocks; a second
 > computer with Transposers is required to verify the two-hall merge, so
 > `npm run test:field` is the rest of the evidence.
@@ -592,7 +596,7 @@ total, boot within 1.5 seconds, and a multi-session harness test. (The original
 client `ramSizes` were scaled ×32 and 64 MB was verified in-game on 2026-11-15;
 it is no longer a target.)
 
-## F5 — Application server and terminals (0.6)
+## F5 — Application server and terminals (0.6) · blocked, no host decided
 
 > **Blocked.** The premise — a fleet of nodes whose free RAM decides where a
 > session runs — went with the racks (decision 25). A line node has no desktop and
@@ -600,25 +604,24 @@ it is no longer a target.)
 > either the master alone hosts sessions, or a new decision brings back a machine
 > that can.
 
-**Goal:** run apps on the node with the most free RAM and use lightweight
-terminals in factories — the plant dashboard is the first app that matters
-here, because it is the thing an operator wants on the hall wall.
+**Blocked on a host decision.** Until that decision names the machine a session
+runs on, this phase has no Goal and no exit criteria. The placement requirement
+the old phase carried is withdrawn with the racks (decision 25) and is not a
+requirement of any later phase; hosting sessions on the master alone is one
+option under consideration, not a decision already taken.
+
+The terminal work below survives a re-scope. It is design only: nothing here is
+scheduled and nothing is built.
 
 - Reuse `tc.net`; add `SESSION`, `FRAME`, `INPUT`, and `RESUME` messages.
-- Place a session on the eligible node with the most free RAM; keep the session
-  on its node across terminal reconnects.
 - Resume a terminal's session after disconnect.
-- Discover cores and use a shared per-segment key.
+- If a later decision adds more than one host, discover cores and use a shared
+  per-segment key.
 - Add a minimal terminal client and kiosk profile.
 - Limit remote-session refresh to 10 Hz and group spans; local screens have no
   fixed Hz setting in OpenComputers.
 - The verb-level terminal contract is specified in `docs/terminal-protocol.md`
   (FRAME/INPUT/RESUME, input ACK piggyback, bandwidth ceilings).
-
-**Exit criteria:** two terminals (cable and Linked Card) connected to a headless
-core, reconnect under 5 seconds, documented bandwidth/latency, no session-state
-loss when a terminal disconnects, and a session placed on the node with the most
-free RAM.
 
 ## F5.5 — Long-distance links and tablets (optional; does not block F6)
 
@@ -650,28 +653,26 @@ primary link fails. See [`long-distance.md`](long-distance.md).
 > survives is the *policy*, and it needs hardware that can carry it before any of
 > it is built. Read [`power.md`](power.md), which says the same at its top.
 
-**Goal:** operate the plant as a set of machines with a power policy rather than
-a set of racks. Alarms and energy history already exist from F3; this phase adds
-the policy that acts on them.
+**Goal:** operate the plant as a set of machines with a power policy. Alarms and
+energy history already exist from F3; this phase adds the policy that acts on
+them.
 
 - Inventory the computers the plant actually has — the master and its line nodes
   — with their power, energy and network links.
-- Add UPS and power-plant monitoring, reserve budgets, and staged shedding
-  ([`power.md`](power.md)).
-- Automatically boot in stages above 60% UPS charge, with per-node checks and
-  a watchdog.
+- Raise the policy's alerts on the master: a line node that stops reporting, a
+  disk that stops answering, or a node whose energy runs low.
+- Where the plant has a UPS the bridge can read, add reserve budgets and staged
+  shedding ([`power.md`](power.md)); without that hardware the phase stops at
+  alerts.
 - Shut down in order: line nodes, then the master.
 - Document the permanent chunk-loader requirement.
-- Add health checks, alerts, and rebalancing for the Vault pool. Redundancy
-  comes from the pack's RAID block (see [`vault.md`](vault.md)): no software
-  mirroring. Verify the RAID block's filesystem component in-game; F6 keeps
-  only the monitoring and rebalancing work.
 - Attribute operator names in the UI/log without user accounts.
-- Display a data-center map and node/disk/relay/UPS alerts.
+- Display a plant map and node/disk alerts for the master and its line nodes.
 
-**Exit criteria:** inventory two racks/six nodes, automatic startup after world
-reload above 60% charge, terminal file reads/writes, and one-node failure
-without data corruption or taking down the rest of the system.
+**Exit criteria:** the master and every line node appear in the inventory after a
+world reload, a line node that stops reporting raises an alert instead of
+vanishing, terminal file reads/writes still work, and one line node fails
+without data corruption or taking down the rest of the plant.
 
 ## F7 — Logistics automation (0.8)
 
@@ -765,13 +766,16 @@ action; the wall shows the same numbers as the panel.
 12. **Vault holds files, not goods.** The pooled disks store OS and operator
     files. Item and fluid storage is the world's containers, surfaced as
     stocks; the Vault app is not a warehouse UI.
+    **Moot 2026-11-16 (decision 25):** the Vault was removed with the racks. The
+    rule survives: the OS never stores goods; the world's containers do.
 13. **Recipes are calibrated before they are trusted.** A recipe arrives either
     **declared** by the operator or **imported** from a published pack export
     (amended 2026-11-13, see decision 19), always keyed by the identifiers the
     sensor actually reports. Neither provenance is trusted on arrival: a real run
     calibrates the numbers, measurement wins over belief, and a contradiction
-    raises an alarm instead of being smoothed over. See
-    [`recipes.md`](recipes.md).
+    raises an alarm instead of being smoothed over. **Re-pointed 2026-11-16
+    (decision 25):** the book is local, on the node that uses it; the reference
+    dataset outside stays optional. See [`recipes.md`](recipes.md).
 14. **The brain lives outside the world (2026-11-13).** The recipe book,
     planner, history, plant alarms and panel run in the **plant service**; the
     nodes keep sensors, gates, interlocks and the last desired state. Two facts
@@ -816,9 +820,11 @@ action; the wall shows the same numbers as the panel.
     change is a hard error. Paths are what make external instructions readable,
     reviewable and diffable, and they ship first because every other verb depends
     on them. See [`names.md`](names.md).
-    **Amended 2026-11-15:** paths are local to each computer first; the
-    gateway merge arrives with the second hall (0.4.3), not with the first
-    readout.
+    **Amended 2026-11-15:** paths are local to each computer first; the gateway
+    merge was planned for the second hall (0.4.3), not for the first readout.
+    **Removed 2026-11-16 (decisions 25 and 26):** there is no second hall and no
+    gateway; a node's name is the root of its paths and the master's registry is
+    the DNS.
 18. **Where each fact lives (2026-11-13).** Binding, kind and cardinality
     describe the hardware, so they live in the node and survive a service
     restart. Dispatch policy, amount, selector and limits describe what the
@@ -846,9 +852,10 @@ action; the wall shows the same numbers as the panel.
     and gateways are ordinary computers in the world. Two verified mod facts force
     it: a rack server's internals are `Visibility.Neighbors`, so a rack never
     widens what can be read, and servers **do not boot after a world reload**
-    without a sneak-use each. Racks, Vault, waves and Relay stay shipped and
-    tested, but off the plant path — there to answer density and pooled disks, not
-    component access. Consequence: no in-world redundancy for the translator
+    without a sneak-use each. Racks, Vault, waves and Relay were kept off the
+    plant path then to answer density and pooled disks, not component access;
+    **decision 25 later removed them from the product.** Consequence: no in-world
+    redundancy for the translator
     layer; a dead proxy is silence the service must interpret, and Sessions and
     remote terminals (F4/F5) stop gating anything plant-related until a use
     appears for them.
@@ -861,8 +868,9 @@ action; the wall shows the same numbers as the panel.
     execute calls on components through those paths. See [`names.md`](names.md)
     and [`middleware.md`](middleware.md).
     **Amended 2026-11-15:** the first version has no gateway; each computer is
-    its own authority and the merged view is only added when a second hall
-    exists.
+    its own authority. **Removed 2026-11-16 (decisions 25 and 26):** the second
+    hall and the gateway are gone; the master's registry is the DNS and there is
+    no merge tier. The two-namespaces rule itself stands.
 22. **Component kinds are plugins, and a plugin is data (2026-11-13).** An Adapter
     can expose signs, chests, tanks and machines as readily as drawers, so no block
     name is hardcoded. A kind is described by a declarative descriptor over a
@@ -875,8 +883,9 @@ action; the wall shows the same numbers as the panel.
     plant has up to 64 MB (verified in-game: `memory=863KB/65536KB`), so the
     readout, cache, level alarms and Plant app run in the OS; a service is
     optional and owns long history, the reference dataset, planning at scale and
-    the MCP agent. The gateway/DNS/leaf split is deferred until a second hall
-    exists. This does not repeal the tick budget: reads are trickled, cached and
+    the MCP agent. The gateway/DNS/leaf split went with the second hall:
+    decisions 25 and 26 removed both, and the node registry is the DNS. This
+    does not repeal the tick budget: reads are trickled, cached and
     never polled in the draw path, and no alarm spends an extra component call.
     It amends 14, 16, 17 and 21 as noted there.
 24. **Lines are black boxes with an input and an output (2026-11-15).** A
@@ -897,9 +906,10 @@ action; the wall shows the same numbers as the panel.
     `Visibility.Neighbors`, so a rack never widens what a node can read, and
     servers do not boot after a world reload. A line node is commissioned by
     putting a floppy in a computer. This supersedes decisions 1, 3–7, 14 (the
-    service tiers), 20 and phase F2. It keeps `tc.net`, the node registry, the
-    Nodes app and the desired-state rule for gates, because a line node still
-    reports to a master. See [`line-node.md`](line-node.md).
+    service tiers) and phase F2 — not 20, which asked for exactly this; 12 goes
+    moot and 13 keeps its rule with the book moved local. It keeps `tc.net`, the
+    node registry, the Nodes app and the desired-state rule for gates, because a
+    line node still reports to a master. See [`line-node.md`](line-node.md).
 26. **The node registry is the DNS (2026-11-16).** A line node is named, and its
     name is the root of its paths: `casing/ingots`. The master's registry in
     `/var/nodes.tsv` is the table of names that feed it, and the Nodes app is the
@@ -912,6 +922,15 @@ action; the wall shows the same numbers as the panel.
     rules that still mention the old prefix. This amends 17 and 21: there is no
     gateway and no separate `halls.tsv` — the live registry is the DNS. See
     [`names.md`](names.md).
+
+    **26-A (2026-11-23) — the hall module is kept, the file is not.** 26 removed a
+    file and a gateway, not the merge function. A node's hall is its own name,
+    merged in memory: `plant.lua:316-321` builds a one-row registry from the
+    configured name, `/etc/halls.tsv` is never read, and `halls.load`,
+    `halls.save` and `halls.PATH` were deleted in `6236f99`. The payload still
+    ships `halls.lua` because the plant requires it (`payload.lua:27`), and
+    `plant.halls` stays a read verb (`link.lua:48`). A second hall would be a new
+    decision, not a new table format.
 27. **The sidecar replaces the card, not the protocol (2026-11-16).** The plant's
     route to the bridge moves to a mod component that runs its HTTP exchange on its
     own thread. Three measured facts force it: the Internet Card refuses loopback
@@ -926,3 +945,11 @@ action; the wall shows the same numbers as the panel.
     containers affordable. It is a mod, so the pack is no longer stock: an operator
     decision recorded in the release notes, with the mod kept in its own repository
     and never vendored here. See [`sidecar.md`](sidecar.md).
+28. **A bus may move stock between named endpoints (2026-11-16), not built.** This
+    amends 10: TerraCorp still does not run the plant's logistics, but it may
+    execute one metered, reported move between two bindings, which is what a
+    decentralised warehouse needs. `move` keeps its contract; only the transport
+    behind it changes — a port anywhere on the network instead of an adjacent
+    Transposer face, one call per move instead of one per stack, energy and a rate
+    cap per core, no force-loading, and no cross-dimension unless a quantum link
+    pair is enabled. Where a pipe reaches, the pipe wins. See [`bus.md`](bus.md).
