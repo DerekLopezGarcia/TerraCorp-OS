@@ -53,6 +53,18 @@ may declare a version as fact; they may only quote it.
 last tagged GitHub Release** (`docs/versioning.md:70-71`). Any sentence of the
 form "0.4.9 is released/available" is wrong until the tag exists.
 
+**The freeze is deliberate, and it has a consequence.** Leaving 0.4.9 untagged
+stops every in-world computer from self-updating: `updater.check` offers an update
+only when the installed version is *lower* than the latest release
+(`available = compareVersions(current, latest) < 0`, `updater.lua:375`). A machine
+stamped `0.4.8` against a `v0.4.8` release therefore sits still, which is the
+intent. But it means a machine can **run 0.4.9 code while reporting `0.4.8`** — the
+live rig does exactly this (§10 records the repository side of the same effect).
+So: **a version stamp cannot distinguish the last release from an untagged
+build.** `fs.read /lib/tc/version.lua` is not a reliable answer to "what is this
+machine running"; a behaviour the old build could not produce is. Whoever writes
+a diagnostic or an update flow must design around that, not around the stamp.
+
 **Changelog:** 21 entries, 0.3.21 → 0.4.9, newest last
 (`src/lib/tc/changelog.lua`). 0.4.3 and 0.4.6 have no entry: they were cut under
 those numbers and shipped inside 0.4.8's entry. A node updating from ≤ 0.3.20
