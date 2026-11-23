@@ -207,9 +207,9 @@ every save (`config.lua:9-25,47-70`):
 `linkInterval`, `linkControl`.
 
 **`hostname` is read (`kernel.lua:594`) but never written** — Settings has no row
-for it, so the operator sets it by hand in the configuration file. `linkTransport`
-appears in `status.md:93` and **does not exist** in `config.lua`, and
-`config.set` rejects unknown keys, so it could never be stored.
+for it, so the operator sets it by hand in the configuration file. **No key selects a transport:** `linkTransport` is a name used in design notes, is
+absent from `config.lua`, and `config.set` rejects unknown keys, so it could never
+be stored today.
 
 **`/etc` (operator-authored, survives updates):**
 
@@ -309,10 +309,12 @@ One POST per interval; `linkControl` decides how far the far side reaches
 - `/init.lua`, `/boot/`, `/lib/`, `/apps/` are **PROTECTED**: writes there need
   `full` (`link.lua:66-77`).
 - A command not in the table is rejected `unknown_cmd` (`link.lua:494-496`).
-  **There is no item `move` command** — `external-link.md:180` documents one;
-  `fs.move` is a file rename.
-- `gate.set` answers `desired=<0|1> actual=<0|1>`; `open`/`closed` is a
-  documentation error in `plant-service.md:97`.
+  **There is no item `move` command** — item transfer is designed in
+  [`names.md`](names.md) and [`bus.md`](bus.md) and not built; `fs.move` is a
+  file rename.
+- `gate.set` answers `desired=<0|1> actual=<0|1>`, and `state` is `0`/`1`
+  everywhere; `open`/`closed` was a documentation error, fixed 2026-11-23. See
+  the command table in [`external-link.md`](external-link.md#command-set-closed).
 
 ### 7.4 The bridge and the agent
 
