@@ -53,18 +53,12 @@ end
 -- Halls
 --------------------------------------------------------------------------------
 
-local hallVfs = newVfs({
-  ["/etc/halls.tsv"] = table.concat({
-    "# hall\taddress",
-    "hall1\taddr-1",
-    "hall2\taddr-2",
-    "bad name!\taddr-3",
-  }, "\n") .. "\n",
-})
-
-local registry = halls.load(hallVfs)
-equal(#registry.list, 2, "two valid halls load")
-equal(#registry.errors, 1, "one invalid hall is reported")
+-- Decision 26 removed the hall table: the plant builds a one-row registry in
+-- memory, so this covers the registry and the merge, not a file format.
+local registry = halls.new()
+halls.assign(registry, "hall1", "addr-1")
+halls.assign(registry, "hall2", "addr-2")
+equal(#registry.list, 2, "two halls are registered")
 check(registry.configured == true, "the registry is configured")
 
 local here = halls.localHall(registry, "addr-2", "TC-X")
@@ -101,9 +95,7 @@ equal(stale.stocks and #stale.stocks, 0, "a stale hall does not pretend to have 
 
 local added = halls.assign(registry, "hall3", "addr-3b")
 check(added ~= nil, "a hall can be assigned")
-check(halls.save(hallVfs, registry), "the registry saves")
-local reloaded = halls.load(hallVfs)
-equal(#reloaded.list, 3, "the saved hall reloads")
+equal(#registry.list, 3, "the assigned hall joins the registry")
 
 --------------------------------------------------------------------------------
 -- Gates
