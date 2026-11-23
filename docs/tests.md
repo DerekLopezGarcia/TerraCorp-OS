@@ -1068,8 +1068,9 @@ What this does and does not settle:
   exchanges and the result is posted on a later one. The floor constant was
   therefore confirmed through observable behaviour, not by reading that file.
 
-Harness for the same change: `npm run test:link` is 47 scenarios (the new
-`interval_floor` asserts `interval=0.5s` and `instance.interval == 0.5`), and
+Harness for the same change: `npm run test:link` is 48 scenarios (the new
+`interval_floor` asserts `interval=0.5s` and `instance.interval == 0.5`, and
+`off_refuses_read` asserts a read command is refused at `off`), and
 `npm run test:bridge` asserts a fractional `n` is accepted for `link.interval`
 and still refused for `fs.read`. Both fail when the change is reverted.
 

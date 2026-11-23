@@ -10,7 +10,7 @@ Status: **phase 1 and 2 implemented**, merged for 0.3.20. What exists today:
 | Start after first render, one step per frame | `src/boot/kernel.lua` |
 | Bridge | `tools/bridge/bridge.js` |
 | Operator window: state, sink, token, tier | `src/apps/gaia.lua` |
-| Gate | `npm run test:link` (47 scenarios), `npm run test:bridge` and `npm run test:gaia` |
+| Gate | `npm run test:link` (48 scenarios), `npm run test:bridge` and `npm run test:gaia` |
 
 0.4.2 adds the plant readout verbs below. The local **Plant** app does not need
 the link, and the link does not need the service: the four verbs read the
@@ -300,17 +300,24 @@ this and cannot: the OS is the only side that knows the tier.
 
 | `linkControl` | Allows | Use |
 |---|---|---|
-| `off` (default) | `read` commands only | Watching a machine |
+| `off` (default) | `link.interval` only | A machine that should answer nothing |
+| `read` | the `read` commands: status, log, check, files, the plant mirror | Watching a machine |
 | `write` | `read` + user data: `/etc`, `/var`, apps, `reboot` | Automating a machine |
 | `full` | everything, including the OS tree and `lua` | Repairing a machine |
+
+**`off` means off.** Until 0.4.9, `off` shared a rank with `read`, so the default
+silently allowed every read command — a machine left at the factory setting was
+readable by anyone holding the token. There is now a `read` level of its own.
+A machine whose `/etc/terracorp.cfg` still says `off` and that was being polled
+for data must be set to `read`; that is the only migration.
 
 `link.interval` sits in its own `link` tier and is allowed at **every** control
 level, including `off`. It changes only this client's polling cadence, reads and
 writes no user data, and is the same knob the GAIA window exposes; refusing it
 would not protect anything the bridge operator cannot already do. The value is
-clamped to 1–60 seconds, persisted in `/etc/terracorp.cfg`, and applied on the
+clamped to 0.5–60 seconds, persisted in `/etc/terracorp.cfg`, and applied on the
 next scheduling decision, so a reboot keeps it. Use it to make a test session
-responsive (`n=1`) and put it back when finished: a one-second poll is 60
+responsive (`n=0.5`) and put it back when finished: a half-second poll is 120
 requests a minute on the world host.
 
 The OS tree — `/init.lua`, `/boot/`, `/lib/`, `/apps/` — needs `full` even when
@@ -341,7 +348,7 @@ Keys live in `/etc/terracorp.cfg` with the rest of the settings
 | `linkSink` | empty | Base URL of the bridge; empty disables the link |
 | `linkToken` | empty | Shared secret; every frame carries it |
 | `linkInterval` | 5 | Seconds between exchanges |
-| `linkControl` | `off` | `off`, `write` or `full`; see [Control tiers](#control-tiers) |
+| `linkControl` | `off` | `off`, `read`, `write` or `full`; see [Control tiers](#control-tiers) |
 
 The link is **off by default**. No sink, no polling, no background traffic.
 

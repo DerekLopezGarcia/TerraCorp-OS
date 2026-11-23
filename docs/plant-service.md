@@ -177,7 +177,7 @@ This service is plant control, so it is treated as production:
 - The bridge binds to loopback or the tunnel address, never `0.0.0.0`.
 - Every `gate.set` is logged with the service action id that caused it, on both
   sides: the node writes its `tc.log` line, the service writes its own.
-- `linkControl` is the blast radius. A hall that only watches runs with `off`.
+- `linkControl` is the blast radius. A hall that only watches runs with `read`.
 
 ## Out of scope
 

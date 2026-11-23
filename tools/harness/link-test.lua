@@ -582,7 +582,7 @@ local function makePlanner()
   }
 end
 
-local settings = { linkSink = "http://bridge:8787", linkToken = "tok", linkInterval = 5 }
+local settings = { linkSink = "http://bridge:8787", linkToken = "tok", linkInterval = 5, linkControl = "read" }
 local files = { ["/var/log/tc.log"] = "alpha\nbeta\ngamma\n" }
 local listings = { ["/etc"] = { "notes.cfg", "terracorp.cfg" } }
 
@@ -767,9 +767,11 @@ elseif scenario == "reboot" then
   check(capture.poweroff == 1, "poweroff was called once, got " .. tostring(capture.poweroff))
 elseif scenario == "interval" then
   -- The interval is a link-level knob: available with linkControl off, because
-  -- it changes only this client's cadence and touches no user data.
+  -- it changes only this client's cadence and touches no user data. It is the
+  -- only command that reaches the OS at `off`.
+  local offSettings = { linkSink = "http://bridge:8787", linkToken = "tok", linkInterval = 5 }
   local instance, requests, _, _, capture = build(
-    settings,
+    offSettings,
     {
       "TC1 LINK id=c1 token=tok cmd=link.interval n=abc\n",
       "TC1 LINK id=c2 token=tok cmd=link.interval n=1\n",
@@ -823,6 +825,24 @@ elseif scenario == "interval_floor" then
     "the reply keeps the fraction instead of rounding it, got " .. string.format("%q", joined)
   )
   check(instance.interval == 0.5, "the client polls every 0.5 s, got " .. tostring(instance.interval))
+elseif scenario == "off_refuses_read" then
+  -- `off` means off. Read access is its own tier, so a read command at `off`
+  -- must be refused with the tier named. Before this, `off` and `read` shared a
+  -- rank and every read verb answered at `off`.
+  local offSettings = { linkSink = "http://bridge:8787", linkToken = "tok", linkInterval = 5 }
+  local instance, requests = build(
+    offSettings,
+    { "TC1 LINK id=c1 token=tok cmd=status\n" },
+    files,
+    listings
+  )
+  drive(instance, 12)
+  local result = posted(requests[2].body)
+  check(result.state == "error", "status is refused at off, got " .. tostring(result.state))
+  check(
+    result.reason == "needs_read_control",
+    "the refusal names the read tier, got " .. tostring(result.reason)
+  )
 elseif scenario == "lua" then
   local full = {
     linkSink = settings.linkSink,
@@ -890,7 +910,7 @@ elseif scenario == "plant_status" then
   check(result.text:find("revision=7", 1, true) ~= nil, "plant.status carries the revision")
   check(result.text:find("history_samples=720", 1, true) ~= nil, "plant.status carries the history size")
   check(result.text:find("alarms=1", 1, true) ~= nil, "plant.status counts the alarms")
-  check(result.text:find("link_control=off", 1, true) ~= nil, "plant.status carries the link tier")
+  check(result.text:find("link_control=read", 1, true) ~= nil, "plant.status carries the link tier")
 elseif scenario == "plant_snapshot" then
   local plant = makePlant()
   local instance, requests = build(

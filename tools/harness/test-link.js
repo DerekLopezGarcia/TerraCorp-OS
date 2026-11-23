@@ -35,6 +35,7 @@ const scenarios = [
   "interval",
   "interval_max",
   "interval_floor",
+  "off_refuses_read",
   "lua",
   "lua_error",
   "lua_refused",

@@ -100,7 +100,8 @@ local function accepted(key, value)
     return type(value) == "number" and value >= 0.5
   end
   if key == "linkControl" then
-    return value == "off" or value == "write" or value == "full"
+    -- `read` is its own level: `off` must not quietly mean "read-only".
+    return value == "off" or value == "read" or value == "write" or value == "full"
   end
   -- A node's name is stored as typed: a wrong name is reported by the node when
   -- it publishes, so the one rule that decides a legal name stays in tc.naming.

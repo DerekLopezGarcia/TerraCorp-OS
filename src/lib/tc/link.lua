@@ -61,7 +61,17 @@ local COMMANDS = {
   lua = "full",
 }
 
-local TIER_RANK = { link = 0, off = 1, read = 1, write = 2, full = 3 }
+-- How far the far side can reach. `off` and `link` share rank 0 on purpose:
+-- `link.interval` changes only this client's cadence and touches no user data,
+-- so it stays available at every level. Everything else needs a tier the
+-- operator chose. `off` used to share rank 1 with `read`, which made it silently
+-- mean "read-only"; it now means off.
+local TIER_RANK = { link = 0, off = 0, read = 1, write = 2, full = 3 }
+
+-- The accepted `linkControl` values, in the order GAIA offers them.
+link.CONTROLS = { "off", "read", "write", "full" }
+
+local CONTROL_SET = { off = true, read = true, write = true, full = true }
 
 -- Files that belong to the running OS. Touching them needs `linkControl = full`
 -- because a bad write there leaves a computer that cannot boot.
@@ -199,7 +209,7 @@ function link:refresh()
   self.interval = interval
 
   local control = tostring(self.config.get("linkControl") or "off")
-  if control ~= "write" and control ~= "full" then
+  if not CONTROL_SET[control] then
     control = "off"
   end
   self.control = control

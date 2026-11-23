@@ -22,7 +22,7 @@ gaia.iconArt = {
 }
 gaia.order = 9
 
-local TIERS = { "off", "write", "full" }
+local TIERS = { "off", "read", "write", "full" }
 local INTERVALS = { 5, 10, 15, 30 }
 
 local function masked(value)
@@ -166,12 +166,16 @@ function gaia:draw(ctx)
     if report.control == tier then
       label = "[" .. tier .. "]"
     end
+    -- Wrap instead of dropping the tier: every level stays reachable on a
+    -- narrow screen, which matters because `off` is finally off.
+    local width = ctx.text.width(" " .. label .. " ")
+    if x > 11 and x + width > ctx.w then
+      row = row + 1
+      x = 11
+    end
     x = self:button(ctx, x, row, label, function(context)
       self:cycleTier(context)
     end)
-    if x + 4 > ctx.w then
-      break
-    end
   end
 
   row = row + 1

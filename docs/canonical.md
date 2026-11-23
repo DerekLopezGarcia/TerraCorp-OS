@@ -303,11 +303,14 @@ One POST per interval; `linkControl` decides how far the far side reaches
 | **write** (9) | 2 | `gate.set`, `fs.write`, `fs.append`, `fs.mkdir`, `fs.remove`, `fs.move`, `app.open`, `app.close`, `reboot` |
 | **full** (1) | 3 | `lua` |
 
-- `linkControl` ∈ `off` | `write` | `full` (`config.lua:102-104`), default `off`.
-- **`off` is not "off".** `TIER_RANK = { link=0, off=1, read=1, write=2, full=3 }`
-  (`link.lua:64`), so **`off` permits every read and link-tier command**. The
-  name promises more than it does; treat `off` as "read-only" until it is fixed
-  or renamed.
+- **Tiers:** `linkControl` ∈ `off` | `read` | `write` | `full`, default `off`
+  (`config.lua:102-105`), ranked `{ link=0, off=0, read=1, write=2, full=3 }`
+  (`link.lua:64`). **`off` means off**: only `link.interval` (tier `link`, rank 0)
+  reaches the OS. `read` is a level of its own, `write` adds user data, `full`
+  adds the OS tree and `lua`.
+  Before 0.4.9 `off` and `read` shared rank 1, so the default silently allowed
+  every read command; a machine still carrying `off` and being polled for data
+  must be moved to `read`.
 - `/init.lua`, `/boot/`, `/lib/`, `/apps/` are **PROTECTED**: writes there need
   `full` (`link.lua:66-77`).
 - A command not in the table is rejected `unknown_cmd` (`link.lua:494-496`).
@@ -421,7 +424,7 @@ in-game: a never-booted computer booting the floppy, and
 
 **Baseline run, 2026-11-23** (Node v26.13.1, npm 11.20.0, dependencies installed
 with `npm install`): `check` 71 files / 0 errors / manifest 54 · `size` 155.0 KB
-(30 % of the medium) · `test:link` 47 scenarios, 0 failures · `sim` and `sim:oc`
+(30 % of the medium) · `test:link` 48 scenarios, 0 failures · `sim` and `sim:oc`
 clean · `test:screens` 50 combinations, no failures · `test:flash`, `test:installer`,
 `test:naming`, `test:report`, `test:master`, `test:apps`, `test:plant`,
 `test:history`, `test:book`, `test:field`, `test:line`, `test:gaia`,
@@ -582,7 +585,7 @@ a card. Severity: **H** breaks the product or a promise, **M** misleads a reader
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F24 | **H** | `linkControl = "off"` still permits all 14 read + 1 link command (`off` and `read` share rank 1); the name promises "not armed" | `link.lua:64`, `config.lua:25` |
+| F24 | **H** | **Fixed 2026-11-23.** `linkControl = "off"` shared a rank with `read` and so permitted all 14 read commands; `off` now refuses them and `read` is its own level | `link.lua:64`, `config.lua:102`, `gaia.lua:25` |
 | F25 | H | `external-link.md` documents an item `move` command that is not in the table and would answer `unknown_cmd` | `external-link.md:180` vs `link.lua:34-62` |
 | F26 | M | The same `gate.set` is listed twice with two different response shapes and two different `0.4.6`/`0.4.8` slices | `external-link.md:178-179` |
 | F27 | M | The working tree raises `MAX_FRAME` 1024 → 8192 in **both** `net.lua` and `bridge.js` (unpublished), so six documents that say "capped at 1024" are stale. The 1 KB *send policy* is the rule to document | `external-link.md:70`, `sidecar.md:44,88`, `line-node.md:143`, `status.md:87`, `plant-service.md:85` vs `net.lua:15`, `bridge.js:31` |
@@ -629,7 +632,7 @@ a card. Severity: **H** breaks the product or a promise, **M** misleads a reader
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F56 | M | `test:link` is quoted as 32, 37 and 46 scenarios; the code has **47** since the sub-second floor scenario landed | `tests.md:68,168`, `status.md:133` vs `test-link.js:18-64` |
+| F56 | M | `test:link` is quoted as 32, 37 and 46 scenarios; the code has **48** since the sub-second floor and the `off` refusal scenarios landed | `tests.md:68,168`, `status.md:133` vs `test-link.js:18-64` |
 | F57 | M | Manifest count is quoted as 53 and 56; the tree has 54 | `status.md:110,175`, `versioning.md:88`, `roadmap.md:508` |
 | F58 | M | `npm run check` is quoted as 68 files; it checks 71 | `status.md:175` vs `check.js:10-24` |
 | F59 | M | The screen matrix is described as including Vault and "runs nine scenarios … 45 combinations"; it is 10 × 5 = 50 with Lines | `tests.md:599-604` vs `test-screens.js:12` |

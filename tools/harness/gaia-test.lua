@@ -160,12 +160,14 @@ do
   local ctx = makeCtx(settings, link)
   local instance = gaia.create()
   instance:cycleTier(ctx)
+  check(settings.linkControl == "read", "the tier advances to read, got " .. tostring(settings.linkControl))
+  instance:cycleTier(ctx)
   check(settings.linkControl == "write", "the tier advances to write, got " .. tostring(settings.linkControl))
   instance:cycleTier(ctx)
   check(settings.linkControl == "full", "the tier advances to full, got " .. tostring(settings.linkControl))
   instance:cycleTier(ctx)
   check(settings.linkControl == "off", "the tier wraps back to off, got " .. tostring(settings.linkControl))
-  check(link.refreshed == 3, "the link is refreshed on every change")
+  check(link.refreshed == 4, "the link is refreshed on every change")
 end
 
 -- 4. The interval cycles through the offered values.
