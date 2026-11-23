@@ -88,11 +88,12 @@ against fake components. It requires:
 
 `node tools/harness/simulate.js plant --strict` opens the eleventh app from the
 Terminal and requires the empty-configuration message. `npm run test:screens`
-runs the `plant` scenario at five resolutions (50 combinations total).
+runs all ten screen scenarios at five resolutions (50 combinations), `plant`
+among them.
 
 ## 0.4.2 mirror checks
 
-`npm run test:link` now runs **32 scenarios**. The eleven plant scenarios use a
+At 0.4.2, `npm run test:link` ran **32 scenarios**. The eleven plant scenarios use a
 fake plant service shaped like `tc.plant` and require:
 
 1. `plant.status` carries the format line, version, hall, energy, stock and
@@ -192,9 +193,9 @@ recipes and a casing line program. It requires:
    `empty_book` and an unknown IO recipe is a load error.
 7. **200 three-step plans stay under one second** in the harness.
 
-`npm run test:link` adds five scenarios (`plant.book`, `plant.book_one`,
-`plant.book_unknown`, `plant.plan`, `plant.plan_bad`), for **37** total. They
-require the book body with recipes and IO, the single-recipe lookup, the plan
+`npm run test:link` added five scenarios (`plant.book`, `plant.book_one`,
+`plant.book_unknown`, `plant.plan`, `plant.plan_bad`), for **37** at the time.
+The cases require the book body with recipes and IO, the single-recipe lookup, the plan
 body with steps, bottleneck, shortfall and warnings, and the named errors for
 an unknown recipe and a zero quantity.
 
@@ -659,12 +660,12 @@ Manual in-game checks for 0.2.1:
 ## 0.2.0 desktop shell checks
 
 `npm run test:desktop` clicks the Files icon and requires the final screen to
-show exactly one window titled Files. `npm run test:screens` runs nine
+show exactly one window titled Files. At 0.2.0, `npm run test:screens` ran nine
 scenarios (System, desktop, Terminal, Files, Settings, Notes, updater, Nodes,
 Vault) across five resolutions (160x50, 120x40, 80x25, 60x20, 40x16), for 45
-combinations. The list now includes Plant, for fifty combinations. GAIA has its
-own gate, `npm run test:gaia`, because the screen
-matrix does not open it.
+combinations. The current matrix drops Vault and adds Lines and Plant: ten
+scenarios × five resolutions = 50 combinations. GAIA has its own gate,
+`npm run test:gaia`, because the screen matrix does not open it.
 Each combination must adopt the requested resolution, finish without errors,
 and paint visible content.
 

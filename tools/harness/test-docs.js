@@ -49,6 +49,14 @@ const payloadFiles = Number(payload[1]);
 const payloadKB = Number(payload[2]);
 const scenarios = pick(linkOut, /(\d+) link scenarios/, "test:link");
 
+// The npm script list is source too: package.json is what `npm run` exposes.
+const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+const scripts = Object.keys(pkg.scripts || {}).length;
+if (scripts === 0) {
+  console.error("FAIL package.json declares no scripts; update this gate, not the docs");
+  process.exit(1);
+}
+
 // The app list is source, not documentation: kernel.lua is what the desktop shows.
 const kernel = fs.readFileSync(path.join(root, "src", "boot", "kernel.lua"), "utf8");
 const appIds = (kernel.match(/^local APP_IDS = \{([^}]*)\}/m) || [])[1];
@@ -69,6 +77,13 @@ const claims = [
   { re: /(\d+) link scenarios/gi, want: scenarios, what: "link scenario count" },
   { re: /test:link`? \(?(\d+) (?:link )?scenarios/gi, want: scenarios, what: "link scenario count" },
   { re: /installer image (?:is|at) ([\d.]+) KB/gi, want: payloadKB, what: "installer size", float: true },
+  // The same claims in the shapes a table cell or a bold label uses: `**46**
+  // scenarios`, `**56** scripts`, `21-file payload`, `**155.0 KB**`. These are
+  // exactly the forms that stayed green while canonical.md §9 was wrong.
+  { re: /\*\*(\d+)\*\*\s+scenarios/gi, want: scenarios, what: "link scenario count" },
+  { re: /\*\*(\d+)\*\*\s+scripts/gi, want: scripts, what: "npm script count" },
+  { re: /(\d+)-file payload/gi, want: payloadFiles, what: "payload file count" },
+  { re: /\*\*([\d.]+)\s*KB\*\*/g, want: payloadKB, what: "installer size", float: true },
 ];
 
 // "22 files, 163.3 KB" is two numbers in one sentence; check them together.
@@ -160,6 +175,43 @@ for (const rel of docs) {
   }
 }
 
+// §9 of canonical.md is the "real numbers" table: every cell there has to equal
+// a gate output too. A table cell is the shape the prose patterns miss — the
+// stale 54/46/155.0 in that table survived a green run before this check existed.
+const canonical = fs.readFileSync(path.join(root, "docs", "canonical.md"), "utf8");
+const s9 = canonical.match(/^## 9\. Verification gates[^\n]*\n([\s\S]*?)(?=^## )/m);
+if (!s9) {
+  console.error("FAIL docs/canonical.md has no §9 'Verification gates — real numbers'; update this gate, not the docs");
+  process.exit(1);
+}
+for (const line of s9[1].split(/\r?\n/)) {
+  if (!line.startsWith("|")) continue;
+  const cells = line.split("|").slice(1, -1).map((s) => s.trim());
+  if (cells.length < 2) continue;
+  const label = cells[0];
+  const last = cells[cells.length - 1].replace(/\*/g, "");
+  if (label === "Manifest") {
+    const m = last.match(/^(\d+)$/);
+    if (!m) failures.push("docs/canonical.md: §9 Manifest row no longer ends in a count");
+    else if (Number(m[1]) !== manifest) failures.push("docs/canonical.md: §9 Manifest row says " + m[1] + " — check prints " + manifest);
+  } else if (label === "Link") {
+    const m = last.match(/(\d+) scenarios/);
+    if (!m) failures.push("docs/canonical.md: §9 Link row no longer quotes N scenarios");
+    else if (Number(m[1]) !== scenarios) failures.push("docs/canonical.md: §9 Link row says " + m[1] + " scenarios — test:link prints " + scenarios);
+  } else if (label === "Size") {
+    const m = last.match(/(\d+) files?, ([\d.]+) KB/);
+    if (!m) failures.push("docs/canonical.md: §9 Size row no longer quotes 'N files, X KB'");
+    else if (Number(m[1]) !== payloadFiles || Math.abs(Number(m[2]) - payloadKB) >= 0.05) {
+      failures.push("docs/canonical.md: §9 Size row says " + m[1] + " files, " + m[2] + " KB — size prints " + payloadFiles + " files, " + payloadKB.toFixed(1) + " KB");
+    }
+  } else if (label.startsWith("Compile")) {
+    const files = last.match(/(\d+) files/);
+    const entries = last.match(/(\d+) manifest entries/);
+    if (files && Number(files[1]) !== checked) failures.push("docs/canonical.md: §9 Compile row says " + files[1] + " files — check prints " + checked);
+    if (entries && Number(entries[1]) !== manifest) failures.push("docs/canonical.md: §9 Compile row says " + entries[1] + " manifest entries — check prints " + manifest);
+  }
+}
+
 if (failures.length > 0) {
   console.error("docs: " + failures.length + " claim(s) disagree with the tree\n");
   for (const f of failures) console.error("  " + f);
@@ -169,5 +221,5 @@ if (failures.length > 0) {
 console.log(
   "docs: " + docs.length + " documents agree with the tree (manifest " + manifest +
   ", check " + checked + ", payload " + payloadKB.toFixed(1) + " KB, link " +
-  scenarios + " scenarios, " + apps.length + " apps)"
+  scenarios + " scenarios, " + scripts + " scripts, " + apps.length + " apps)"
 );

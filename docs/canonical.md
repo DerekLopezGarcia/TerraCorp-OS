@@ -382,18 +382,18 @@ carry the old numbers, which is a documentation edit (F16).
 
 ## 9. Verification gates — real numbers
 
-`npm run` exposes **56** scripts (`package.json:7-64`).
+`npm run` exposes **57** scripts (`package.json:7-65`).
 
 | Gate | Command | What it really checks | Real number |
 |---|---|---|---|
 | Compile + manifest + icons + payload | `npm run check` | every `.lua` under `src`, `eeprom`, `tools` compiles; manifest matches the tree; each app's icon shape; the node payload is complete and closed | **72** files, **55** manifest entries, 0 `PAYLOAD GAP` |
-| Manifest | `npm run manifest` | rewrites `tools/manifest.txt` | 54 |
+| Manifest | `npm run manifest` | rewrites `tools/manifest.txt` | 55 |
 | Desktop smoke | `npm run sim`, `sim:oc` | fake-component boot | — |
 | Screen matrix | `npm run test:screens` | 10 scenarios × 5 resolutions | **50** combinations |
-| Link | `npm run test:link` | the closed command set | **46** scenarios |
+| Link | `npm run test:link` | the closed command set | **48** scenarios |
 | Bridge | `npm run test:bridge` | HTTP endpoints + mirror parsing | 20 asserts |
 | MCP | `npm run test:mcp` | identity, 9 tools, first answers | 20 asserts |
-| Size | `npm run size` | the *intended* 21-file payload against a 512 KB medium / 256 KB target | **155.0 KB** (see §8.1) |
+| Size | `npm run size` | the payload `payload.files` describes, against a 512 KB medium / 256 KB target | **22 files, 161.0 KB** (see §8.1) |
 | Others | `test:plant`, `history`, `book`, `field`, `line`, `naming`, `installer`, `report`, `master`, `apps`, `flash`, `fetch`, `install`, `boot`, `faults`, `gaia` | module-level behaviour | ≈706 assertions |
 
 **`check.js` does not validate** icon-code uniqueness or `order` uniqueness —
@@ -650,15 +650,15 @@ dropped with 0.3.x; roadmap F5 is marked blocked and F6 re-scoped; and
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F56 | M | `test:link` is quoted as 32, 37 and 46 scenarios; the code has **48** since the sub-second floor and the `off` refusal scenarios landed | `tests.md:68,168`, `status.md:133` vs `test-link.js:18-64` |
-| F57 | M | **Fixed 2026-11-23.** The manifest count was quoted as 53 and 56; the tree has **55** and every document now says so | `status.md:110,175`, `versioning.md:105`, `roadmap.md:508` |
-| F58 | M | **Fixed 2026-11-23.** `npm run check` was quoted as 68 files; it checks **72**, and the documents say so | `status.md:175`, `blackbox.md:213` vs `check.js:10-24` |
-| F59 | M | The screen matrix is described as including Vault and "runs nine scenarios … 45 combinations"; it is 10 × 5 = 50 with Lines | `tests.md:599-604` vs `test-screens.js:12` |
-| F60 | M | `tests.md` is titled "F0 Test Plan" but is the whole 0.2–0.4.9 plan; F0 is one section | `tests.md:1` |
-| F61 | L | `tests.md:1016-1026` describes 0.3.1 work as "under development" and "not part of v0.3.0" | `tests.md:1016-1026` |
-| F62 | L | F0's checklist still says "needs an in-game retest" under a phase declared closed | `tests.md:1032-1043` vs `:1033` |
-| F63 | L | Backlog items 17-20 list the line node, naming, `tc.master` and `size` as future work at 0.4.9, which shipped | `roadmap.md:714-717` vs `:501-512` |
-| F64 | L | `README.md:72` still recommends 2 MB, and no document states the 64 MB requirement the readout depends on | `README.md:72` vs `roadmap.md:226`, `tests.md:998` |
+| F56 | M | **Fixed 2026-11-23.** `test:link` was quoted as 32, 37 and 46 scenarios; the code has **48** since the sub-second floor and the `off` refusal scenarios landed | `tests.md` §0.4.2 and §0.4.5, `roadmap.md` §0.4.2, `canonical.md` §9 vs `test-link.js:18-64` |
+| F57 | M | **Fixed 2026-11-23.** The manifest count was quoted as 53 and 56; the tree has **55** and every document now says so | `status.md` "What exists today" and "Harness green", `versioning.md` 0.4.7, `roadmap.md` F3.5 |
+| F58 | M | **Fixed 2026-11-23.** `npm run check` was quoted as 68 files; it checks **72**, and the documents say so | `status.md` "Harness green", `blackbox.md` "Verification gates" vs `check.js:10-24` |
+| F59 | M | **Fixed 2026-11-23.** The screen matrix was described as including Vault and "runs nine scenarios … 45 combinations"; it is 10 × 5 = 50 with Lines | `tests.md` §0.2.0 "desktop shell checks" vs `test-screens.js:12` |
+| F60 | M | **Fixed 2026-11-23.** `tests.md` was titled "F0 Test Plan" but is the whole 0.2–0.4.9 plan; F0 is one section | `tests.md:1-4` |
+| F61 | L | **Fixed 2026-11-23.** `tests.md` described 0.3.1 work as "under development" and "not part of v0.3.0" | `tests.md` "Post-release work that shipped as 0.3.1 and later" |
+| F62 | L | **Fixed 2026-11-23.** F0's checklist still said "needs an in-game retest" under a phase declared closed | `tests.md` "F0 exit checklist", the three post-F0 rows |
+| F63 | L | **Fixed 2026-11-23.** Backlog items 17-20 listed the line node, naming, `tc.master` and `size` as future work at 0.4.9, which shipped | `roadmap.md` backlog rows 17-20, all `0.4.9 · done` |
+| F64 | L | **Fixed 2026-11-23.** `README.md` recommended 2 MB; the plant readout needs 64 MB | `README.md` hardware table |
 
 ## P9 — Dead code and residue (6)
 
