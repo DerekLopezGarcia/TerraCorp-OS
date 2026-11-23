@@ -21,7 +21,8 @@ Option A stays shipped and stays the default. The sidecar replaces only the rout
 from the computer to the bridge — a card component instead of the Internet Card —
 and adds a bulk inventory read. The protocol, the command table, the control tiers
 and the body format are unchanged, and `linkTransport = "http"` keeps the stock
-pack working.
+pack working — **planned**: that key joins `config.lua` with the sidecar, and does
+not exist yet.
 
 The harness proves the state machine against a fake Internet Card. In-game,
 0.3.33 verified `status`, `log`, `fs.read`, `fs.write`, `link.interval` and
@@ -67,7 +68,8 @@ are no sockets and no inbound ports:
 - An HTTP fetch is a handle, not a callback. Reading blocks the caller, and the
   desktop runs its own loop at a 1/30 s idle wait (`src/boot/kernel.lua`). The
   link therefore cannot fetch inside the draw path.
-- Frames are capped at `net.MAX_FRAME` = 1024 bytes (`src/lib/tc/net.lua`).
+- Frames stay at or below **1 KB on the wire** — the send policy stated in
+  `net.lua:3`, not a constant. The receive guard is `net.MAX_FRAME = 8192`.
   Anything larger travels as slices keyed by `off`, exactly like the existing
   `FETCH` / `DATA` pair (`src/lib/tc/pull.lua`).
 
@@ -175,9 +177,13 @@ inside.
 | `plant.history` | read | 0.4.7 | `stock?`, `n?` | The bounded ring: rate, trend and recent samples per stock |
 | `plant.paths` | read | 0.4.7 | `path?` | Semantic paths with cardinality, member count and bound state |
 | `plant.halls` | read | 0.4.8 | — | The hall registry and the merged, prefixed stock view |
-| `gate.set` | write | 0.4.8 | `line`, `state` | Actual state, or `refused=<why>`; the setpoint is stored |
-| `gate.set` | write | 0.4.6 | `line`, `state` | Actual state, or `refused reason=<why>` |
-| `move` | write | 0.4.6b | `from`, `to`, `n`, `key`, `member?`, `policy?` | `moved=<n> slots=<k>` per member, or `moved=0 reason=<why>` |
+| `gate.set` | write | 0.4.8 | `line`, `state` (`0`/`1`) | `desired=<0\|1> actual=<0\|1>`, or `refused=<why>`; the setpoint is stored |
+
+**`move` is not in this table.** Item transfer by name (`from`, `to`, `n`, `key`,
+`policy`) is designed in [`names.md`](names.md) and [`bus.md`](bus.md) and arrives
+with the bus; a frame naming `cmd=move` today answers `unknown_cmd`, because the
+OS only runs verbs in its own table. It is listed once here instead of as a row
+that looks shipped.
 
 `component.list`, `path.list`, `path.query`, `path.assign`, `driver.*` and
 `line.list` are **local** in 0.4.2: the Plant app calls them in-process. They
@@ -552,9 +558,10 @@ once it does not.
    polling, with the token and the loop-safe state machine. Shipped.
 2. **Automation.** `fs.write`, `fs.append`, `fs.mkdir`, `fs.remove`, `fs.move`,
    `app.open`, `app.close`, `reboot`, behind `linkControl`. Shipped.
-3. **In-world transport.** The same command surface over TC1 on the rack bus, so
-   a Terminal Server or a slave can answer an agent without an Internet Card.
-   Not started.
+3. **The sidecar.** The same command surface over a card component instead of the
+   Internet Card, with a bulk inventory read — [`sidecar.md`](sidecar.md), 0.4.10.
+   The rack-bus option (row B below) is **retired**: it needed hardware decision 25
+   deleted.
 
 Not planned: arbitrary code execution, cluster or node control, anything that
 reaches a machine other than the one holding the connection.

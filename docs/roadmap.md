@@ -498,9 +498,11 @@ the hologram wall, sessions.
 > the 100-casing plan from the real rig (1128 exact, 592 missing, bottleneck
 > 0.0204 targets/s), each with its source line.
 
-## F3.5 — Line nodes (0.4.9) · shipped 2026-11-16
+## F3.5 — Line nodes (0.4.9) · built 2026-11-16, tag held
 
-> Shipped as 0.4.9 "Flint". `tc.naming`, `tc.installer` with
+> Built and cut as 0.4.9 "Flint"; **deliberately untagged**, so `v0.4.8` is still
+> the newest release ([`versioning.md`](versioning.md) records the hold and its
+> four conditions). `tc.naming`, `tc.installer` with
 > `boot/install.lua`, the `role = "line"` runtime, `tc.report`, `tc.master`, the
 > Nodes app as the DNS, the Lines app with configuration push and `tc.flash` to
 > write the installer medium from the master (**Nodes**, key **I**). The rack layer

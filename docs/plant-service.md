@@ -94,7 +94,7 @@ a UUID to show a stock.
 | `plant.snapshot` | read | 0.4.2 | `hall?`, `stocks?` | Paged stock/tank/energy snapshot; `kind`, `key`, `count`, `state` |
 | `plant.delta` | read | 0.4.2 | `cursor` | Entries changed since the cursor plus the new one; `reason=resync` when it expired |
 | `plant.alarms` | read | 0.4.2 | `since?` | Local level alarms with severity, source, first/last seen and ack state |
-| `gate.set` | **write** | 0.4.6 | `line`, `state` (`open`/`closed`) | `state=<actual>`, or `refused reason=<why>` from the cache |
+| `gate.set` | **write** | 0.4.6 | `line`, `state` (`0`/`1`) | `desired=<0|1> actual=<0|1>`, or `refused=<why>` from the cache |
 | `move` | **write** | 0.4.6b | `from`, `to`, `n`, `key`, `member?`, `policy?` | `moved=<n> slots=<k>` per member, or `moved=0 reason=<why>` |
 
 `component.list`, `path.list`, `path.query`, `path.assign`, `driver.*` and

@@ -85,9 +85,9 @@ ask, so it refuses and leaves the computer alone. An interrupted install carries
 `/var/install-incomplete` on the target and is resumed, never mistaken for a
 finished one.
 
-No OpenOS, no `fetch.lua`, no netboot, no EEPROM write, no rack. This is the
-local version of what `boot/netboot.lua` does for a rack server, minus the
-network: no master has to be up for a computer to become a node.
+No OpenOS, no `fetch.lua`, no netboot, no EEPROM write, no rack. What
+`boot/netboot.lua` did for a rack server, this does locally, minus the network: no
+master has to be up for a computer to become a node.
 
 **Two BIOS facts are on the critical path, and neither is verified in-game:**
 
@@ -144,7 +144,7 @@ extra scalar fields allowed so a newer peer adds data without breaking an older
 one (see `src/lib/tc/net.lua`).
 
 ```text
-TC1 HELLO  id=<address> name=casing v=0.5.0
+TC1 HELLO  id=<address> name=casing v=0.4.9
 TC1 STATUS id=<address> name=casing state=online mem=863 disk=420 uptime=612
     alarm=starved:95 stocks=2
     s=casing/ingots:744:exact:4.8 s=casing/casings:5:exact:0.0
@@ -153,19 +153,29 @@ TC1 STATUS id=<address> name=casing state=online mem=863 disk=420 uptime=612
 - **Cadence:** a heartbeat every 30 s and an immediate frame when an alarm
   changes or a stock disappears. Never on every scan: each component call costs
   about 50 ms of server tick.
-- **Size:** about ten stocks with full paths fit in one frame. Beyond that, a
-  second frame carries `off=<n>`; if even that is not enough, the node sends the
-  stocks with an alarm and aggregates the rest as `others=<n>`.
+- **Size:** **eight** stocks with full paths fit in one frame
+  (`report.MAX_STOCKS = 8`), as `s1`…`s8`. Anything past that is reported as
+  `more=<n>` — the tail is dropped from that frame, never silently renamed. There
+  is no `off=` continuation and no `others=` bucket; a node with more than eight
+  stocks needs a second frame to be designed, not a second field.
 - **No master:** exponential backoff, the state stays in `/var/status/last.tsv`,
   and the local screen keeps showing it.
 
 ## The master
 
-`tc.master` (~10 KB) replaces `tc.cluster` on the desktop: token, `HELLO`,
-`STATUS`, `PING`/`PONG`, `ASSIGN` on rename, upsert into `/var/nodes.tsv`, and
-`offline` after the stale window. The registry keeps
-`id, name, state, lastSeen, v, mem, disk, stocks, alarms, uptime`; `role`, `jobs`
-and `drain` go with the racks.
+`tc.master` (~10 KB) replaces `tc.cluster` on the desktop: `HELLO`, `STATUS`,
+`PING`/`PONG`, `ASSIGN` on rename, upsert into `/var/nodes.tsv`, and `offline`
+after the stale window. **There is no token handshake** — the wired modem bus is
+the boundary (`master.lua:9-10`), and the frame carries the literal `token=none`
+only because `net.lua:24` requires the field.
+
+The registry writes **fourteen** columns
+(`registry.lua:14`): `id`, `name`, `role`, `modem`, `state`, `mem`, `disk`,
+`lastSeen`, `v`, `jobs`, `drain`, `stocks`, `alarms`, `uptime`. Four of them —
+`role` (still accepting `worker`/`storage`/`node`/`line`), `jobs`, `drain` and
+`modem` — are rack-era residue that the master always writes as `line`, `0`, `0`
+and the node's modem address. They stay until something decides whether the file
+keeps those columns; nothing in the product reads them.
 
 The **Nodes app is the DNS**. One row per node that talks to the master:
 
@@ -173,8 +183,8 @@ The **Nodes app is the DNS**. One row per node that talks to the master:
 |---|---|---|
 | `name` · `online`/`stale`/`offline`/`conflict` · worst alarm · stock count | its stocks with qualified paths, value, state, rate and age | Rename · Ping · Forget |
 
-Racks being gone, the app loses role cycling, draining, job counts and Vault
-usage, and stops depending on `tc.cluster`.
+Racks being gone, the app has no role cycling, no draining, no job counts and no
+Vault usage, and does not depend on `tc.cluster`.
 
 ## Not here
 

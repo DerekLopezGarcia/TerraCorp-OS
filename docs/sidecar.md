@@ -85,7 +85,7 @@ Lua   kernel loop   bridge.push(body) ──► outbox (≤64 frames)
 
 | Method | Returns | Notes |
 |---|---|---|
-| `push(body)` | `true`, or `nil, reason` | Body ≤ 1024 bytes, the same cap as `net.MAX_FRAME`; `queue_full` at 64 queued frames |
+| `push(body)` | `true`, or `nil, reason` | Body ≤ 1024 bytes (the send policy in `net.lua:3`, not the guard: `MAX_FRAME` is 8192); `queue_full` at 64 queued frames |
 | `pull()` | one body, or `nil` | Dequeues one inbound frame |
 | `stats()` | table | `queued`, `inbox`, `pushed`, `dropped`, `errors`, `last` (`ok`/`timeout`/`refused`) |
 | `address()` | the bridge URL in use | Diagnostics only; it carries no secret |
@@ -125,7 +125,7 @@ the expensive half is moving, and that is the bus.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `linkTransport` | `http` | `http` (Internet Card, today) or `sidecar` (the card) |
+| `linkTransport` | `http` | **planned key, not in `config.lua` yet**: `http` (Internet Card, today) or `sidecar` (the card) |
 
 `linkSink`, `linkToken`, `linkInterval` and `linkControl` keep their meaning and
 their defaults. The transport changes only how a frame leaves the computer; the

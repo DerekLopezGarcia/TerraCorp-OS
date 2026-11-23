@@ -90,7 +90,9 @@ discovery.
     items, fluids and energy in one call without giving it a Transposer, because 50
     ms per host call also prices the hardware density of a base-wide readout out.
     `bridge.js`, the command table, the tiers and the desired-state rule are
-    untouched, and `linkTransport = "http"` stays as the stock fallback.
+    untouched, and `linkTransport = "http"` stays as the stock fallback (planned: the
+key does not exist in `config.lua` until the sidecar lands, and `config.set`
+rejects anything a default does not name).
     See [`sidecar.md`](sidecar.md).
 28. **A bus may move stock between named endpoints (2026-11-16), not built.** This
     amends 10: TerraCorp still does not run the plant's logistics, but it may
