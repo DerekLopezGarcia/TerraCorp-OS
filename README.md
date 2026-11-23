@@ -221,6 +221,7 @@ npm install
 npm run check        # Lua compiles, manifest, app icons, node payload closure
 npm run manifest     # rewrite tools/manifest.txt after adding or removing a file
 npm run size         # the node installer image against the 512 KB medium
+npm run test:docs    # every number a document quotes still equals its command
 npm run sim
 npm run sim:oc
 npm run test:desktop

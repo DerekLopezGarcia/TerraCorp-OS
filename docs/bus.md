@@ -111,8 +111,8 @@ it does not delete the pack's logistics, it fills the gaps where a pipe run is
 absurd.
 
 An operator who does not want it never crafts the block and the feature is inert:
-nothing in the OS depends on it, exactly as the card falls back to
-`linkTransport = "http"`.
+nothing in the OS depends on it, exactly as the link falls back to plain HTTP —
+the `linkTransport` key that would switch it is **planned, not in `config.lua`**.
 
 ## AE2, honestly
 

@@ -14,12 +14,14 @@ OpenComputers BIOS or optional EEPROM manager
   -> process computer.pullSignal events
 ```
 
-A rack server that carries no boot address starts from the provisioning floppy
-instead. The stock BIOS runs `/init.lua` from the floppy, which loads
-`/boot/netboot.lua`; that script installs the runtime from `/payload` onto the
-first HDD, writes the node configuration, sets the HDD boot address, and
-reboots. The installed node then follows the normal boot sequence in `node`
-role. See [`cluster.md`](cluster.md).
+A computer that carries no boot address starts from the installer floppy
+instead. The stock BIOS runs `/init.lua` from the floppy; because the floppy
+carries `/installer.lua`, that runs `boot/install.lua` rather than the kernel.
+It copies the payload onto the first writable HDD, writes the node
+configuration, sets the HDD boot address and reboots. The installed node then
+follows the normal boot sequence in the node role. The rack cluster and its
+`boot/netboot.lua` were **removed with 0.4.9** (decision 25); see
+[`line-node.md`](line-node.md).
 
 The boot volume contains the contents of `src/`: `init.lua` at its root and the
 kernel under `/boot`. Standard BIOS boot does not require the custom EEPROM

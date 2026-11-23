@@ -109,7 +109,7 @@ rejects anything a default does not name).
 - **0.4.9 "Flint" is built**: the line node (installer, `role = "line"`, status
   publisher, status page), `tc.master` with the registry as the DNS, and the
   Nodes and Lines apps. The cluster layer and its apps are gone (decision 25);
-  the manifest is 55 files and the installer image is 163.3 KB of the 512 KB
+  the manifest is 55 files and the installer image is 161.0 KB of the 512 KB
   floppy. Harness: `check`, `sim`, `sim:oc`, `test:naming`, `test:installer`,
   `test:report`, `test:master`, `test:apps`, `test:plant`, `test:link`,
   `test:bridge`, `test:history`, `test:book`, `test:mcp`, `test:field`,
@@ -132,7 +132,7 @@ rejects anything a default does not name).
   existing `LREP`/`LDATA`/`LEND` slicing. The bridge parses each completed body
   and keeps the last reply of each kind at `GET /link/mirror`. A delta cursor is
   the stock revision, so an idle scan does not force a resync. `npm run
-  test:link` (32 scenarios) and `npm run test:bridge` cover it. In-game: the real
+  test:link` (48 scenarios) and `npm run test:bridge` cover it. In-game: the real
   1232-byte snapshot paged intact, the stale cursor resynced, the bridge mirror
   parsed both stocks, and 50 s with the bridge down left the scan, cache and
   Plant window untouched.

@@ -508,7 +508,7 @@ the hologram wall, sessions.
 > write the installer medium from the master (**Nodes**, key **I**). The rack layer
 > (cluster, node, netboot, netfetch, provision, vault, pull, jobs, the Vault app
 > and the console's vault commands) is gone; the manifest went from 62 to 55
-> files. `npm run size` holds the installer image at 163.3 KB of the 512 KB floppy
+> files. `npm run size` holds the installer image at 161.0 KB of the 512 KB floppy
 > and `test:naming`, `test:installer`, `test:report`, `test:master` and
 > `test:apps` cover the new code. Pending in-game: a never-booted computer
 > booting the floppy, and `setBootAddress` on a plain computer.

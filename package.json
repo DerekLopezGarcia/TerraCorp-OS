@@ -36,6 +36,7 @@
     "test:screens": "node tools/harness/test-screens.js",
     "measure": "node tools/harness/measure.js",
     "size": "node tools/harness/size.js",
+    "test:docs": "node tools/harness/test-docs.js",
     "test:naming": "node tools/harness/test-naming.js",
     "test:installer": "node tools/harness/test-installer.js",
     "test:report": "node tools/harness/test-report.js",

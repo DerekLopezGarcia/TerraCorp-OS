@@ -107,7 +107,7 @@ All state lives on the boot volume. Nothing is stored outside it.
 | `/var/plant/calibration.tsv` | Recipe calibration state and ratios | `src/lib/tc/book.lua` |
 | `/etc/recipes.tsv`, `/etc/recipe-io.tsv` | Operated book | `src/lib/tc/book.lua` |
 | `/etc/lines/*.line` | Line programs (data-only rules) | `src/lib/tc/line.lua` |
-| `/etc/halls.tsv` | Hall name to computer address | `src/lib/tc/halls.lua` |
+| *no hall table* | `/etc/halls.tsv` was **removed** with decision 26; `tc.halls` builds a one-row registry in memory from the node's own name | `src/lib/tc/halls.lua` |
 | `/etc/gates.tsv` | Line to gate component/face and stocks | `src/lib/tc/gate.lua` |
 | `/var/gates.tsv` | Desired gate setpoints | `src/lib/tc/gate.lua` |
 | `/var/nodes.tsv` | Node registry | `src/lib/tc/registry.lua` |

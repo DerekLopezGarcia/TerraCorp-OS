@@ -354,7 +354,7 @@ The list now lives once, in `src/lib/tc/payload.lua`:
 | Quantity | Now |
 |---|---|
 | payload files | **22** |
-| payload bytes | **163.3 KB** |
+| payload bytes | **161.0 KB** |
 | medium | 512 KB floppy, 8 KB margin |
 | gate | `npm run size` — 256 KB target, and fails if image + margin exceeds the medium |
 | closure | `npm run check` — fails with `PAYLOAD GAP` |
@@ -411,11 +411,11 @@ in-game: a never-booted computer booting the floppy, and
 
 **Baseline run, 2026-11-23** (Node v26.13.1, npm 11.20.0, dependencies installed
 with `npm install`): `check` 72 files / 0 errors / manifest 55 · `size` 22 files,
-163.3 KB (32 % of the medium) · `test:link` 48 scenarios, 0 failures · `sim` and
+161.0 KB (32 % of the medium) · `test:link` 48 scenarios, 0 failures · `sim` and
 `sim:oc` clean · `test:screens` 50 combinations, no failures · `test:flash`,
 `test:installer`, `test:naming`, `test:report`, `test:master`, `test:apps`,
 `test:plant`, `test:history`, `test:book`, `test:field`, `test:line`, `test:gaia`,
-`test:mcp`, `test:bridge` all pass — 25 gates, every exit code 0.
+`test:mcp`, `test:bridge`, `test:docs` all pass — 26 gates, every exit code 0.
 
 **Read that baseline carefully.** On 2026-11-23 it was fully green *while F13 was
 true*: the flasher wrote 514.2 KB to a 512 KB medium and no gate could see it.
@@ -567,10 +567,10 @@ and the four documents that listed the 0.4.8 app set were corrected.
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F13 | **H** | **Fixed 2026-11-23.** `flash.lua` copied whole roots (514.2 KB) onto a 512 KB floppy and refused every flash; it now copies `tc.payload` (22 files, 163.3 KB) | `flash.lua:120`, `payload.lua` |
+| F13 | **H** | **Fixed 2026-11-23.** `flash.lua` copied whole roots (514.2 KB) onto a 512 KB floppy and refused every flash; it now copies `tc.payload` (22 files, 161.0 KB) | `flash.lua:120`, `payload.lua` |
 | F14 | H | **Fixed 2026-11-23.** `size.js` gated a list the flasher did not read; flasher, size gate and `check` now share `src/lib/tc/payload.lua` | `tools/payload.js`, `size.js`, `check.js` |
 | F15 | H | **Resolved 2026-11-23.** `halls.lua` is in the payload because the plant genuinely needs it; `line-node.md` must drop it from its "excluded" list | `payload.lua:26` vs `line-node.md:51-52` |
-| F16 | M | **Fixed 2026-11-23.** The installer image is now one measured artifact: `npm run size` prints `22 files, 163.3 KB of 256 KB target (32% of the 512 KB floppy)`, and every document quotes that line | `line-node.md`, `status.md:110`, `roadmap.md:509` |
+| F16 | M | **Fixed 2026-11-23.** The installer image is now one measured artifact: `npm run size` prints `22 files, 161.0 KB of 256 KB target (32% of the 512 KB floppy)`, and every document quotes that line | `line-node.md`, `status.md:110`, `roadmap.md:509` |
 
 ## P4 — Roles, registry, master (7)
 

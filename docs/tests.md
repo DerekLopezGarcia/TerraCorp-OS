@@ -204,11 +204,11 @@ not, so the test covers both paths. `tools/bridge/plant.js` parses both bodies;
 ## 0.4.3/0.4.6 hall, gate and move checks
 
 `npm run test:field` loads `tc.halls`, `tc.gate` and `tc.move` against fake
-files and a fake transposer. It requires:
+files, a fake transposer and an in-memory registry. It requires:
 
-1. `/etc/halls.tsv` loads two valid halls and reports one bad row; the local
-   hall resolves by address, an implicit hall uses the hostname, and
-   `halls.assign`/`save`/`load` round-trips a third hall.
+1. `halls` builds a one-row registry from the node's own name. The
+   `/etc/halls.tsv` table is gone (decision 26), so the test asserts the
+   registry it builds instead of a table on disk.
 2. `halls.merge` prefixes stocks with the hall name, counts the missing hall as
    **offline** and an old snapshot as **stale**, and drops neither.
 3. `gate.set` persists the desired state in `/var/gates.tsv`; a new instance
@@ -224,6 +224,34 @@ files and a fake transposer. It requires:
 The second hall, the gate and the transport are not built. These tests are the
 evidence for the logic; the in-game run is **pending** and will be added when
 the hardware exists.
+
+## Documentation gate
+
+`npm run test:docs` reads the tree and every Markdown document, then compares
+each claim it finds with the command behind it. It measures the numbers by
+running `check`, `size` and `test:link` (not by repeating their arithmetic), so
+a document cannot be right while the tree is wrong or the other way round.
+
+It fails when:
+
+- a document quotes a manifest, check, payload-size or link-scenario number
+  that the gate prints differently;
+- a document names a retired thing — the hall table, the rack test suite,
+  netboot, the planned transport key, the old status overflow key, the old
+  eight-versus-ten stock cap — as if it were current. A line that says the thing
+  was removed, dropped, planned or never existed is fine: that is how this
+  project retires a feature;
+- a document counts the app tiles as ten, or names the Vault, while `kernel.lua`
+  lists eleven ids and no Vault.
+
+The finding ledger (`canonical.md`), the roadmap and the deferred designs
+(`bus.md`, `sidecar.md`, `plant-service.md`) are exempt from the vocabulary rule:
+their job is to discuss removed and planned things, and the ledger would have no
+substance without naming what was wrong.
+
+Proved both ways on 2026-11-23: changing `manifest is 55 files` to 54, and the
+installer size to the old 163.3 KB, each fails the gate with the file and the
+number; restoring them exits 0.
 
 ## 0.3.33 external link checks
 

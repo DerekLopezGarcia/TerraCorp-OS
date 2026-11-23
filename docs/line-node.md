@@ -7,7 +7,7 @@ editor (decision 25).
 
 Built as designed: `tc.naming`, `tc.installer` + `boot/install.lua`, the
 `role = "line"` runtime, `tc.report`, `tc.master`, and the Nodes and Lines apps.
-`npm run size` holds the installer image at 163.3 KB of the 512 KB floppy, and
+`npm run size` holds the installer image at 161.0 KB of the 512 KB floppy, and
 `test:naming`, `test:installer`, `test:report`, `test:master` and `test:apps`
 cover it. Two facts are still pending an in-game session: a never-booted computer
 booting the floppy, and `setBootAddress` on a plain computer.
@@ -40,7 +40,7 @@ asks for a module the list does not carry. Measured on 2026-11-23:
 
 ```text
 $ npm run size
-  22 files, 163.3 KB of 256 KB target  (32% of the 512 KB floppy)
+  22 files, 161.0 KB of 256 KB target  (32% of the 512 KB floppy)
 ```
 
 The desktop is genuinely out: `tc.theme`, `tc.gfx` and `tc.ui` (about 51 KB) load

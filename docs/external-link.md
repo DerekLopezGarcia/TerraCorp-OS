@@ -20,9 +20,9 @@ service cache, so a missing bridge leaves the readout untouched.
 Option A stays shipped and stays the default. The sidecar replaces only the route
 from the computer to the bridge — a card component instead of the Internet Card —
 and adds a bulk inventory read. The protocol, the command table, the control tiers
-and the body format are unchanged, and `linkTransport = "http"` keeps the stock
-pack working — **planned**: that key joins `config.lua` with the sidecar, and does
-not exist yet.
+and the body format are unchanged, and plain HTTP keeps the stock pack working.
+`linkTransport` is **planned**: that key joins `config.lua` with the sidecar, and
+does not exist yet.
 
 The harness proves the state machine against a fake Internet Card. In-game,
 0.3.33 verified `status`, `log`, `fs.read`, `fs.write`, `link.interval` and
