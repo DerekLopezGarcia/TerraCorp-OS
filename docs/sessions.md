@@ -1,5 +1,10 @@
 # 0.5.0 Sessions — implementation plan
 
+> **Deferred, not planned.** The frame this plan assumes — sessions placed on a
+> fleet of nodes, rendered on remote terminals — came from decision 1, which
+> decision 25 superseded. Nothing here is scheduled; the plant readout is
+> local-first and every node has its own screen. Kept as the design record.
+
 The model, memory budget, and display backends are specified in
 `distributed.md`; the renderer work is planned in `render.md`. This document
 turns the 0.5.0 "Sessions" phase into a concrete module and release plan.

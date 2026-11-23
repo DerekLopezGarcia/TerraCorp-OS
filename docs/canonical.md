@@ -535,6 +535,10 @@ a card. Severity: **H** breaks the product or a promise, **M** misleads a reader
 
 ## P1 — Identity and version (5)
 
+**All five fixed 2026-11-23.** README and blackbox say 0.4.9 Flint; the sample
+frame carries `v=0.4.9`; roadmap says "built, tag held"; and `versioning.md` holds
+the un-freeze conditions.
+
 | ID | Sev | Finding | Where |
 |---|---|---|---|
 | F01 | H | README advertises 0.4.8 "Keystone"; code says 0.4.9 "Flint" | `README.md:7` vs `version.lua:8-9` |
@@ -570,6 +574,12 @@ and the four documents that listed the 0.4.8 app set were corrected.
 
 ## P4 — Roles, registry, master (7)
 
+**F17, F18, F19, F21, F22, F23 fixed 2026-11-23**; F20 stays open on purpose —
+the registry still offers a `role` column and no app edits it, which is P9's
+question (does the file keep the column) rather than a documentation fix.
+`masterId` was removed from `config.lua`; `hostname` stays because the
+configuration file is hand-editable and the kernel reads it.
+
 | ID | Sev | Finding | Where |
 |---|---|---|---|
 | F17 | H | Status frame: docs say 10 stocks, `off=<n>`, `others=<n>`; code caps at 8 with `more=<n>` | `line-node.md:157-159` vs `report.lua:20,190-193` |
@@ -581,6 +591,10 @@ and the four documents that listed the 0.4.8 app set were corrected.
 | F23 | L | `line-node.md:89-90` still explains the floppy by reference to `boot/netboot.lua`, a file deleted with the racks | `line-node.md:89-91` |
 
 ## P5 — External link contract (9)
+
+**F24-F31 fixed 2026-11-23.** F32 stays: the nine MCP tools are correct but still
+only described in `tools/bridge/README.md` and one bullet here, which is a P8
+documentation gap rather than a contract defect.
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
@@ -649,6 +663,21 @@ dropped with 0.3.x; roadmap F5 is marked blocked and F6 re-scoped; and
 
 ## P9 — Dead code and residue (6)
 
+**Verdict per function, 2026-11-23.** Deleting everything without a caller would
+have removed working code whose only sin is that its hardware does not exist yet,
+so each one is decided rather than swept:
+
+| Symbol | Verdict |
+|---|---|
+| `halls.load` / `halls.save` / `halls.PATH` | **Deleted** — the last thing pretending `/etc/halls.tsv` exists |
+| `tc.move` (`move.run`) | **Kept, harness-only.** Named by decision 28 and covered by `test:field`; it becomes reachable when the bus (0.4.11) lands or the decision is retired. Not loaded into the kernel instance |
+| `gate:alarms` / `gate:status` | **Kept.** The read half of a gate; a gate has no hardware to report on yet, and deleting these would delete the only statement of what a gate reports |
+| `registry.aggregate` / `registry.setRole` | **Kept for now.** They belong with the `role` column, which is F18/P4: whether `/var/nodes.tsv` keeps rack-era columns is a data-format decision, not a cleanup |
+| `registry.rename` | **Kept** — the Nodes app renames by upsert, but the helper is the registry's own API and is covered incidentally |
+| 23 inert TC1 verbs | **Kept as accepted legacy**, with a pointer to decision 25 in `net.lua`'s header; deleting verbs from a wire contract turns a clean `unknown verb` into a parser surprise for an old peer |
+| `config.masterId` | **Deleted** — no reader, no writer, and the frame field that shares the name is a different thing |
+| `ui.lua:3-5` app-contract docstring | **Fixed** in this pass |
+
 | ID | Sev | Finding | Where |
 |---|---|---|---|
 | F65 | M | `tc.move` is instantiated into `instance.move` but `move.run` has no caller in `src/`; item `move` is not a link command either, so the acting layer is reachable from nowhere | `kernel.lua:734-739`, `link.lua:34-62` |
@@ -659,6 +688,12 @@ dropped with 0.3.x; roadmap F5 is marked blocked and F6 re-scoped; and
 | F70 | L | `ui.lua:3-5` documents an app contract without `iconArt`/`iconStyle` | `ui.lua:3-5` |
 
 ## P10 — Naming and deferred designs (5)
+
+**All five fixed 2026-11-23.** `names.md` is now a dated design record with
+`<node>/<stock>` examples and a command surface that says which verbs exist;
+`sessions.md` and `terminal-protocol.md` say deferred and why; the terminal
+protocol frames are TC1 text; `opencomputers.md`'s rack section is labelled mod
+trivia; and the recipe dataset has one path.
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|

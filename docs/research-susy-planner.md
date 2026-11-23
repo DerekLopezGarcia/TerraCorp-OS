@@ -31,7 +31,7 @@ tool, it is a dataset-driven planning engine with a real solver.
 
 ## The dataset, in its own words
 
-`src/lib/datasets/types.ts` defines `RecipeDataset`:
+`src/lib/model/types.ts` defines `RecipeDataset`:
 
 ```text
 schemaVersion, datasetVersionId, gtnhVersion, sourceInfo,

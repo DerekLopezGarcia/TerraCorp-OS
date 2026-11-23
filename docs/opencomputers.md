@@ -125,6 +125,11 @@ Verified against `master-MC1.12` (1.8.x) and the pack's 1.8.9a build.
 
 ## Racks and servers
 
+> **Kept as mod trivia, not product contract.** TerraCorp used racks in 0.3.x and
+> stopped in 0.4.9 (decision 25); a line node uses none of this. The facts below
+> are still true of OpenComputers 1.8.x and are the reason the cluster design
+> looked the way it did.
+
 Verified against `master-MC1.12` (1.8.x) and the pack's 1.8.9a build.
 
 - A rack holds four mountables: servers, Terminal Servers, and mountable disk

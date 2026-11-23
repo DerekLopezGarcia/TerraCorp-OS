@@ -1,21 +1,26 @@
 # Component addressing and the semantic registry
 
-Status: **0.4.1, local first; since 2026-11-16 there is no gateway and the node
-registry is the DNS** ([`line-node.md`](line-node.md)). Two namespaces,
-deliberately separate: an opaque **physical address** for routing, and a
-**semantic path** for search and grouping. Nothing outside the game ever handles
-the physical one by hand; the link exposes plant snapshots, not UUIDs.
+Status: **design record, partly built.** Two namespaces, deliberately separate: an
+opaque **physical address** for routing, and a **semantic path** for search and
+grouping. Nothing outside the game ever handles the physical one by hand; the link
+exposes plant snapshots, not UUIDs.
+
+What is current (decisions 25 and 26, 2026-11-16): a **line node and the master,
+two levels only** — no gateway, no plant-service tier — and a node's **name is the
+root of its paths** (`casing/ingots`), with `/var/nodes.tsv` as the table of names
+([`line-node.md`](line-node.md)). `tc.addr` and `tc.path` are built; the rest of
+this page is the design they were built against, and the examples below use the
+node-rooted shape rather than the old `hall1/…` prefix.
 
 Design agreed with the pack's co-operator on 2026-11-13; it supersedes the
-earlier single-name registry. The gateway and plant-service tiers described below
-were dropped with the racks (decision 25): a line node and the master are the
-only two levels.
+earlier single-name registry. The gateway and plant-service tiers it described
+were dropped with the racks (decision 25).
 
 ## Two namespaces, one job each
 
 | | Physical address | Semantic path |
 |---|---|---|
-| Looks like | `1a2b…:9f3c…:north` (node, component, face) | `hall1/ore_processing/grinders` |
+| Looks like | `1a2b…:9f3c…:north` (node, component, face) | `casing/ingots` |
 | Answers | *Where does this call go?* | *What is this thing, and what else is like it?* |
 | Uniqueness | One owner, one address | Many members, many paths per component |
 | Written by | Machines: the registry and the proxies | Humans, from the tablet or the app |
@@ -52,8 +57,9 @@ string is what makes plant configs unmaintainable.
   OS; the face stays part of the address for routing and the operation passes
   it as an argument.
 
-The registry also keeps a short **node alias** (`hall1-oc`) so logs and the
-combined view can print `hall1-oc/9f3c…:north` instead of two UUIDs.
+The node's **name is its alias** (decision 26): logs and the merged view print
+`casing/9f3c…:north` instead of two UUIDs, because the name is already the root of
+every path the node publishes.
 
 ### Adapter faces are derived, not minted
 
@@ -87,21 +93,23 @@ block edits by design rather than by luck.
 ## Semantic path
 
 ```text
-hall1/ore_processing/grinders
-hall1/ore_processing/entrada
-lineas/grinder_1/entrada
+casing/ingots
+casing/feed
+lv/feed
 ```
 
 - Segments separated by `/`; `-` or `_` inside a segment. Using `-` between
   segments makes compound words ambiguous (`ore_processing-grinders` cannot say
   whether that is two levels or one).
-- **Many-to-many.** A component appears in every path that describes it, so the
-  same drawer is in `hall1/ore_processing/entrada` and in
-  `lineas/grinder_1/entrada` at once. This is what the registry exists for.
-- **Prefix and wildcard queries**: `hall1/*/tanks`, `**/grinders`,
-  `lineas/*/entrada`. Semantic search is the point: the agent should not need to
+- **The first segment is the node's name** (decision 26), so a path is
+  `<node>/<what the stock means>`: `casing/ingots`, `lv/feed`. A component appears
+  in every path *of its own node* that describes it, so the same drawer can be
+  `casing/feed` and `casing/ingots` at once; across nodes it cannot, because each
+  computer owns the components on its own bus.
+- **Prefix and wildcard queries**: `casing/*`, `**/ingots`,
+  `lv/*`. Semantic search is the point: the agent should not need to
   memorise the base.
-- **Declared, never inferred.** The system may *propose* `hall2/nuevo_drawer_3`
+- **Declared, never inferred.** The system may *propose* `casing/nuevo_drawer_3`
   for a component it just noticed, but a human accepts the path. Declared
   cardinality (`single` / `pool`) records intent, so a `single` path resolving to
   two components is `cardinality_mismatch` — an alarm, not a silent choice.
@@ -184,7 +192,7 @@ expensive half and stays on demand, trickled across ticks.
 ## Moving by name
 
 ```text
-move from=hall1/casing/ingots to=hall1/casing/line
+move from=casing/ingots to=casing/line
      n=8 key=gregtech:meta_ingot* policy=fill
 ```
 
@@ -215,18 +223,25 @@ like items for free; crates do not. `n` is capped per command; the service loops
 
 ## Command surface
 
-| Command | Tier | What it does |
-|---|---|---|
-| `component.list` | read | Components on this proxy: address, kind, face, first_seen, paths |
-| `component.unclaimed` | read | Seen but not in any path, newest first |
-| `path.list` | read | Paths on this proxy with member counts and declared cardinality |
-| `path.query` | read | Path or wildcard → set of physical addresses, kinds, states |
-| `path.assign` | **write** | Adds or removes a member for a path; validates the address against `component.list()` |
-| `driver.list` | read | Registered drivers: kind, capabilities, source file |
-| `driver.dump` | read | `component.methods` + `component.doc` for one address — data, safe to paste |
-| `driver.reload` | **write** | Re-parses `/etc/drivers/*.lua` without a reboot; a broken file degrades that kind to `unknown` |
-| `move` | **write** | Bounded transfer by path (above) |
-| `gate.set` | **write** | Desired state of a line's gate, guarded by the cache |
+**Only the last row exists on the link today.** `tc.addr` and `tc.path` implement
+addresses and local paths as modules, and `gate.set` is the one verb exposed over
+the External Link; everything else in this table is the designed surface of the
+plant service and answers `unknown_cmd` until it is built. The list is kept whole
+because it is the contract the modules are being built towards, but nothing here
+should be scripted against yet.
+
+| Command | Tier | Status | What it does |
+|---|---|---|---|
+| `component.list` | read | designed | Components on this proxy: address, kind, face, first_seen, paths |
+| `component.unclaimed` | read | designed | Seen but not in any path, newest first |
+| `path.list` | read | designed | Paths on this proxy with member counts and declared cardinality |
+| `path.query` | read | designed | Path or wildcard → set of physical addresses, kinds, states |
+| `path.assign` | **write** | designed | Adds or removes a member for a path; validates the address against `component.list()` |
+| `driver.list` | read | designed | Registered drivers: kind, capabilities, source file |
+| `driver.dump` | read | designed | `component.methods` + `component.doc` for one address — data, safe to paste |
+| `driver.reload` | **write** | designed | Re-parses `/etc/drivers/*.lua` without a reboot; a broken file degrades that kind to `unknown` |
+| `move` | **write** | designed, arrives with the bus (0.4.11) | Bounded transfer by path (above) |
+| `gate.set` | **write** | **shipped over the link** | Desired state of a line's gate, guarded by the cache |
 
 Errors are first-class and never guessed around: `unknown_path`,
 `unreachable_members`, `unbound_member`, `wrong_kind`, `cardinality_mismatch`,
@@ -250,7 +265,7 @@ Verified facts used above (`component.list()` shape, address stability,
    returns an array with one entry per slot, empty slots are empty tables, and
    `getStackInSlot` returns `nil` for an empty slot. One call per face, so the
    budget of `move` is per face, not per slot.
-4. Path wildcards against a real proxy: `**/…` and `hall1/*/…` return what a hand
+4. Path wildcards against a real proxy: `**/…` and `casing/*` return what a hand
    count says.
 5. Rename a path and confirm the saved line still points at the same address.
 6. Re-place a block on an Adapter face, then a native OpenComputers component:

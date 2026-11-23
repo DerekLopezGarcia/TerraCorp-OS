@@ -1,5 +1,10 @@
 # Terminal protocol (0.6)
 
+> **Deferred, not planned.** This rests on decision 1 ("one application server,
+> lightweight terminals"), which decision 25 superseded when the racks left. A line
+> node has no desktop and the master needs no remote terminal, so nothing here is
+> scheduled. Kept as the record of the protocol that was worked out.
+
 Message contract for remote terminals: the session runs on a core node, the
 terminal renders spans and sends input. The model, refresh policy, and memory
 budget live in `distributed.md`; this document fixes the verb-level contract
@@ -17,7 +22,9 @@ alarm echo only).
 
 ## Verbs
 
-All frames are `tc.net`-encoded (32-bit framing, `net.md`). `sid` is the
+All frames are TC1 text — `TC1 <VERB> key=value …`, percent-escaped, under the
+1 KB send policy in `src/lib/tc/net.lua:3`. There is no binary framing and no
+`net.md`. `sid` is the
 session id (host-assigned), `seq` a per-direction counter, `tok` the resume
 token.
 

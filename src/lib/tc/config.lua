@@ -18,7 +18,6 @@ config.defaults = {
   iconLayout = "",
   role = "desktop",
   master = "",
-  masterId = "",
   linkSink = "",
   linkToken = "",
   linkInterval = 5,
