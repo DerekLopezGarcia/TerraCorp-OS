@@ -204,6 +204,21 @@ async function main() {
     const state = JSON.parse(await request(base, "GET", "/link/state"));
     assert.strictEqual(state.addresses.length, 1, "one node is known");
     assert.strictEqual(state.addresses[0].mirror, 2, "two mirror kinds are stored");
+
+    // A sub-second `link.interval` must survive the bridge: `n` may be fractional
+    // for that one verb (the OS floor is 0.5 s), and must stay an integer
+    // everywhere else, or the relaxation would leak into every other command.
+    // This runs last so it cannot disturb the node count or the mirror above.
+    const floorNode = "bridge-test-floor";
+    const queuedFloor = await request(base, "POST", "/link/queue?node=" + floorNode,
+      "TC1 LINK id=f1 token=" + escapeValue(TOKEN) + " cmd=link.interval n=0.5\n");
+    assert.ok(queuedFloor.includes("queued=1"), "the bridge accepts a fractional link.interval");
+    await assert.rejects(
+      () => request(base, "POST", "/link/queue?node=" + floorNode,
+        "TC1 LINK id=f2 token=" + escapeValue(TOKEN) + " cmd=fs.read path=%2Fvar%2Fx n=0.5\n"),
+      /n must be a non-negative integer/,
+      "a fractional n is still rejected for verbs other than link.interval",
+    );
   } finally {
     child.kill();
   }

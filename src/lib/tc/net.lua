@@ -12,7 +12,7 @@
 local net = {}
 
 net.PORT = 4200
-net.MAX_FRAME = 1024
+net.MAX_FRAME = 8 * 1024
 net.PROTOCOL = "TC1"
 net.VERSION = 1
 

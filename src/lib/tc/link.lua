@@ -22,7 +22,7 @@ link.MAX_COMMANDS = 8
 link.LOG_LINES = 40
 link.LOG_MAX_LINES = 200
 link.TIMEOUT = 30
-link.MIN_INTERVAL = 1
+link.MIN_INTERVAL = 0.5
 link.MAX_INTERVAL = 60
 link.MAX_LUA_OUTPUT = 16384
 link.LOG_PATH = "/var/log/tc.log"
@@ -119,6 +119,19 @@ local function plantNumber(value, digits, fallback)
   return tostring(math.floor(number))
 end
 
+-- Seconds keep whole seconds whole and show a fraction as 0.5, so the reported
+-- interval matches what the link actually does after link.interval.
+local function plantSeconds(value)
+  local number = tonumber(value)
+  if not number then
+    return "0"
+  end
+  if number == math.floor(number) then
+    return tostring(math.floor(number))
+  end
+  return string.format("%.1f", number)
+end
+
 local function plantAlarmRecord(alarm)
   return plantRecord("alarm", {
     { "code", alarm.code },
@@ -177,8 +190,8 @@ function link:refresh()
   local sink = self.config.get("linkSink") or ""
   local token = self.config.get("linkToken") or ""
   local interval = tonumber(self.config.get("linkInterval")) or 5
-  if interval < 1 then
-    interval = 1
+  if interval < link.MIN_INTERVAL then
+    interval = link.MIN_INTERVAL
   end
 
   self.sink = sink:gsub("/+$", "")
@@ -709,7 +722,7 @@ function link:commandPlantStatus()
     plantNumber(service.stock and service.stock.revision, nil, "0"))
   lines[#lines + 1] = plantScalar("alarms", plantNumber(#(service:alarms() or {}), nil, "0"))
   lines[#lines + 1] = plantScalar("link_control", report.control or "off")
-  lines[#lines + 1] = plantScalar("link_interval", plantNumber(report.interval, nil, "0"))
+  lines[#lines + 1] = plantScalar("link_interval", plantSeconds(report.interval))
   lines[#lines + 1] = plantScalar("link_failures", plantNumber(report.failures, nil, "0"))
   lines[#lines + 1] = plantScalar("link_commands", plantNumber(report.commands, nil, "0"))
   if report.problem then
@@ -1289,7 +1302,7 @@ end
 -- MIN/MAX_INTERVAL, persisted in the preferences file and applied on the next
 -- scheduling decision, so it survives a reboot.
 function link:commandInterval(value)
-  local seconds = math.floor(tonumber(value) or 0)
+  local seconds = tonumber(value) or 0
   if seconds < link.MIN_INTERVAL then
     return nil, "bad_interval"
   end

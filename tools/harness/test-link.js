@@ -34,6 +34,7 @@ const scenarios = [
   "reboot",
   "interval",
   "interval_max",
+  "interval_floor",
   "lua",
   "lua_error",
   "lua_refused",

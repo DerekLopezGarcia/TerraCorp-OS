@@ -97,7 +97,7 @@ local function accepted(key, value)
     return ROLES[value] == true
   end
   if key == "linkInterval" then
-    return type(value) == "number" and value >= 1
+    return type(value) == "number" and value >= 0.5
   end
   if key == "linkControl" then
     return value == "off" or value == "write" or value == "full"

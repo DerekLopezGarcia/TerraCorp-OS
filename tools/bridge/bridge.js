@@ -27,7 +27,7 @@ const http = require("http");
 const { parsePlantBody } = require("./plant");
 
 const PROTOCOL = "TC1";
-const MAX_FRAME = 1024;
+const MAX_FRAME = 8 * 1024;
 const MAX_BODY = 64 * 1024;
 const DEFAULT_PORT = 8787;
 const DEFAULT_HOST = "127.0.0.1";
@@ -47,6 +47,7 @@ const RESULT_VERBS = ["LREP", "LDATA", "LEND"];
 const VERB_NAME = /^[A-Z][A-Z0-9_]*$/;
 const FIELD_NAME = /^[a-z][a-zA-Z0-9_]*$/;
 const UNSIGNED = /^[0-9]+$/;
+const DECIMAL = /^[0-9]+(\.[0-9]+)?$/;
 const SLUG = /^[a-z0-9][a-z0-9._-]*$/;
 
 const USAGE = [
@@ -156,6 +157,11 @@ function isUnsignedInteger(value) {
   return UNSIGNED.test(value) && Number.isSafeInteger(Number(value));
 }
 
+// link.interval takes seconds, so it may be fractional (the OS floor is 0.5).
+function isPositiveSeconds(value) {
+  return DECIMAL.test(value) && Number(value) > 0;
+}
+
 // Parse one frame. Returns { verb, fields } or { error }.
 function parseFrame(line) {
   if (line.length === 0) return { error: "empty frame" };
@@ -209,8 +215,14 @@ function parseFrame(line) {
       return { error: "size must be a non-negative integer" };
     }
   } else if (verb === "LINK") {
-    if (Object.hasOwn(fields, "n") && !isUnsignedInteger(fields.n)) {
-      return { error: "n must be a non-negative integer" };
+    if (Object.hasOwn(fields, "n")) {
+      if (fields.cmd === "link.interval") {
+        if (!isPositiveSeconds(fields.n)) {
+          return { error: "n must be a positive number of seconds" };
+        }
+      } else if (!isUnsignedInteger(fields.n)) {
+        return { error: "n must be a non-negative integer" };
+      }
     }
   }
 

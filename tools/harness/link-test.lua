@@ -161,7 +161,10 @@ local function build(settings, replies, files, listings, hasCard, plant, book, p
   env.config = {
     get = function(key) return live[key] end,
     set = function(key, value)
-      if key == "linkInterval" and type(value) == "number" and value >= 1 then
+      -- Mirrors src/lib/tc/config.lua: linkInterval is a number of seconds and
+      -- its accepted floor is 0.5, not 1. A fake that insisted on 1 would
+      -- reject the sub-second cadence the OS deliberately allows.
+      if key == "linkInterval" and type(value) == "number" and value >= 0.5 then
         live[key] = value
         return true
       end
@@ -795,6 +798,31 @@ elseif scenario == "interval_max" then
   )
   drive(instance, 6)
   check(instance.interval == 60, "the interval is capped at 60 s, got " .. tostring(instance.interval))
+elseif scenario == "interval_floor" then
+  -- The floor is 0.5 s. A sub-second cadence must survive as a fraction, and a
+  -- value below the floor must be clamped up to it rather than refused, because
+  -- the whole point of the change is that the operator asked for "as fast as
+  -- possible".
+  local instance, requests = build(
+    settings,
+    {
+      "TC1 LINK id=c1 token=tok cmd=link.interval n=0.5\n",
+      "TC1 LINK id=c2 token=tok cmd=link.interval n=0.1\n",
+    },
+    files,
+    listings
+  )
+  drive(instance, 12)
+  local bodies = {}
+  for index = 2, #requests do
+    bodies[#bodies + 1] = posted(requests[index].body).text or ""
+  end
+  local joined = table.concat(bodies, "\n")
+  check(
+    joined:find("interval=0.5s", 1, true) ~= nil,
+    "the reply keeps the fraction instead of rounding it, got " .. string.format("%q", joined)
+  )
+  check(instance.interval == 0.5, "the client polls every 0.5 s, got " .. tostring(instance.interval))
 elseif scenario == "lua" then
   local full = {
     linkSink = settings.linkSink,
