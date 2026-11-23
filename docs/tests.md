@@ -1,6 +1,8 @@
-# F0 Test Plan
+# Test plan and in-game results
 
-F0 exits when the OS has run for 30 minutes without `ERR` log entries, retains
+This is the whole test plan, from the F0 exit protocol through every slice up to
+0.4.9. F0 is the first section, not the whole document: it exits when the OS has
+run for 30 minutes without `ERR` log entries, retains
 at least 250 KB free on a Tier 2 node, and reaches its first render within 2
 seconds in Supersymmetry. The updater must also detect and install a published
 stable GitHub Release while preserving settings and leaving the BIOS/EEPROM
@@ -1017,7 +1019,7 @@ errors` and **`Gates: 0 lines, 0 errors`**. Results:
 The actual second hall, gate reconciliation and move are **pending hardware**:
 `npm run test:field` covers the hall merge, interlocks and transfer logic.
 
-Post-release work under development: an interrupted install could leave the
+Post-release work that shipped as 0.3.1 and later: an interrupted install could leave the
 EEPROM pointed at a half-written disk (the boot address is now set after a
 complete copy), re-preparing an already prepared floppy rewrote it (same
 versions are now reused), the node list kept failed installs (nodes now join
@@ -1082,7 +1084,7 @@ and still refused for `fs.read`. Both fail when the change is reverted.
 
 | Criterion | Status |
 |---|---|
-| All seven apps usable in-game | Tested by user; Terminal input still needs an in-game retest on 0.1.11+ |
+| All seven apps usable in-game | Tested by the user. A terminal-input retest on 0.1.11+ is a post-F0 follow-up, not an open F0 item |
 | 30-minute session without errors | **Met**: the user ran a clean 30-minute session with no `ERR` entries on the published build (2026-10-26) |
 | At least 250 KB free on Tier 2 | **Met**: recorded logs exceed the threshold; CPU/GPU tiers confirmed by the user's session |
 | First render within 2 seconds | **Met**: recorded values 1.05 s and 1.25 s are within budget; confirmed in-game |
@@ -1092,8 +1094,8 @@ and still refused for `fs.read`. Both fail when the change is reverted.
 | About → Update SYSTEM section shows live values | Harness screens pass; confirm values and R refresh in-game |
 | Updater detects, stages, installs, and restarts from a stable release | Modern/legacy response paths, full manifest filtering, backup recovery, rollback, and the boot-time applier (including a successful close with no return value) pass in the harness; the 0.1.9 → 0.1.11 repair path and the normal 0.1.11 → 0.2.0 update were confirmed in-game; keep log and pending-file evidence for F0 |
 | Notes persist across restarts and updates | `npm run test:notes` verifies `/var/notes.txt`; the 0.2.0 update succeeded in-game, but an explicit notes check was not recorded |
-| System uptime advances every second | `npm run test:dashboard-tick` passes; the 0.2.0 desktop was reported working, but per-second uptime was not itemized |
-| UI loop requests 30 Hz idle cadence | `npm run test:refresh-rate` verifies the 1/30 s signal wait; actual display cadence must be measured in-game |
+| System uptime advances every second | `npm run test:dashboard-tick` passes; the 0.2.0 desktop was reported working. Per-second uptime was never itemized; that is a post-F0 follow-up |
+| UI loop requests 30 Hz idle cadence | `npm run test:refresh-rate` verifies the 1/30 s signal wait; actual display cadence is a post-F0 follow-up: measure it in-game when a rig is free |
 | Window drag signal rate | In-game: Terminal `dragtest`, drag its title bar for 5-10 seconds, release, then `log 10` |
 
 ## Black-screen diagnostics

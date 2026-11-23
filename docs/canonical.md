@@ -592,9 +592,8 @@ configuration file is hand-editable and the kernel reads it.
 
 ## P5 — External link contract (9)
 
-**F24-F31 fixed 2026-11-23.** F32 stays: the nine MCP tools are correct but still
-only described in `tools/bridge/README.md` and one bullet here, which is a P8
-documentation gap rather than a contract defect.
+**F24-F32 fixed 2026-11-23.** F32 was closed by documenting the nine MCP tools in
+`tools/bridge/README.md`, where someone wiring an agent would look.
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|

@@ -726,10 +726,10 @@ action; the wall shows the same numbers as the panel.
 | 14 | Hologram wall | 0.8 | M |
 | 15 | Redstone Control measurement spike and transport | F5.5 | M |
 | 16 | Resumable tablet client | F5.5 | M |
-| 17 | Line node payload: `role = "line"`, readout, level alarms and a status publisher, no desktop | 0.4.9 | L |
-| 18 | Naming: `tc.naming`, the name in `/etc/terracorp.cfg`, `ASSIGN` from the master, `conflict` state | 0.4.9 | M |
-| 19 | `tc.master`, registry columns and the Nodes app as the DNS view | 0.4.9 | M |
-| 20 | `npm run size`: the node payload budget as a failing gate | 0.4.9 | S |
+| 17 | Line node payload: `role = "line"`, readout, level alarms and a status publisher, no desktop | 0.4.9 · done | L |
+| 18 | Naming: `tc.naming`, the name in `/etc/terracorp.cfg`, `ASSIGN` from the master, `conflict` state | 0.4.9 · done | M |
+| 19 | `tc.master`, registry columns and the Nodes app as the DNS view | 0.4.9 · done | M |
+| 20 | `npm run size`: the node payload budget as a failing gate | 0.4.9 · done | S |
 
 ## Decisions
 

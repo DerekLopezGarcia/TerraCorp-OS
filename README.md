@@ -77,7 +77,7 @@ authoritative definition of the whole system is
 | CPU | Tier 2 | Tier 3 |
 | Screen | Tier 2 (80x25) | Tier 3 (up to 160x50) |
 | Disk | 1 MB free | 2 MB |
-| Memory | 1 MB | 2 MB |
+| Memory | 1 MB | 64 MB for the plant readout |
 
 The desktop uses the screen's actual resolution and adapts from 40x16 to
 160x50. The icon grid covers the full desktop width and height; windows open
