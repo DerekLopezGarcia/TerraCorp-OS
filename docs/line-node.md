@@ -7,7 +7,7 @@ editor (decision 25).
 
 Built as designed: `tc.naming`, `tc.installer` + `boot/install.lua`, the
 `role = "line"` runtime, `tc.report`, `tc.master`, and the Nodes and Lines apps.
-`npm run size` holds the installer image at 156 KB of the 512 KB floppy, and
+`npm run size` holds the installer image at 163.3 KB of the 512 KB floppy, and
 `test:naming`, `test:installer`, `test:report`, `test:master` and `test:apps`
 cover it. Two facts are still pending an in-game session: a never-booted computer
 booting the floppy, and `setBootAddress` on a plain computer.
@@ -28,37 +28,36 @@ booting the floppy, and `setBootAddress` on a plain computer.
 ## Budget
 
 A floppy holds 512 KB in Supersymmetry ([`opencomputers.md`](opencomputers.md)).
-The floppy only carries the **installer**: the payload plus `boot/install.lua`,
-about 129 KB, so the image uses a quarter of the medium. The writable side —
-`/etc`, the sample ring and the log — lives on the node's HDD, which is why
-nothing is ever written back to the floppy and why the ring has room to grow.
+The floppy only carries the **installer**: the payload plus `boot/install.lua`
+and the `/installer.lua` marker. The writable side — `/etc`, the sample ring and
+the log — lives on the node's HDD, which is why nothing is ever written back to
+the floppy and why the ring has room to grow.
 
-| Part | KB |
-|---|---|
-| `init`, `kernel`, `config`, `log`, `util`, `vfs`, `version`, `text` | 46.6 |
-| `addr`, `path`, `driver`, `stock`, `tank`, `plant`, `history` | 55.4 |
-| `net` + `tc.report` (status publisher) | 12.1 |
-| `tc.naming` (normalise, validate, qualify) | 4.0 |
-| status page on a screen, if one exists | 3.0 |
-| **payload** | **~121** |
-| `boot/install.lua` (copy to HDD, config, boot address, reboot) | ~8 |
-| **installer image** | **~129** |
+**The payload is a list, not a directory.** `src/lib/tc/payload.lua` names the
+files a node carries; `flash.lua` copies exactly that list, `npm run size`
+measures it, and `npm run check` fails with `PAYLOAD GAP` if one of those files
+asks for a module the list does not carry. Measured on 2026-11-23:
 
-Out, with the size it costs: the desktop (`ui` 38, `gfx` 9, `theme` 3, eleven
-apps 138), the cluster (`cluster` 43, `node` 29, `netfetch` 23, `vault` 18,
-`provision` 15, `netboot` 14, `jobs` 9, `registry` 7, `pull` 7, the Nodes and
-Vault apps 30), the external link (`link` 45.5), the book and planner (`book`
-11.6 + `plan` 7.6), the line program (`line` 10.8) and the acting layer (`gate`
-8.1, `move` 3.0, `halls` 6.3).
+```text
+$ npm run size
+  22 files, 163.3 KB of 256 KB target  (32% of the 512 KB floppy)
+```
+
+The desktop is genuinely out: `tc.theme`, `tc.gfx` and `tc.ui` (about 51 KB) load
+only inside the desktop branch of the kernel, and the eleven apps (138 KB) and
+`tc.link` (47 KB) are not in the list at all. Before this, the flasher walked
+whole roots and wrote 514.2 KB — more than the medium — while the size gate
+measured a different, hand-written set and reported 155 KB.
 
 Because the installed node runs from the HDD, the floppy no longer caps what the
-node may contain — 121 KB of 512 is a quarter of the medium. The real limits are
+node may contain — 163 KB of 512 is a third of the medium. The real limits are
 RAM and the tick budget, and both say keep it small. If `link` or `gate` earn
 their place later, they can join without a redesign; the budget below stays as
 the target, not as a ceiling imposed by the medium.
 
-`npm run size` fails when the installer image passes the budget, so "it fits on a
-floppy" cannot rot in three releases.
+`npm run size` holds the installer image inside its budget of the 512 KB floppy,
+and `npm run check` holds the payload closed, so "it fits on a floppy" cannot rot
+in three releases.
 
 ## Boot and install
 
@@ -66,8 +65,8 @@ One floppy installs every computer in the plant, and it never gets written to:
 
 1. Flash the installer medium from the master (decision 26): put a blank floppy
    in a disk drive connected to the master, open **Nodes** and press **I** twice.
-   The flasher writes `init.lua`, `boot/`, `lib/` and `apps/` (~155 KB of the
-   512 KB floppy), the `/installer.lua` marker that makes `/init.lua` run the
+   The flasher writes the payload named in `/lib/tc/payload.lua` (22 files,
+   about 163 KB of the 512 KB floppy), the `/installer.lua` marker that makes `/init.lua` run the
    installer, and `/etc/terracorp.cfg` with `role = "line"`, an empty name (the
    node names itself from its output) and this master's address. It refuses a
    floppy holding foreign data and rewrites a floppy it flashed before.

@@ -107,7 +107,7 @@ discovery.
 - **0.4.9 "Flint" is built**: the line node (installer, `role = "line"`, status
   publisher, status page), `tc.master` with the registry as the DNS, and the
   Nodes and Lines apps. The cluster layer and its apps are gone (decision 25);
-  the manifest is 53 files and the installer image is 156 KB of the 512 KB
+  the manifest is 55 files and the installer image is 163.3 KB of the 512 KB
   floppy. Harness: `check`, `sim`, `sim:oc`, `test:naming`, `test:installer`,
   `test:report`, `test:master`, `test:apps`, `test:plant`, `test:link`,
   `test:bridge`, `test:history`, `test:book`, `test:mcp`, `test:field`,
@@ -172,7 +172,7 @@ discovery.
   modules load (`Gates: 0 lines, 0 errors`), `plant.halls` reports the local hall
   with 1128 and 5, and `gate.set` answers `unknown_line` without a configured
   gate; the real second-hall merge, gate reconciliation and move remain pending.
-- **Harness green**: `npm run check` (68 files, 56-file manifest), `test:link`
+- **Harness green**: `npm run check` (72 files, 55-file manifest), `test:link`
   (48 scenarios), `test:bridge`, `test:history`, `test:book`, `test:mcp`,
   `test:field`, `test:plant`, `test:line`, `sim`, `sim:oc` and the
   50-combination screen matrix.

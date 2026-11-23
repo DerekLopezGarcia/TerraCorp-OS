@@ -102,8 +102,8 @@ Before the tag is created, all of the following must hold:
 
 The current build is 0.4.9 Flint, built on 2026-11-16; v0.4.8 remains the latest
 published release until v0.4.9 is tagged. 0.4.9 removes the cluster and the Vault
-app, so the manifest shrinks from 62 to 54 entries (`npm run check` prints
-`manifest: 54 files`). The updater only adds and
+app, so the manifest shrinks from 62 to 55 entries (`npm run check` prints
+`manifest: 55 files`). The updater only adds and
 replaces files, so a module left behind on an updated machine is inert: the
 kernel no longer loads it. A line node is installed from its floppy, not through
 this path ([`line-node.md`](line-node.md)). Earlier versions: 0.4.8 added six
@@ -119,7 +119,7 @@ alarms. 0.4.5 adds the operated book (`/etc/recipes.tsv`, `/etc/recipe-io.tsv`,
 line rules), `plan()` with bottleneck and shortfall, and calibration exposed as
 `plant.book` and `plant.plan`. 0.4.7 adds `plant.history` and `plant.paths` and
 the read-only MCP server at `tools/bridge/mcp.js`; the MCP tool files live on
-the host, not on the computer, so they are not in the 56-file manifest. 0.4.8
+the host, not on the computer, so they are not in the 55-file manifest. 0.4.8
 adds the hall registry, gate setpoints/interlocks and move-by-name modules;
 their in-game halves need hardware the rig does not have.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected

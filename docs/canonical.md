@@ -390,7 +390,7 @@ carry the old numbers, which is a documentation edit (F16).
 
 | Gate | Command | What it really checks | Real number |
 |---|---|---|---|
-| Compile + manifest + icons | `npm run check` | every `.lua` under `src`, `eeprom`, `tools` compiles; manifest matches the tree; each app's icon shape | **71** files, **54** manifest entries |
+| Compile + manifest + icons + payload | `npm run check` | every `.lua` under `src`, `eeprom`, `tools` compiles; manifest matches the tree; each app's icon shape; the node payload is complete and closed | **72** files, **55** manifest entries, 0 `PAYLOAD GAP` |
 | Manifest | `npm run manifest` | rewrites `tools/manifest.txt` | 54 |
 | Desktop smoke | `npm run sim`, `sim:oc` | fake-component boot | — |
 | Screen matrix | `npm run test:screens` | 10 scenarios × 5 resolutions | **50** combinations |
@@ -414,34 +414,42 @@ in-game: a never-booted computer booting the floppy, and
 (`line-node.md:93-105`).
 
 **Baseline run, 2026-11-23** (Node v26.13.1, npm 11.20.0, dependencies installed
-with `npm install`): `check` 71 files / 0 errors / manifest 54 · `size` 155.0 KB
-(30 % of the medium) · `test:link` 48 scenarios, 0 failures · `sim` and `sim:oc`
-clean · `test:screens` 50 combinations, no failures · `test:flash`, `test:installer`,
-`test:naming`, `test:report`, `test:master`, `test:apps`, `test:plant`,
-`test:history`, `test:book`, `test:field`, `test:line`, `test:gaia`,
-`test:mcp`, `test:bridge` all pass.
+with `npm install`): `check` 72 files / 0 errors / manifest 55 · `size` 22 files,
+163.3 KB (32 % of the medium) · `test:link` 48 scenarios, 0 failures · `sim` and
+`sim:oc` clean · `test:screens` 50 combinations, no failures · `test:flash`,
+`test:installer`, `test:naming`, `test:report`, `test:master`, `test:apps`,
+`test:plant`, `test:history`, `test:book`, `test:field`, `test:line`, `test:gaia`,
+`test:mcp`, `test:bridge` all pass — 25 gates, every exit code 0.
 
-**Read that baseline carefully: the suite is fully green while F13 is true.** A
-green run means "no regression", never "the product works" — the flasher, the
-`off` tier and the `halls.tsv` decision are all invisible to it. When a card
-claims something is fixed, the evidence must be a test that would have failed
-before the fix.
+**Read that baseline carefully.** On 2026-11-23 it was fully green *while F13 was
+true*: the flasher wrote 514.2 KB to a 512 KB medium and no gate could see it.
+A green run means "no regression", never "the product works". When a card claims
+something is fixed, the evidence must be a test that would have failed before the
+fix — the payload gate, the `off` tier and the sub-second floor were each proved
+that way.
 
 ## 10. State of the working tree (read this before trusting any diff)
 
-The folder is **neither a git repository nor a clean copy of upstream.** Compared
-against `github.com/DerekLopezGarcia/TerraCorp-OS` at `main` = `7ed69d2`
-("Document 0.4.9 and the sidecar transport decision"), everything is byte-identical
-**except**:
+The folder is a git repository since 2026-11-23, tracking the real upstream:
+`main` → `origin/main` (base `7ed69d2`, "Document 0.4.9 and the sidecar transport
+decision"). Everything is committed and pushed; the working tree is clean.
+
+What it is *not* is a checkout of the last release. It is several commits past
+`v0.4.8`, which is the newest tag, because 0.4.9 is deliberately untagged (see
+§1 and `versioning.md`). So `git describe` will name `v0.4.8` while the code is
+further on — another way a stamp can mislead.
+
+The files that were unpublished when this audit started now live in specific
+commits:
 
 | File | Change | Status |
 |---|---|---|
-| `src/lib/tc/net.lua` | `MAX_FRAME` 1024 → `8 * 1024` | unpublished |
-| `src/lib/tc/config.lua` | `linkInterval` accepts `>= 0.5` (was `>= 1`) | unpublished |
-| `src/lib/tc/link.lua` | `MIN_INTERVAL` 1 → 0.5, new `plantSeconds()`, clamping in `refresh`, `commandStatus`, `commandInterval` | unpublished |
-| `tools/bridge/bridge.js` | `MAX_FRAME` 1024 → `8 * 1024`, new `DECIMAL` regex and `isPositiveSeconds()`, `LINK n` accepts a fractional interval for `link.interval` | unpublished |
-| `docs/canonical.md` | this file | new, unpublished |
-| `package-lock.json` | `version` fields 0.3.20 → 0.4.9 | normalised by `npm install`; the committed lock was stale |
+| `src/lib/tc/net.lua` | `MAX_FRAME` 1024 → `8 * 1024` | committed in `adda7b4` |
+| `src/lib/tc/config.lua` | `linkInterval` accepts `>= 0.5`, and `linkControl` accepts `read` | `adda7b4`, `0e34837` |
+| `src/lib/tc/link.lua` | `MIN_INTERVAL` 0.5, `plantSeconds()`, clamping; `off` no longer shares a rank with `read` | `adda7b4`, `0e34837` |
+| `tools/bridge/bridge.js` | `MAX_FRAME` 8192, `DECIMAL` + `isPositiveSeconds()`, fractional `link.interval` | `adda7b4` |
+| `docs/canonical.md` | this file | `189b9df` onwards |
+| `package-lock.json` | `version` fields 0.3.20 → 0.4.9 | `78eb68f` |
 
 `node_modules/` is present and gitignored. `.link.token.tmp` (a 16-byte link
 token) is **untracked and not covered by `.gitignore`** — it must be ignored
@@ -459,9 +467,9 @@ Two consequences:
 - **F27 is now a documentation task, not a decision.** 8192 is the intent; the
   six documents that say "capped at 1024" are stale and must cite the 1 KB send
   policy instead.
-- **P5 must account for the fractional interval.** The committed bridge rejects
-  `n` as a non-integer, so anything documenting "0.5 s minimum" describes this
-  working tree only, and the change has no in-game run behind it.
+- **P5 must account for the fractional interval.** Both ends are committed
+  (`adda7b4`), covered by `interval_floor` and `test:bridge`, and exercised
+  against the live rig — see `tests.md`, "0.4.9 sub-second link intervals".
 
 Conversely, **F01 is upstream, not local**: the published README really does say
 "Current version: 0.4.8 Keystone" while `version.lua` says 0.4.9. The
@@ -558,7 +566,7 @@ a card. Severity: **H** breaks the product or a promise, **M** misleads a reader
 | F13 | **H** | **Fixed 2026-11-23.** `flash.lua` copied whole roots (514.2 KB) onto a 512 KB floppy and refused every flash; it now copies `tc.payload` (22 files, 163.3 KB) | `flash.lua:120`, `payload.lua` |
 | F14 | H | **Fixed 2026-11-23.** `size.js` gated a list the flasher did not read; flasher, size gate and `check` now share `src/lib/tc/payload.lua` | `tools/payload.js`, `size.js`, `check.js` |
 | F15 | H | **Resolved 2026-11-23.** `halls.lua` is in the payload because the plant genuinely needs it; `line-node.md` must drop it from its "excluded" list | `payload.lua:26` vs `line-node.md:51-52` |
-| F16 | M | The installer image is still quoted at four sizes: 156 KB, ~129 KB, ~155 KB, 133 KiB — now one measured number exists to replace them | `line-node.md:10,45,69`, `status.md:110`, `README.md:111` |
+| F16 | M | **Fixed 2026-11-23.** The installer image is now one measured artifact: `npm run size` prints `22 files, 163.3 KB of 256 KB target (32% of the 512 KB floppy)`, and every document quotes that line | `line-node.md`, `status.md:110`, `roadmap.md:509` |
 
 ## P4 — Roles, registry, master (7)
 
@@ -624,8 +632,8 @@ a card. Severity: **H** breaks the product or a promise, **M** misleads a reader
 | ID | Sev | Finding | Where |
 |---|---|---|---|
 | F56 | M | `test:link` is quoted as 32, 37 and 46 scenarios; the code has **48** since the sub-second floor and the `off` refusal scenarios landed | `tests.md:68,168`, `status.md:133` vs `test-link.js:18-64` |
-| F57 | M | Manifest count is quoted as 53 and 56; the tree has 54 | `status.md:110,175`, `versioning.md:88`, `roadmap.md:508` |
-| F58 | M | `npm run check` is quoted as 68 files; it checks 71 | `status.md:175` vs `check.js:10-24` |
+| F57 | M | **Fixed 2026-11-23.** The manifest count was quoted as 53 and 56; the tree has **55** and every document now says so | `status.md:110,175`, `versioning.md:105`, `roadmap.md:508` |
+| F58 | M | **Fixed 2026-11-23.** `npm run check` was quoted as 68 files; it checks **72**, and the documents say so | `status.md:175`, `blackbox.md:213` vs `check.js:10-24` |
 | F59 | M | The screen matrix is described as including Vault and "runs nine scenarios … 45 combinations"; it is 10 × 5 = 50 with Lines | `tests.md:599-604` vs `test-screens.js:12` |
 | F60 | M | `tests.md` is titled "F0 Test Plan" but is the whole 0.2–0.4.9 plan; F0 is one section | `tests.md:1` |
 | F61 | L | `tests.md:1016-1026` describes 0.3.1 work as "under development" and "not part of v0.3.0" | `tests.md:1016-1026` |

@@ -210,5 +210,5 @@ The following are unknown or unmeasured, and must not be stated as fact:
 
 Before a change is considered complete the repository requires `npm run check`,
 `npm run sim`, `npm run sim:oc`, plus the focused test for whatever was touched
-(`AGENTS.md`). `npm run check` currently reports 68 files checked, 0 errors, and
-a 56-file manifest.
+(`AGENTS.md`). `npm run check` currently reports 72 files checked, 0 errors, and
+a 55-file manifest.

@@ -108,8 +108,8 @@ required.
 
 ### Offline installer floppy
 
-A 512 KiB floppy is large enough for the current installer bundle (about
-133 KiB). In OpenOS, connect and format the floppy, find its mount under
+A 512 KiB floppy is large enough for the OpenOS fetch bundle (about 133 KiB). In
+OpenOS, connect and format the floppy, find its mount under
 `/mnt`, then download the bundle directly onto it:
 
 ```lua
@@ -220,7 +220,6 @@ npm run test:updater-recover
 npm run test:boot-update
 npm run test:notes
 npm run test:nodes
-npm run test:cluster
 npm run test:install
 npm run test:fetch
 npm run test:boot

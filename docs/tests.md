@@ -30,7 +30,6 @@ npm run test:lab
 npm run test:files-scroll
 npm run test:release-notes
 npm run test:nodes
-npm run test:cluster
 npm run test:faults
 npm run test:screens
 npm run test:line
@@ -339,7 +338,12 @@ preview that only draws its first page cannot pass.
 
 ## 0.3.0 rack and netboot checks
 
-`npm run test:cluster` runs pure Lua module tests under Fengari against fake
+> **Historical.** The cluster layer — rack discovery, netboot, Relay, waves and
+> the Vault app — was removed in 0.4.9 (decision 25), and with it the
+> `test:cluster` suite this section used to name. The record stays because the
+> checks describe how the protocol and provisioning were proved at the time.
+
+The `test:cluster` suite used to run pure Lua module tests under Fengari against fake
 filesystem, floppy, and modem components:
 
 1. `TC1` frames encode and decode escaped values, reject missing or duplicate
