@@ -4,11 +4,17 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.4.8 Keystone**. The prototype boots into a desktop shell with
-eleven apps, persists settings, notes, and the desktop icon layout, and logs
-errors. The Nodes app provisions rack servers over a wired network and keeps a
-node registry. Local simulations cover the OpenComputers API contract; in-game
-testing is tracked in [`docs/tests.md`](docs/tests.md).
+Current version: **0.4.9 Flint** (`src/lib/tc/version.lua` is the only source of
+that fact; it is built and **deliberately untagged** — see
+[`docs/versioning.md`](docs/versioning.md)). It boots into a desktop shell with
+eleven apps, persists settings, notes and the desktop icon layout, and logs
+errors. One desktop computer is the master: its node registry, `/var/nodes.tsv`,
+is the plant's naming service and the Nodes app is its view and editor. Each
+production line runs a line node that reads its own boundary stocks and publishes
+to the master over a wired modem. Local simulations cover the OpenComputers API
+contract; in-game testing is tracked in [`docs/tests.md`](docs/tests.md). The
+authoritative definition of the whole system is
+[`docs/canonical.md`](docs/canonical.md).
 
 ## Features
 
@@ -28,12 +34,13 @@ testing is tracked in [`docs/tests.md`](docs/tests.md).
 - **Update:** version details, a SYSTEM section (memory, storage, screen,
   devices, boot volume, address), a GitHub Releases updater, and release
   notes in /var/whatsnew.md after an update.
-- **Nodes:** discover rack servers on a wired network, prepare a floppy
-  netboot installer, watch a node install, and rename or reassign nodes in
-  `/var/nodes.tsv`.
-- **Vault:** browse the cluster storage namespace, read files into a memory
-  cache, store from `/var/vault-in`, save out to `/var/vault-out`, and delete
-  entries.
+- **Nodes:** the plant's naming service. One row per line node that talks to the
+  master — the name it answers to, its state, its worst alarm and its stocks —
+  stored in `/var/nodes.tsv`. The app is the registry's view and editor.
+- **Lines:** control over what a line watches. Edits the level thresholds of the
+  selected line in the master's `/etc/plant.tsv` and pushes the file to the node,
+  so the node keeps evaluating its own alarms with the same numbers. It never
+  invents a stock: stocks are declared on the node.
 - **Plant:** a local readout of line-boundary stocks: items and fluids, exact or
   coarse states, level alarms and node status. One component call per second;
   none while the line is idle.
@@ -55,7 +62,8 @@ testing is tracked in [`docs/tests.md`](docs/tests.md).
   are not built yet, so the in-game run is pending.
 - **GAIA:** the external link. Shows whether the link to an outside agent is
   armed, edits the sink and token, and sets how far the far side can reach
-  (`off`, `write`, `full`).
+  (`off`, `read`, `write`, `full`). `off` really is off: only the interval knob
+  answers. See [`docs/external-link.md`](docs/external-link.md).
 - Difference-based framebuffer rendering.
 - No OpenOS runtime dependency: TerraCorp loads its own modules and filesystem.
 
@@ -128,26 +136,26 @@ settings. It does not need Internet and does not write the EEPROM. If it finds
 multiple eligible target volumes, provide the TerraCorp filesystem address as
 the final argument.
 
-## Rack cluster
+## Line node
 
-0.3.0 turns an existing TerraCorp computer into the master of a small wired
-cluster. A rack-mounted server with no boot address boots the provisioning
-floppy, announces itself over a wired network card, receives a name and role,
-copies the runtime to its first HDD, sets its own boot address, and reboots
-headless. The master tracks nodes in `/var/nodes.tsv` and shows them in the
-Nodes app.
+Each production line gets one ordinary computer running `role = "line"`: it reads
+the two boundary stocks, caches the answers, raises its own level alarms and
+publishes its status to the master over a wired modem. It has no desktop and
+needs no GPU, and it keeps reading, alarming and writing `/var/status/last.tsv`
+with no master in reach.
 
-- The master needs a wired network card, a rack with a mountable disk drive and
-  a floppy, a cable to the rack's data bus, and power on a separate bus.
-- Servers are not remote-controlled: a player must sneak-right-click each front
-  face to start it. They stay off after a world reload.
-- No EEPROM is written; a server's stock Lua BIOS boots the floppy once, then
-  boots its own HDD afterwards.
-- Back up `/var/nodes.tsv` with `/etc/terracorp.cfg` and `/var/notes.txt`. The
-  updater preserves all three.
+The master flashes a floppy with the node payload — an explicit list of files, not
+the whole runtime — and that medium installs one computer after another, because
+it is only ever read.
 
-See [`docs/cluster.md`](docs/cluster.md) for the bill of materials, rack GUI
-wiring, provisioning procedure, protocol, and failure modes.
+The rack cluster that 0.3.x built (rack discovery, netboot provisioning, Relay,
+update waves and the Vault pool) was **removed in 0.4.9** (decision 25). The
+documents that describe it are kept as the 0.3.x record and say so at the top.
+
+See [`docs/line-node.md`](docs/line-node.md) for the payload, the installer, the
+naming rules and the status contract, and
+[`docs/canonical.md`](docs/canonical.md) for the authoritative definition of the
+whole system.
 
 ## Controls
 
@@ -174,9 +182,11 @@ wiring, provisioning procedure, protocol, and failure modes.
   on its own progress screen, and rolls back if anything fails. Requires an
   Internet Card. Saved 0.2.x layouts that name the old `about` app migrate to
   `update` in place.
-- **Nodes:** P prepares the floppy installer and arms a ten-minute window; S
-  stops it. Arrows select a node, R renames, O cycles its role, and G pings it.
-  Enter commits a rename and Tab cancels it.
+- **Nodes:** arrows select a node, `R` renames, `P` pings it, `F` forgets it, and
+  `I` pressed twice flashes the installer medium. Enter commits a rename and Tab
+  cancels it.
+- **Lines:** arrows select a line, and the threshold editor pushes `/etc/plant.tsv`
+  to the node it belongs to.
 - **0.1.9 and 0.1.10 updater repair:** those builds reject the filesystem's
   successful `close` (which returns no value) while staging, so an in-game update
   stops with `could not stage ... (nil)`. From OpenOS, replace `/boot/apply.lua`
@@ -187,13 +197,17 @@ wiring, provisioning procedure, protocol, and failure modes.
 
 ```text
 src/                  boot-volume contents
-  init.lua            entry point
+  init.lua            entry point; also runs the installer and a pending update
   boot/kernel.lua     filesystem, services, module loader, event loop
-  boot/netboot.lua    floppy netboot installer
-  lib/tc/             core libraries, graphics, UI, updater, and cluster
-  apps/               system, files, terminal, settings, notes, update, nodes, vault, gaia, lab, plant
+  boot/install.lua    line node installer, run from the flashed medium
+  boot/apply.lua      boot-time update applier
+  lib/tc/             core libraries, display, UI, plant readout, link, line node
+  lib/tc/payload.lua  the files a line node carries (the flash and size contract)
+  apps/               dashboard, files, console, settings, notes, update, nodes,
+                      gaia, lab, plant, lines
 eeprom/init.lua       optional boot manager (not required for normal installs)
 tools/                OpenOS installer, downloader, and manifest
+tools/bridge/         HTTP bridge, link client, and the read-only MCP server
 tools/harness/        local Node.js simulation and tests
 docs/                 architecture, testing, roadmap, and release documentation
 ```
@@ -204,28 +218,45 @@ No build step is required. With Node.js 20+:
 
 ```sh
 npm install
-npm run check
-npm run manifest
+npm run check        # Lua compiles, manifest, app icons, node payload closure
+npm run manifest     # rewrite tools/manifest.txt after adding or removing a file
+npm run size         # the node installer image against the 512 KB medium
 npm run sim
 npm run sim:oc
 npm run test:desktop
 npm run test:icon-order
-npm run test:dashboard-tick
-npm run test:refresh-rate
-npm run test:drag-metric
+npm run test:screens
+npm run test:faults
+npm run test:boot
+npm run test:install
+npm run test:fetch
+npm run test:notes
+npm run test:nodes
+npm run test:apps
+npm run test:plant
+npm run test:line
+npm run test:history
+npm run test:book
+npm run test:link
+npm run test:bridge
+npm run test:mcp
+npm run test:field
+npm run test:naming
+npm run test:installer
+npm run test:flash
+npm run test:report
+npm run test:master
+npm run test:gaia
 npm run test:updater
 npm run test:updater-legacy
 npm run test:updater-rollback
 npm run test:updater-recover
 npm run test:boot-update
-npm run test:notes
-npm run test:nodes
-npm run test:install
-npm run test:fetch
-npm run test:boot
-npm run test:faults
-npm run test:screens
 ```
+
+`npm run` also exposes focused `sim:*` runs for a single app. The complete
+contract, including what each gate really checks and the numbers it prints, is in
+[`docs/canonical.md`](docs/canonical.md) §9.
 
 The harness uses in-memory components and is a smoke test, not a replacement
 for in-game testing. See [`docs/tests.md`](docs/tests.md) for the F0 protocol and

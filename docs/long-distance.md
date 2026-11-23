@@ -1,5 +1,10 @@
 # Long-Distance Links and Tablets
 
+> **Partly superseded (decision 25).** The transport research below still holds
+> — the Internet Card's limits, the framing, the 80 B/s of an RC link — but a
+> tablet no longer renders a desktop that lives on a server, and there is no
+> gateway. A tablet today is a read-only client of the plant snapshot.
+
 This complements [`distributed.md`](distributed.md) with transport choices for
 operating a remote base and using tablets as mobile terminals.
 

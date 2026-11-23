@@ -1,5 +1,9 @@
 # Relay — decentralized work queue (0.3.2)
 
+> **Dropped 2026-11-16 (decision 25).** Kept as the 0.3.x record; nothing here
+> ships in a line node. The JS/worker roles it served left with the racks, and a
+> line node publishes its status straight to the master.
+
 > Design goal: **no coordinator**. Any node can publish work and any worker
 > can take it, so the network can grow without a central bottleneck. The
 > publisher of a job is only the job's bookkeeper, not a broker: it broadcasts

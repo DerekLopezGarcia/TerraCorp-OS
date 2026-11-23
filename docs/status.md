@@ -112,13 +112,13 @@ discovery.
   `test:report`, `test:master`, `test:apps`, `test:plant`, `test:link`,
   `test:bridge`, `test:history`, `test:book`, `test:mcp`, `test:field`,
   `test:line` and the screen matrix.
-- **0.3.x is built and tagged** up to `v0.3.33`, and **0.4.1 is built and
-  verified in-game** (2026-11-15): `tc.net`, netboot provisioning, node registry, Relay,
-  waves, Vault, the desktop shell with **eleven apps**, the GAIA app and the
-  external-link bridge (loopback verified in-game, including remote writes,
-  `link.interval` and `lua`), the Lab with its Lua interpreter, and the Plant
-  readout. Updates leave the notes of every skipped release in
-  `/var/whatsnew.md`.
+- **0.3.x was built and tagged** up to `v0.3.33`; its remaining in-game checklist
+  died with the cluster (decision 25) and will never be finished, because the
+  features are gone. What survives into today's product: the desktop shell with
+  **eleven apps**, the GAIA app and the external-link bridge (loopback verified
+  in-game, including remote writes, `link.interval` and `lua`), the Lab with its
+  Lua interpreter, and the Plant readout. Updates leave the notes of every skipped
+  release in `/var/whatsnew.md`.
 - **0.4.1 Plant readout**: `tc.addr`, `tc.path`, `tc.driver`, `tc.stock`,
   `tc.tank`, `tc.plant` and the Plant app; boundary stocks, exact/coarse states,
   level alarms and one component call per second. `npm run test:plant` covers
@@ -161,25 +161,25 @@ discovery.
   covers the full path with a fake node. In-game: the server answered the three
   questions from the real rig, naming `casing/ingots` (1128 exact), the stock
   entries and the 100-casing plan (bottleneck 0.0204 targets/s, 592 missing).
-- **0.4.8 Keystone (harness-only slices)**: `tc.halls` names each computer in
-  `/etc/halls.tsv` and merges snapshots with a hall prefix, marking a missing
-  hall `offline` and an old one `stale`. `tc.gate` stores desired setpoints in
-  `/var/gates.tsv`, applies local interlocks (empty input, full output) and
-  raises `DISOBEDIENT LINE` after three refusals. `tc.move` transfers by name
-  through a transposer and reports what actually moved. `plant.halls` and
-  `gate.set` expose them over the link. The second hall, the gate and the
-  transport are not built: `npm run test:field` covers the modules. In-game the
-  modules load (`Gates: 0 lines, 0 errors`), `plant.halls` reports the local hall
-  with 1128 and 5, and `gate.set` answers `unknown_line` without a configured
-  gate; the real second-hall merge, gate reconciliation and move remain pending.
+- **0.4.8 Keystone**: `tc.halls` merges one snapshot per hall, prefixes each stock
+  with its hall and marks a missing hall `offline` and an old one `stale`. It
+  reads no file since 0.4.9 — decision 26 made the node's own name the root of its
+  paths, so the plant builds a one-row registry in memory. `tc.gate` stores
+  desired setpoints in `/var/gates.tsv`, applies local interlocks (empty input,
+  full output) and raises `DISOBEDIENT LINE` after three refusals. `tc.move`
+  transfers by name through a transposer and reports what actually moved.
+  `plant.halls` and `gate.set` expose them over the link. The second hall, the
+  gate and the transport remain pending hardware; of the three only `gate.set` is
+  reachable from outside, and it answers `unknown_line` without a configured gate.
 - **Harness green**: `npm run check` (72 files, 55-file manifest), `test:link`
   (48 scenarios), `test:bridge`, `test:history`, `test:book`, `test:mcp`,
   `test:field`, `test:plant`, `test:line`, `sim`, `sim:oc` and the
   50-combination screen matrix.
-- **0.4.5a parser written**: `tc.line` parses `/etc/lines/*.line` (`stock in/out`,
-  multiple rules, multi-item/fluid terms, `ticks`/`limit`) without executing it;
-  `npm run test:line` covers the casing fixture and malformed input. The planner
-  and calibration are not wired yet.
+- **The line program parser and the planner**: `tc.line` parses
+  `/etc/lines/*.line` (`stock in/out`, multiple rules, multi-item/fluid terms,
+  `ticks`/`limit`) without executing it, and `tc.book` + `tc.plan` are built on
+  top of it — the book, the bottleneck, the shortfall and calibration are all in
+  0.4.5. `npm run test:line` and `npm run test:book` cover both.
 - **Probe answers are recorded**: items (`name` + `damage`, `tag` only when
   `hasTag`), fluids (Forge `name`, `label`, `amount`, `capacity`, `hasTag`;
   `getFluidInTank` returns an array), tanks through `tank_controller`, energy
@@ -197,9 +197,11 @@ discovery.
   ×32 (top module 32 MB, cap 64 MB) and `status` answered
   `memory=863KB/65536KB`, 18 components, version 0.4.0. The `supersymmetry-local`
   server config was **not** changed.
-- **Partial 0.3.x in-game verification**: provisioning, Relay, Drain and the
-  0.3.33 update pass; the second node, update waves, Vault and the RAID probe
-  remain.
+- **0.3.x is history.** The rack cluster — provisioning, Relay, waves, the Vault
+  pool and its app — was built and partly verified in-game through `v0.3.33`, and
+  then **removed in 0.4.9** (decision 25). The documents that describe it
+  (`cluster.md`, `relay.md`, `vault.md`, `power.md`, `distributed.md`) are kept as
+  the record and say so at the top. Nothing there is outstanding work.
 
 ## What is designed but not written
 
@@ -226,14 +228,15 @@ F3**: a line is a black box and its rate comes from the boundary deltas
 `recipedump.json.gz`, confirm which SuSy version it carries. Until then
 `imported` recipes stay optional and outside.
 
-**3. The rest of the 0.3.x in-game checklist** ([`tests.md`](tests.md)): second
-node, waves, Vault, RAID. It can ride a later session; it no longer blocks the
-plant readout.
+**3. Nothing left of 0.3.x.** The second node, the update waves, the Vault and
+the RAID probe were removed with the cluster (decision 25). They will never be
+verified because they no longer exist; `tests.md` keeps the section as the record.
 
-**4. Implementation order:** `tc.addr` → `tc.path` → driver registry →
-stock/tank/energy readers with cache → local level alarms → Plant app → link
-mirror → second hall → ring/rates → local book/plan → gates/move → MCP read
-tools.
+**4. What actually remains, in order:** the sidecar (0.4.10), the bus (0.4.11),
+and the documentation reconciliation tracked in
+[`canonical.md`](canonical.md) Part III. Everything from 0.4.1 to 0.4.9 is
+delivered except two in-game facts in [`line-node.md`](line-node.md): a bare
+computer booting the flashed floppy, and `setBootAddress` on a plain computer.
 
 ## Known risks we accepted
 

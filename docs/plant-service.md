@@ -134,7 +134,7 @@ Sequence numbers on every body let the service drop duplicates after a retry.
 |---|---|---|
 | Which containers make a stock | The node (`/etc/stocks.tsv`) | It is hardware, and only that node knows its components |
 | Local level thresholds | The node (`/etc/plant.tsv`) | The app must alarm with the bridge down |
-| Which gate address is line `craft1` | The node (`/etc/lines.tsv`) | It is hardware |
+| Which gate address is line `craft1` | The node (`/etc/gates.tsv`) | It is hardware |
 | Which recipe a line runs, limits, priority at scale | The service (or the local book in 0.4.5) | Planning; it changes while the world runs |
 | Long history and the reference dataset | The service | They do not fit the node |
 | Item keys | Both, identical | The service keys off the identifiers the node reports (see [`recipes.md`](recipes.md)) |

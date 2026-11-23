@@ -155,7 +155,7 @@ which stock receives each output, and which gate the loop drives
 The binding is split across the two sides, because each knows one half:
 
 ```text
-node /etc/lines.tsv      line  gate            # hardware: which component
+node /etc/gates.tsv      line  gate            # hardware: which component
 service lines.tsv        line  recipe  in:<stock>  out:<stock>  machines
 ```
 

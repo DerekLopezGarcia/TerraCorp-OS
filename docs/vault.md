@@ -1,5 +1,10 @@
 # Vault — pooled storage over the cluster (0.3.4)
 
+> **Dropped 2026-11-16 (decision 25).** Kept as the 0.3.x record; nothing here
+> ships in a line node. The app and the pool left with the racks. Decision 12 —
+> the OS stores files, never goods — survives and still governs what the world's
+> containers hold.
+
 > Decision: **no RAID and no mirror for now**. Every server's system disk
 > stays local for the OS and programs; all other disks on every server join
 > one shared storage pool, presented as a single namespace instead of X

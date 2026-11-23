@@ -1,5 +1,11 @@
 # Plant power policy
 
+> **Dropped 2026-11-16 (decision 25)** for everything it actuates: the rack
+> servers, Relay, the Vault pool and the staged standby roles are gone. The
+> *policy* — staged startup, load shedding, `ONLINE → BLACKOUT` — is still the
+> right shape for a service that owns several machines; what is missing is
+> hardware that can carry it. Do not read this page as current.
+
 How TerraCorp coordinates the staged startup, shutdown, and load shedding
 described in `distributed.md` ("The data center uses a dedicated power plant
 and UPS…"). Design for 0.7.x; depends on Relay (0.3.2), the local alarm engine

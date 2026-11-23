@@ -368,7 +368,7 @@ cross-hall policy stays outside.
 ### 0.4.5 Book — recipes and planning, local when it fits
 
 The operated book stays small and local (`recipes.tsv`, `recipe-io.tsv`,
-`lines.tsv`) — the twenty recipes the plant actually runs, not the encyclopedia.
+`lines/*.line`) — the twenty recipes the plant actually runs, not the encyclopedia.
 A **line program** is one data file per line (`/etc/lines/<line>.line`) with
 `stock in`/`stock out` and `rule` blocks: `mat in = mat out`, several items and
 fluids per rule, no code ([`recipes.md`](recipes.md#the-line-program)).
@@ -585,10 +585,18 @@ master is useful on day one, while a movable session is not.
   `docs/sessions.md`.
 
 **Exit criteria:** two headless sessions and one local session under 200 KB
-total, at most 64 KB per session, boot within 1.5 seconds, and a multi-session
-harness test.
+total, boot within 1.5 seconds, and a multi-session harness test. (The original
+"64 KB per session" cap came from the 1–2 MB machines and was retired when the
+client `ramSizes` were scaled ×32 and 64 MB was verified in-game on 2026-11-15;
+it is no longer a target.)
 
 ## F5 — Application server and terminals (0.6)
+
+> **Blocked.** The premise — a fleet of nodes whose free RAM decides where a
+> session runs — went with the racks (decision 25). A line node has no desktop and
+> no apps, so there is nothing to place. Re-scope this phase before starting it:
+> either the master alone hosts sessions, or a new decision brings back a machine
+> that can.
 
 **Goal:** run apps on the node with the most free RAM and use lightweight
 terminals in factories — the plant dashboard is the first app that matters
@@ -635,17 +643,22 @@ primary link fails. See [`long-distance.md`](long-distance.md).
 
 ## F6 — Data center and power (0.7)
 
-**Goal:** operate the cluster as a data center rather than a set of racks.
-Alarms and energy history already exist from F3; this phase adds the policy
-that acts on them.
+> **Re-scoped.** The cluster it described is gone (decision 25): no rack
+> inventory, no `worker`/`storage` roles, no Vault pool, no UPS fleet. What
+> survives is the *policy*, and it needs hardware that can carry it before any of
+> it is built. Read [`power.md`](power.md), which says the same at its top.
 
-- Inventory nodes, disks, power, and network links across racks.
-- Refine roles: `core`, `storage`, `worker`, and `edge`.
+**Goal:** operate the plant as a set of machines with a power policy rather than
+a set of racks. Alarms and energy history already exist from F3; this phase adds
+the policy that acts on them.
+
+- Inventory the computers the plant actually has — the master and its line nodes
+  — with their power, energy and network links.
 - Add UPS and power-plant monitoring, reserve budgets, and staged shedding
   ([`power.md`](power.md)).
 - Automatically boot in stages above 60% UPS charge, with per-node checks and
   a watchdog.
-- Shut down in order: workers, terminals, storage, then core.
+- Shut down in order: line nodes, then the master.
 - Document the permanent chunk-loader requirement.
 - Add health checks, alerts, and rebalancing for the Vault pool. Redundancy
   comes from the pack's RAID block (see [`vault.md`](vault.md)): no software

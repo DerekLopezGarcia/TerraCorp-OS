@@ -1,5 +1,9 @@
 # Hologram status wall
 
+> **Not implemented, and its feed no longer exists (decision 25).** The wall was
+> to be fed by the cluster and Relay and to show pool usage; all three are gone.
+> A wall today would read `plant.snapshot` from the master. Research only.
+
 Using an OpenComputers hologram projector as the factory status wall — plant
 KPIs visible across the hall, updated by the cluster. Research for a 0.8.x
 optional module (`tc/holo.lua`); nothing here is implemented.

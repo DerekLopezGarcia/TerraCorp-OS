@@ -1,5 +1,11 @@
 # Distributed Model and Data Center
 
+> **Superseded 2026-11-16 (decision 25).** The frame below — one application
+> server with lightweight terminals, a rack fleet with `worker` and `storage`
+> roles — is gone. Today there is a desktop master and one ordinary computer per
+> line ([`line-node.md`](line-node.md)); sessions and remote terminals are
+> deferred, not planned. Kept as the record of how the target was argued.
+
 This document records the target architecture for OpenComputers and the
 Supersymmetry modpack. The design is a single application server with
 lightweight terminals in each factory; 0.3.x adds the first cable-connected

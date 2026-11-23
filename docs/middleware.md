@@ -21,11 +21,12 @@ Name and roles agreed with the pack's co-operator on 2026-11-13.
 | A rack does not widen reach | A server's internals are `Visibility.Neighbors`: putting something in a rack never lets another computer see it |
 
 So the plant is built from **plain computers**, not rack servers. Racks, Vault,
-waves and Relay stay shipped and tested (`0.3.x`) but are **off the plant path**:
-they answer density and pooled disks, not component access.
+waves and Relay were **removed** in 0.4.9 (decision 25), not parked: they answered
+density and pooled disks, not component access.
 
 For 0.4.1 the computer is both the reader and its own authority; no gateway is
-needed. The profile below is kept for the second hall (0.4.3).
+needed. **There is no gateway either** (decision 26): the node registry is the
+DNS, and the multi-hall profile below is kept as a deferred design, not as a plan.
 
 ## Two roles
 
@@ -144,10 +145,11 @@ dies and the brain has leaked back into the game (decision 16).
 
 ## Sequencing
 
-1. Single-computer plant core: registry, readers, level alarms, Plant app — 0.4.1.
-2. Mirror over the link — 0.4.2.
-3. Second hall and the leaf/gateway merge — 0.4.3.
-4. Service ingest, gates and `move` — 0.4.4-0.4.6.
+Nothing here is scheduled. The three slices that did happen are recorded in
+[`status.md`](status.md): the single-computer plant core (0.4.1), the link mirror
+(0.4.2), and the line node with the registry as the DNS (0.4.9). The second hall,
+the leaf/gateway merge and service ingest are **not** on any phase — the gateway
+went with the halls model (decision 26).
 
 Cross-links: [`names.md`](names.md) (addresses and paths),
 [`plant-service.md`](plant-service.md) (combined view), `docs/opencomputers.md`

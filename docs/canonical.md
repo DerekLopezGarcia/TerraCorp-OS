@@ -608,6 +608,12 @@ a card. Severity: **H** breaks the product or a promise, **M** misleads a reader
 
 ## P7 — Removed features still documented (16)
 
+**All sixteen fixed 2026-11-23.** README's rack section became "Line node"; the
+retired documents carry a banner at the top saying what replaced them and whether
+anything of them survives; `status.md` separates what is current from what was
+dropped with 0.3.x; roadmap F5 is marked blocked and F6 re-scoped; and
+`/etc/lines.tsv` is corrected to `/etc/gates.tsv` in both places that named it.
+
 | ID | Sev | Finding | Where |
 |---|---|---|---|
 | F40 | H | README keeps the whole "Rack cluster" section, the Vault feature and `boot/netboot.lua` in the layout | `README.md:31-33,34-36,131-150,192-194` |

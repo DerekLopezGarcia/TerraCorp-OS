@@ -1,5 +1,10 @@
 # Craft orchestration: buffer-driven recipes (Yordi111 requirement)
 
+> **Relay is gone (decision 25).** Where this page names Relay as the carrier of
+> buffers, reports and orders, read "the master and the link" instead. The loop
+> below — buffers in, gates out, redstone between machines — stands on its own;
+> the "Standalone rule" further down already says so.
+
 Automate crafting across any machines connected by logic + redstone between
 two buffers. The operator's flow, verbatim from field operations:
 
