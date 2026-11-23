@@ -20,7 +20,7 @@ gaia.iconArt = {
   " ██▄█▄██ ",
   "  ▀███▀  ",
 }
-gaia.order = 9
+gaia.order = 8
 
 local TIERS = { "off", "read", "write", "full" }
 local INTERVALS = { 5, 10, 15, 30 }

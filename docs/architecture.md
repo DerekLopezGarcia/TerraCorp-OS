@@ -92,7 +92,7 @@ The desktop is drawn under the windows. It contains a responsive full-screen ico
 grid and a one-row taskbar; windows are drawn over the grid.
 
 - Every app declares a 3-cell `icon` code (`SYS`, `FIL`, `TRM`, `SET`, `NTS`,
-  `UPD`, `NOD`, `VLT`, `GAI`, `LAB`, `PLT`) and a 9x5 `iconArt` pictogram. The desktop
+  `UPD`, `NOD`, `GAI`, `LAB`, `PLT`, `LIN`) and a 9x5 `iconArt` pictogram. The desktop
   tile is 9 cells wide and 5 rows tall, with the `short` label on the row below.
   `npm run check` rejects an app without a registered ID, a 3-cell code, a
   label, or five 9-cell art rows, so an app cannot ship without a visible
@@ -116,7 +116,7 @@ grid and a one-row taskbar; windows are drawn over the grid.
   background (System uses this). The art is drawn in the inverse color, so the
   tile is highlighted without an inset box.
 - Tile height shrinks from five rows to three, two, or one when the screen
-  cannot fit every app. The UI chooses the largest height that fits all ten
+  cannot fit every app. The UI chooses the largest height that fits all eleven
   apps, then draws the app's 3-cell `icon` code instead of the 9x5 art so nothing
   is clipped; the label stays on the row below.
 - An open window is indicated by the accent-colored icon label; the tile itself
@@ -127,7 +127,7 @@ grid and a one-row taskbar; windows are drawn over the grid.
 - The taskbar lists open windows as chips. Clicking a chip focuses its window;
   clicking the focused chip minimizes it. The focused window is highlighted.
 - With no focused window, arrows move the icon selection, Home/End jump to the
-  first/last occupied cell, and Enter opens the selected app. F1-F9 always open
+  first/last occupied cell, and Enter opens the selected app. F1-F10 always open
   an app by `order`, independent of the grid arrangement.
 - The empty-desktop hint is drawn only when no window is open and the grid
   leaves room for it.

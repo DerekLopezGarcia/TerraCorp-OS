@@ -147,26 +147,22 @@ headless node gets them too (`kernel.lua:629-631`).
 | 4 | `settings` | Settings | Settings | `SET` | 9×5 | — |
 | 5 | `notes` | Notes | Notes | `NTS` | 9×5 | — |
 | 6 | `update` | Update | Update | `UPD` | 9×5 | — |
-| 7 | `nodes` | Nodes | Nodes | `NTS` | 9×5 | — |
-| — | *(8 unused)* | | | | | |
-| 9 | `gaia` | GAIA | GAIA | `GAI` | 9×5 | — |
-| 10 | `lab` | Lab | Lab | `LAB` | 9×5 | — |
-| 11 | `plant` | Plant | Plant | `PLT` | 9×5 | — |
-| 12 | `lines` | Lines | Lines | `LIN` | 9×5 | — |
+| 7 | `nodes` | Nodes | Nodes | `NOD` | 9×5 | — |
+| 8 | `gaia` | GAIA | GAIA | `GAI` | 9×5 | — |
+| 9 | `lab` | Lab | Lab | `LAB` | 9×5 | — |
+| 10 | `plant` | Plant | Plant | `PLT` | 9×5 | — |
+| 11 | `lines` | Lines | Lines | `LIN` | 9×5 | — |
 
 **Facts and rules derived from this table:**
 
 - An app's **id is its filename**; `check.js:142-144` enforces it.
 - Every app must ship a 3-cell `icon`, a `short` label and a 9×5 `iconArt`
   (`check.js:145-161`, `AGENTS.md:119-121`). No exceptions, no taskbar-only apps.
-- **`notes` and `nodes` both use `NTS`.** On a full tile the 9×5 art and the label
-  tell them apart; on a shrunken tile (screen too small for 5-row tiles,
-  `ui.lua:668-677`) the two apps draw **identically**. This is a defect, not a
-  style choice. `check.js` does not catch it because it validates shape, not
-  uniqueness.
-- **`order = 8` is unused** — residue of the removed Vault app. Harmless for the
-  grid (which sorts) and for F-keys (which are positional, see below), but it
-  makes any "orders run 1..11" statement false.
+- **Icon codes and `order` values are unique and contiguous**, and `check.js`
+  enforces both since 2026-11-23: a duplicate code makes two apps draw identically
+  on a shrunken tile, and a gap in `order` makes the F-key map depend on load
+  order. Before this, `notes` and `nodes` both shipped `NTS` and `order = 8` sat
+  unused for two releases because nothing checked either.
 - **F-keys are positional, not by `order`:** `ui.lua:1327-1329` binds `F1`…`F10`
   to the first ten apps *after sorting by `order`*. Today that is
   dashboard…plant (F1…F10). **`lines` is 11th and has no function key.** The UI
@@ -549,15 +545,19 @@ a card. Severity: **H** breaks the product or a promise, **M** misleads a reader
 
 ## P2 — App contract and desktop facts (7)
 
+**All seven fixed 2026-11-23.** `nodes` got its own code (`NOD`), the `order`
+values run 1..11 with no gap, `check.js` now fails on a duplicate code or a gap,
+and the four documents that listed the 0.4.8 app set were corrected.
+
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F06 | H | `notes` and `nodes` share icon code `NTS`; identical on a shrunken tile; `check` does not catch it | `notes.lua:9`, `nodes.lua:15`, `ui.lua:668-677` |
-| F07 | H | README/AGENTS/architecture/blackbox list the 0.4.8 app set: `vault` (gone), no `lines`; `terminal`/`system` given as ids when they are titles | `README.md:13-58,192-194`, `AGENTS.md:26`, `architecture.md:94-95`, `blackbox.md:79-82` |
-| F08 | M | `order = 8` unused (Vault residue); docs that count orders are wrong | `gaia.lua:12` … `lines.lua:13` |
-| F09 | M | architecture says "F1-F9"; the code binds F1-F10; README says Plant has no function key but Plant *is* F10 and **Lines** has none | `architecture.md:130` vs `ui.lua:1327-1329` |
-| F10 | M | "largest height that fits all **ten** apps" — there are 11 | `architecture.md:119-120` |
-| F11 | M | README's Nodes key map is pre-0.4.9: `P` is ping not "prepare installer", `F` forget, `I` installer twice; `O`, `S`, `G` are unbound; role cycling does not exist | `README.md:177-179` vs `nodes.lua:300-307` |
-| F12 | L | `check.js` validates icon *shape* but not *uniqueness*, and `order` not at all — the gate that should have caught F06/F08 | `check.js:145-164` |
+| F06 | H | **Fixed.** `nodes` and `notes` shared `NTS`; `nodes` is `NOD` | `nodes.lua:15` |
+| F07 | H | **Fixed.** README, AGENTS, architecture and blackbox now list the same eleven ids, with `lines` in and `vault` out | `README.md`, `AGENTS.md:26`, `architecture.md:94`, `blackbox.md:79` |
+| F08 | M | **Fixed.** `order` runs 1..11; the 8 gap is closed | `gaia.lua:23`, `lab.lua`, `plant.lua`, `lines.lua` |
+| F09 | M | **Fixed.** architecture says F1-F10 (it said F1-F9), and the text names `lines` as the one without a key | `architecture.md:130` |
+| F10 | M | **Fixed.** "all ten apps" became eleven | `architecture.md:119` |
+| F11 | M | **Fixed.** README's Nodes key map matches `nodes.lua:300-307`, and `lines` has its own entry | `README.md` |
+| F12 | L | **Fixed.** `check.js` fails on a duplicate icon code, a duplicate order and a missing order; both proved by reverting the fix | `check.js` |
 
 ## P3 — Node payload and the floppy (4)
 

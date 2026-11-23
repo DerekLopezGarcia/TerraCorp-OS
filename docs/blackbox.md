@@ -13,7 +13,7 @@ presented as fact.
 | Field | Value | Source |
 |---|---|---|
 | Product | TerraCorp OS | `src/lib/tc/version.lua` |
-| Version | 0.4.8 "Keystone", API 1 | `src/lib/tc/version.lua` |
+| Version | 0.4.9 "Flint", API 1 (built and deliberately untagged) | `src/lib/tc/version.lua` |
 | Vendor string | TerraCorp Industrial Systems | `src/lib/tc/version.lua` |
 | License | MIT | `LICENSE` |
 | Host | OpenComputers, Minecraft 1.12.2 + Forge, Supersymmetry pack | `README.md` |
@@ -76,10 +76,11 @@ Module resolution is fixed: `tc.*` maps to `/lib/tc/*.lua` and `apps.*` to
 ### Apps
 
 Eleven app ids are registered: `dashboard`, `files`, `console`, `settings`,
-`notes`, `update`, `nodes`, `vault`, `gaia`, `lab`, `plant`.
+`notes`, `update`, `nodes`, `gaia`, `lab`, `plant`, `lines`.
 (`src/boot/kernel.lua`)
 
-`README.md` and `AGENTS.md` list the same eleven ids.
+`README.md` and `AGENTS.md` describe the same eleven apps by title and by id
+respectively; the ids are the contract, the titles are what the windows say.
 
 Every app must expose a desktop icon: a registered id, a 3-cell `icon` code, a
 `short` label and a 9x5 `iconArt` pictogram. `npm run check` fails otherwise.

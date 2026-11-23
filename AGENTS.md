@@ -23,7 +23,7 @@ src/                  boot volume
   init.lua            entry point; finds the volume and loads the kernel
   boot/kernel.lua     VFS, module loader, services, event loop
   lib/tc/*.lua        core libraries, display, UI, updater
-  apps/*.lua          system, files, terminal, settings, notes, update, nodes, gaia, lab, plant, lines
+  apps/*.lua          dashboard, files, console, settings, notes, update, nodes, gaia, lab, plant, lines
 eeprom/init.lua       optional boot manager
 tools/install.lua     OpenOS installer
 tools/fetch.lua       OpenOS repository downloader

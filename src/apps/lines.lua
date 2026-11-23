@@ -21,7 +21,7 @@ lines.iconArt = {
   "│ │ │ │ │",
   "└─┴─┴─┴─┘",
 }
-lines.order = 12
+lines.order = 11
 lines.PATH = "/etc/plant.tsv"
 
 local function trim(value)

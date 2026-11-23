@@ -162,6 +162,37 @@ for _, id in ipairs(ids) do
     end
   end
 end
+
+-- Uniqueness: two apps sharing a compact code draw identically on a shrunken
+-- tile, and a gap or a duplicate in the order field makes the F-key map depend
+-- on load order instead of intent. notes and nodes both shipped "NTS" and order
+-- 8 was unused for two releases because nothing checked.
+local codes, orders = {}, {}
+for _, id in ipairs(ids) do
+  local ok, app = pcall(require, "apps." .. id)
+  if ok and type(app) == "table" then
+    local code = app.icon
+    if code ~= nil then
+      if codes[code] then
+        fail("src/apps/" .. id .. ".lua: icon code " .. code .. " is already used by " .. codes[code])
+      else
+        codes[code] = id
+      end
+    end
+    if type(app.order) ~= "number" then
+      fail("src/apps/" .. id .. ".lua: order must be a number")
+    elseif orders[app.order] then
+      fail("src/apps/" .. id .. ".lua: order " .. app.order .. " is already used by " .. orders[app.order])
+    else
+      orders[app.order] = id
+    end
+  end
+end
+for index = 1, #ids do
+  if not orders[index] then
+    fail("no app uses order " .. index .. ": orders must run 1.." .. #ids .. " with no gap")
+  end
+end
 return table.concat(failures, "\\n")
 `;
 const appStatus = lauxlib.luaL_dostring(L, to_luastring(appScript));

@@ -12,7 +12,7 @@ nodes.__index = nodes
 nodes.id = "nodes"
 nodes.title = "Nodes"
 nodes.short = "Nodes"
-nodes.icon = "NTS"
+nodes.icon = "NOD"
 nodes.iconArt = {
   "╔═══════╗",
   "║ name  ║",

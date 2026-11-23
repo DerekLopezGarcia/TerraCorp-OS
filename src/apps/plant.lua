@@ -20,7 +20,7 @@ plant.iconArt = {
   "│ █████ │",
   "└───────┘",
 }
-plant.order = 11
+plant.order = 10
 
 local function mib(bytes)
   return (tonumber(bytes) or 0) / 1048576

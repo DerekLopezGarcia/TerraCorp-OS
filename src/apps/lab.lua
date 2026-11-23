@@ -25,7 +25,7 @@ lab.iconArt = {
   "  │░░░│  ",
   "  └───┘  ",
 }
-lab.order = 10
+lab.order = 9
 
 local SCRIPT = "/var/lab/script.lua"
 local GUTTER = 4
