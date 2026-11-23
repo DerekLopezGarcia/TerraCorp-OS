@@ -139,9 +139,10 @@ speak exactly the same paths the node reports. No translation table, no gateway.
 
 ## Status contract
 
-The wire is the existing `TC1` frame: 1024 bytes, percent-escaped values, and
-extra scalar fields allowed so a newer peer adds data without breaking an older
-one (see `src/lib/tc/net.lua`).
+The wire is the existing `TC1` frame. Frames are sent under the **1 KB send
+policy** (`net.lua:3`), and the receive guard is `net.MAX_FRAME = 8192`; values
+are percent-escaped, and extra scalar fields are allowed so a newer peer adds
+data without breaking an older one (see `src/lib/tc/net.lua`).
 
 ```text
 TC1 HELLO  id=<address> name=casing v=0.4.9

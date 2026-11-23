@@ -291,7 +291,7 @@ Two things changed with in-game evidence behind them:
   `fs.write`/`fs.append` answered `write_failed`; the fake VFS accepted the extra
   argument, so the gate passed while the game failed. The fake now uses the same
   dot-style signatures as `src/lib/tc/vfs.lua`, and `write_ok` would catch it.
-- `link.interval` (`n` in 1–60) changes the polling cadence from the bridge and
+- `link.interval` (`n` in 0.5–60) changes the polling cadence from the bridge and
   persists it. `interval` queues a bad value and a good one and requires
   `bad_interval` then `interval=1s`, with `instance.interval == 1` and one config
   save; it runs with `linkControl = off` on purpose, because the tier is allowed

@@ -4,10 +4,11 @@ Status: **decided 2026-11-16; not built.** A small Forge mod that takes the
 Internet Card out of the plant's path to the bridge and adds the one read the OS
 cannot afford today: a whole inventory in a single host call.
 
-Naming: this is the **option B** of the design conversation of 2026-11-16. The
-`B` row in [`external-link.md`](external-link.md#options) is a different, retired
-idea (TC1 frames over the rack bus), so read that row as dead with the racks
-(decision 25). Everywhere else this document calls the new path the **sidecar**.
+Naming: the design conversation of 2026-11-16 labelled the candidates A–D; this
+document calls the selected one — row **D** in
+[`external-link.md`](external-link.md#options) — the **sidecar**. The `B` row in
+that table is a different, retired idea (TC1 frames over the rack bus), dead
+with the racks (decision 25).
 
 ## Why a mod, in three measured facts
 

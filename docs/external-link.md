@@ -146,7 +146,7 @@ know, and the existing peers never send these.
 | `check` | read | — | Status, component kinds and the log tail |
 | `fs.list` | read | `path` | Directory listing |
 | `fs.read` | read | `path` | File body, sliced |
-| `link.interval` | link | `n` (seconds, 1–60) | `interval=<n>s` |
+| `link.interval` | link | `n` (seconds, 0.5–60) | `interval=<n>s` |
 | `fs.write` | write | `path`, `data` | `wrote=<bytes>` |
 | `fs.append` | write | `path`, `data` | `wrote=<bytes>` |
 | `fs.mkdir` | write | `path` | `mkdir=<path>` |
@@ -156,28 +156,27 @@ know, and the existing peers never send these.
 | `app.close` | write | `arg` (app id) | `closed=<id>` |
 | `reboot` | write | — | `reboot=scheduled`, then a restart two intervals later |
 | `lua` | full | `data` (source) | Captured `print` output, or `error: <message>` |
+| `plant.status` | read | — | Version, uptime, memory, energy, link health, cache age, halls |
+| `plant.snapshot` | read | `hall?`, `stocks?` | Paged snapshot: `kind`, `key`, `count`, `state` |
+| `plant.delta` | read | `cursor` | Changed entries plus the new cursor; `reason=resync` when expired |
+| `plant.alarms` | read | `since?` | Local level alarms with severity, source, first/last seen, ack |
+| `plant.book` | read | `recipe?` | The operated book: recipes with their inputs and outputs |
+| `plant.plan` | read | `target`, `qty?` | Steps, bottleneck, shortfall and warnings for one target |
+| `plant.history` | read | `stock?`, `n?` | The bounded ring: rate, trend and recent samples per stock |
+| `plant.paths` | read | `path?` | Semantic paths with cardinality, member count and bound state |
+| `plant.halls` | read | — | The hall registry and the merged, prefixed stock view |
+| `gate.set` | write | `line`, `state` (`0`/`1`) | `desired=<0\|1> actual=<0\|1>`, or `refused=<why>`; the setpoint is stored |
 
-A command that the current tier does not allow answers `LREP` with
-`state=error reason=needs_<tier>_control` and touches nothing.
+That is all 25 commands. A command that the current tier does not allow
+answers `LREP` with `state=error reason=needs_<tier>_control` and touches
+nothing.
 
-Implemented in 0.4.2 — the plant readout verbs
-([`plant-service.md`](plant-service.md)). The first
-contract is the **plant snapshot**, not a list of component addresses: an
-external client reads names and counts, and the OS keeps the UUIDs and paths
-inside.
-
-| `cmd` | Tier | Slice | Arguments | Returns |
-|---|---|---|---|---|
-| `plant.status` | read | 0.4.2 | — | Version, uptime, memory, energy, link health, cache age, halls |
-| `plant.snapshot` | read | 0.4.2 | `hall?`, `stocks?` | Paged snapshot: `kind`, `key`, `count`, `state` |
-| `plant.delta` | read | 0.4.2 | `cursor` | Changed entries plus the new cursor; `reason=resync` when expired |
-| `plant.alarms` | read | 0.4.2 | `since?` | Local level alarms with severity, source, first/last seen, ack |
-| `plant.book` | read | 0.4.5 | `recipe?` | The operated book: recipes with their inputs and outputs |
-| `plant.plan` | read | 0.4.5 | `target`, `qty?` | Steps, bottleneck, shortfall and warnings for one target |
-| `plant.history` | read | 0.4.7 | `stock?`, `n?` | The bounded ring: rate, trend and recent samples per stock |
-| `plant.paths` | read | 0.4.7 | `path?` | Semantic paths with cardinality, member count and bound state |
-| `plant.halls` | read | 0.4.8 | — | The hall registry and the merged, prefixed stock view |
-| `gate.set` | write | 0.4.8 | `line`, `state` (`0`/`1`) | `desired=<0\|1> actual=<0\|1>`, or `refused=<why>`; the setpoint is stored |
+The plant rows are specified in [`plant-service.md`](plant-service.md) and
+arrived in slices: `plant.status` through `plant.alarms` in 0.4.2,
+`plant.book` and `plant.plan` in 0.4.5, `plant.history` and `plant.paths` in
+0.4.7, and `plant.halls` with `gate.set` in 0.4.8. The first contract is the
+**plant snapshot**, not a list of component addresses: an external client reads
+names and counts, and the OS keeps the UUIDs and paths inside.
 
 **`move` is not in this table.** Item transfer by name (`from`, `to`, `n`, `key`,
 `policy`) is designed in [`names.md`](names.md) and [`bus.md`](bus.md) and arrives
@@ -560,7 +559,7 @@ once it does not.
    `app.open`, `app.close`, `reboot`, behind `linkControl`. Shipped.
 3. **The sidecar.** The same command surface over a card component instead of the
    Internet Card, with a bulk inventory read — [`sidecar.md`](sidecar.md), 0.4.10.
-   The rack-bus option (row B below) is **retired**: it needed hardware decision 25
+   The rack-bus option (row B in Options above) is **retired**: it needed hardware decision 25
    deleted.
 
 Not planned: arbitrary code execution, cluster or node control, anything that

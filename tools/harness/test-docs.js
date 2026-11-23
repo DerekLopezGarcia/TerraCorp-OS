@@ -120,6 +120,53 @@ const docs = ["README.md", "AGENTS.md"].concat(
 
 const failures = [];
 
+// The command table in docs/external-link.md is a contract with the code: the
+// closed verb set and its tiers live in link.lua, and a table that drifts is a
+// client sending a verb the OS rejects (or one the doc forgot). F25/F26.
+const linkLua = fs.readFileSync(path.join(root, "src", "lib", "tc", "link.lua"), "utf8");
+const commandsBlock = (linkLua.match(/local COMMANDS = \{([\s\S]*?)\n\}/) || [])[1];
+if (!commandsBlock) {
+  console.error("FAIL src/lib/tc/link.lua no longer declares COMMANDS; update this gate, not the docs");
+  process.exit(1);
+}
+const codeCommands = new Map();
+for (const line of commandsBlock.split(/\r?\n/)) {
+  const m = line.match(/^\s*(?:\["([^"]+)"\]|([A-Za-z_][\w.]*))\s*=\s*"([a-z]+)"/);
+  if (m) codeCommands.set(m[1] || m[2], m[3]);
+}
+const external = fs.readFileSync(path.join(root, "docs", "external-link.md"), "utf8");
+const headers = [...external.matchAll(/^\|\s*`cmd`\s*\|\s*Tier\s*\|/gm)];
+if (headers.length !== 1) {
+  failures.push("docs/external-link.md: has " + headers.length + " cmd+Tier tables — the command set must be one table");
+}
+const docCommands = new Map();
+if (headers.length > 0) {
+  for (const line of external.slice(headers[0].index).split(/\r?\n/)) {
+    const m = line.match(/^\|\s*`([^`]+)`\s*\|\s*([a-z]+)\s*\|/);
+    if (m) {
+      if (docCommands.has(m[1])) failures.push("docs/external-link.md: lists `" + m[1] + "` twice");
+      docCommands.set(m[1], m[2]);
+      continue;
+    }
+    if (line.startsWith("|")) continue;
+    break;
+  }
+}
+if (headers.length === 1) {
+  if (docCommands.size !== codeCommands.size) {
+    failures.push("docs/external-link.md: table lists " + docCommands.size + " commands — link.lua declares " + codeCommands.size);
+  }
+  for (const [cmd, tier] of codeCommands) {
+    if (!docCommands.has(cmd)) failures.push("docs/external-link.md: is missing `" + cmd + "` (" + tier + ") from link.lua");
+    else if (docCommands.get(cmd) !== tier) {
+      failures.push("docs/external-link.md: `" + cmd + "` is " + docCommands.get(cmd) + " — link.lua says " + tier);
+    }
+  }
+  for (const cmd of docCommands.keys()) {
+    if (!codeCommands.has(cmd)) failures.push("docs/external-link.md: lists `" + cmd + "`, which link.lua does not run");
+  }
+}
+
 for (const rel of docs) {
   const text = fs.readFileSync(path.join(root, rel), "utf8");
   const lines = text.split(/\r?\n/);
