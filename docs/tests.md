@@ -41,6 +41,32 @@ npm run test:plant
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
 
+## 0.4.9 build gate checks
+
+The 0.4.9 build is the tree on `main` at `9e93fd6` (`git describe --tags`:
+`v0.4.8-21-g9e93fd6`). It is **built and deliberately untagged**: `v0.4.8` is
+still the last release, and `versioning.md` holds the four conditions that must
+be met before a `v0.4.9` tag is cut. This section is the gate record for that
+build, not a release note.
+
+Run from the repository root on 2026-11-23; all seven commands exited 0:
+
+| Gate | Output |
+|---|---|
+| `npm run check` | `72 files checked, 0 errors`; `manifest: 55 files` |
+| `npm run size` | installer image `22 files, 161.0 KB of 256 KB target` — 31% of the 512 KB floppy |
+| `npm run test:naming` | slugs, validation, the label guess and qualification passed |
+| `npm run test:installer` | the image installs, refuses, resumes and never writes the floppy |
+| `npm run test:report` | names, status frames, cadence, backoff and the page passed |
+| `npm run test:master` | registration, names, the merged view and the registry passed |
+| `npm run test:apps` | the DNS table and the line control draw, edit and push |
+
+The same run also passed `npm run test:docs` (36 documents agree), `npm run sim`
+(no errors), `npm run sim:oc` (7 scenarios, no failures) and `npm run test:link`
+(48 link scenarios, 0 failures). These are harness results: they show the build
+is internally consistent, not that it has booted in-game. The in-game record for
+0.4.9 is the sub-second link interval run in the results log below.
+
 ## 0.4.1 Plant readout checks
 
 `npm run test:plant` loads the six plant modules and runs the casing hall
@@ -1110,6 +1136,14 @@ Harness for the same change: `npm run test:link` is 48 scenarios (the new
 `off_refuses_read` asserts a read command is refused at `off`), and
 `npm run test:bridge` asserts a fractional `n` is accepted for `link.interval`
 and still refused for `fs.read`. Both fail when the change is reverted.
+
+0.4.9 build gates (2026-11-23): the six gates that accept the build all pass on
+`main` at `9e93fd6` — `test:naming`, `test:installer`, `test:report`,
+`test:master`, `test:apps` and `npm run size` (`22 files, 161.0 KB`), with
+`npm run check` at `72 files checked, 0 errors` and `manifest: 55 files`. The
+full table, including `test:docs`, `sim`, `sim:oc` and `test:link`, is in
+[0.4.9 build gate checks](#049-build-gate-checks). The build stays deliberately
+untagged: `v0.4.8` is the last release.
 
 ## F0 exit checklist
 
