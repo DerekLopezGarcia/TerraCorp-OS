@@ -173,7 +173,7 @@ discovery.
   with 1128 and 5, and `gate.set` answers `unknown_line` without a configured
   gate; the real second-hall merge, gate reconciliation and move remain pending.
 - **Harness green**: `npm run check` (68 files, 56-file manifest), `test:link`
-  (46 scenarios), `test:bridge`, `test:history`, `test:book`, `test:mcp`,
+  (47 scenarios), `test:bridge`, `test:history`, `test:book`, `test:mcp`,
   `test:field`, `test:plant`, `test:line`, `sim`, `sim:oc` and the
   50-combination screen matrix.
 - **0.4.5a parser written**: `tc.line` parses `/etc/lines/*.line` (`stock in/out`,

@@ -10,7 +10,7 @@ Status: **phase 1 and 2 implemented**, merged for 0.3.20. What exists today:
 | Start after first render, one step per frame | `src/boot/kernel.lua` |
 | Bridge | `tools/bridge/bridge.js` |
 | Operator window: state, sink, token, tier | `src/apps/gaia.lua` |
-| Gate | `npm run test:link` (46 scenarios), `npm run test:bridge` and `npm run test:gaia` |
+| Gate | `npm run test:link` (47 scenarios), `npm run test:bridge` and `npm run test:gaia` |
 
 0.4.2 adds the plant readout verbs below. The local **Plant** app does not need
 the link, and the link does not need the service: the four verbs read the
