@@ -209,9 +209,8 @@ every save (`config.lua:9-26,48-71`):
 Two of those are dead: **`masterId` is never read or written** by any code path
 (the only `masterId` in `src/` is an `ASSIGN` frame field, `net.lua:24`), and
 **`hostname` is read (`kernel.lua:597`) but never written** — Settings has no row
-for it. **No key selects a transport:** `linkTransport` is a name used in design
-notes, is absent from `config.lua`, and `config.set` rejects unknown keys, so it
-could never be stored today.
+for it. `linkTransport` appears in `status.md:93` and **does not exist** in
+`config.lua`, and `config.set` rejects unknown keys, so it could never be stored.
 
 **`/etc` (operator-authored, survives updates):**
 
@@ -311,12 +310,10 @@ One POST per interval; `linkControl` decides how far the far side reaches
 - `/init.lua`, `/boot/`, `/lib/`, `/apps/` are **PROTECTED**: writes there need
   `full` (`link.lua:66-77`).
 - A command not in the table is rejected `unknown_cmd` (`link.lua:494-496`).
-  **There is no item `move` command** — item transfer is designed in
-  [`names.md`](names.md) and [`bus.md`](bus.md) and not built; `fs.move` is a
-  file rename.
-- `gate.set` answers `desired=<0|1> actual=<0|1>`, and `state` is `0`/`1`
-  everywhere; `open`/`closed` was a documentation error, fixed 2026-11-23. See
-  the command table in [`external-link.md`](external-link.md#command-set-closed).
+  **There is no item `move` command** — `external-link.md:180` documents one;
+  `fs.move` is a file rename.
+- `gate.set` answers `desired=<0|1> actual=<0|1>`; `open`/`closed` is a
+  documentation error in `plant-service.md:97`.
 
 ### 7.4 The bridge and the agent
 
@@ -479,7 +476,7 @@ small unpublished tail.
 
 # Part II — The decision register, reconciled
 
-28 decisions (`status.md:38-103`). "Status" is this document's verdict.
+28 decisions (`status.md:38-121`). "Status" is this document's verdict.
 
 | # | Decision | Status |
 |---|---|---|
@@ -499,34 +496,31 @@ small unpublished tail.
 | 17 | Its first job is a DNS: semantic hierarchical paths | **Amended by 26** (node name is the root of the path) |
 | 18 | Hardware facts live in the world; a gate's desired state persists | **Active** |
 | 19 | Recipes may be imported, never redistributed | **Active** |
-| 20 | The plant runs on plain computers, not rack servers | **Active** — see the note below |
-| 21 | Two namespaces: addresses route, paths search | **Amended by 26** (no gateway until a second hall exists) |
+| 20 | The plant runs on plain computers, not rack servers | **Active** — 25 removed the rack layer under it; the rule stands |
+| 21 | Two namespaces: addresses route, paths search | **Amended by 26** (no gateway; it went with the second hall) |
 | 22 | Component kinds are plugins; a plugin is data | **Active** (`tc.driver`) |
 | 23 | Self-contained readout first (2026-11-15) | **Active** — the pivot that everything after it assumes |
 | 24 | Lines are black boxes (2026-11-15) | **Active** |
-| 25 | Racks dropped, line nodes instead (2026-11-16) | **Active** — but see its supersession list |
-| 26 | The node registry is the DNS (2026-11-16) | **Active** — **contradicted in code**, see below |
+| 25 | Racks dropped, line nodes instead (2026-11-16) | **Active** — supersedes 1, 3–7, 14 and F2, not 20; 12 moot, 13 re-pointed |
+| 26 | The node registry is the DNS (2026-11-16) | **Active** — **reconciled by 26-A**: the hall module stays, the file and the gateway are gone |
 | 27 | The sidecar replaces the card, not the protocol | **Active, not built** (0.4.10) |
 | 28 | A bus may move stock between named endpoints | **Active, not built** (0.4.11) |
 
-**Three defects in the register itself:**
+**The register was corrected on 2026-11-23 (F33-F37).** The heading said
+"Decisions, 1-27" over 28 entries, `roadmap.md`'s copy stopped at 27, decision 25
+claimed to supersede 20 — which asks for exactly the removal 25 performs — and 12
+and 13 lost their subject with the Vault. The heading now reads 1-28 and both lists
+carry 28; 25 supersedes 1, 3–7, 14 (service tiers) and F2 only; 12 is moot with its
+rule kept, and 13 is re-pointed at the local book (`status.md:38`, `:48-54`,
+`:79-86`; `roadmap.md:764-770`, `:899-912`, `:948-955`).
 
-1. **The heading says "Decisions, 1-27"; the list contains 28** (`status.md:38`
-   vs `:95-103`). `roadmap.md`'s copy of the list really does stop at 27
-   (`roadmap.md:719-913`). Fix: heading to 1-28, append 28 to `roadmap.md`.
-2. **Decision 25 claims to supersede decision 20, but they agree.** 20 says "plain
-   computers, not rack servers"; 25 removes the racks. Superseding 20 is wrong;
-   25 should only supersede 1, 3–7, 14 (service tiers) and phase F2.
-3. **Decision 25 omits 12 and 13**, both of which lose their subject with the
-   Vault and the cluster. 12 must be marked moot; 13 must be re-pointed at the
-   local book.
-
-**Decision 26 vs the code:** decision 26 says "no gateway, **no `halls.tsv`**",
-and `roadmap.md:322` agrees ("`tc.halls` and `/etc/halls.tsv` go with the racks").
-But `tc.halls` still ships, `plant.lua:92` loads `/etc/halls.tsv` at every boot,
-and `plant.halls` is a live read verb (`link.lua:48`). The docs describe it
-accurately; **the code contradicts the decision.** One of the two has to move
-(Part III, P6).
+**Decision 26 vs the code (closed by 26-A, 2026-11-23):** 26 removed the gateway
+and the `/etc/halls.tsv` file, not the merge. `plant.lua:316-321` builds the hall
+in memory from the node's own name, `halls.load`, `halls.save` and `halls.PATH` were
+deleted in `6236f99`, `halls.lua` still ships because the plant requires it
+(`payload.lua:27`), and `plant.halls` stays a read verb (`link.lua:48`).
+`roadmap.md:341-343` says the plant no longer loads `/etc/halls.tsv`; `status.md:94-101`
+and `roadmap.md:926-933` record the amendment as 26-A.
 
 ---
 
@@ -612,15 +606,20 @@ configuration file is hand-editable and the kernel reads it.
 
 ## P6 — Decision register (7)
 
+**All seven fixed 2026-11-23.** The register reads 1-28 in both files, 25 supersedes
+only what it removes, 12 and 13 are settled, 26-A reconciles decision 26 with
+`plant.lua:316-321`, the implementation order names only outstanding work, and the
+gateway is called removed everywhere (`middleware.md:3-10`).
+
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F33 | H | Heading "Decisions, 1-27" but 28 exist | `status.md:38` vs `:95-103` |
-| F34 | H | `roadmap.md`'s decision list stops at 27 | `roadmap.md:719-913` |
-| F35 | H | **Fixed 2026-11-23.** Decision 26 says no `halls.tsv`; the plant no longer reads it — the hall is the node's own name. `halls.load`/`save` remain as dead code for P9 | `status.md:84` vs `plant.lua:92`, `link.lua:48` |
-| F36 | M | Decision 25 claims to supersede 20, which it agrees with | `status.md:78` |
-| F37 | M | Decision 25 does not mark 12 (moot) or 13 (re-pointed) | `status.md:48,74-79` |
-| F38 | M | The "Implementation order" still schedules the second hall and lists work that is done | `status.md:233-236` |
-| F39 | L | The gateway is called "deferred" in one place and "removed" in another | `status.md:211,251` vs `:84` |
+| F33 | H | **Fixed 2026-11-23.** The heading reads "Decisions, 1-28" over 28 entries | `status.md:38` |
+| F34 | H | **Fixed 2026-11-23.** `roadmap.md`'s decision list carries 28 | `roadmap.md:948-955` |
+| F35 | H | **Fixed 2026-11-23.** Decision 26 and 26-A say the file and the gateway are gone while the merge stays; the plant never reads `/etc/halls.tsv`, and `halls.load`/`save`/`PATH` were deleted in `6236f99` | `status.md:94-101` vs `plant.lua:316-321`, `link.lua:48` |
+| F36 | M | **Fixed 2026-11-23.** 25 supersedes 1, 3–7, 14 and F2 only; 20 stands, part-amended | `status.md:82-84` |
+| F37 | M | **Fixed 2026-11-23.** 12 is marked moot and 13 re-pointed at the local book | `status.md:48-54`, `:79-86` |
+| F38 | M | **Fixed 2026-11-23.** The implementation order lists only outstanding work and marks 0.4.1-0.4.9 delivered | `status.md:238-258` |
+| F39 | L | **Fixed 2026-11-23.** The gateway is called removed everywhere; `middleware.md` carries the dropped banner and no table row lists it | `status.md:232-236`, `:274-280`, `middleware.md:1-10` |
 
 ## P7 — Removed features still documented (16)
 
@@ -699,7 +698,7 @@ trivia; and the recipe dataset has one path.
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F71 | M | `names.md` is stamped 0.4.1 and uses `hall1/ore_processing/…` examples while decision 26 makes the node name the path root (`casing/ingots`) | `names.md:3,18,88-93` vs `status.md:80-85` |
+| F71 | M | `names.md` is stamped 0.4.1 and uses `hall1/ore_processing/…` examples while decision 26 makes the node name the path root (`casing/ingots`) | `names.md:3,18,88-93` vs `status.md:87-92` |
 | F72 | M | `names.md`'s command surface lists `path.assign`, `driver.reload`, `move`, `gate.set` as if they were verbs; only `gate.set` exists on the link and none of the others is implemented anywhere | `names.md:216-233` |
 | F73 | M | `sessions.md` / `terminal-protocol.md` build a remote-terminal model on decision 1, which decision 25 superseded; nothing in the current plan needs them | `sessions.md:1-14`, `terminal-protocol.md:3-33` |
 | F74 | M | `terminal-protocol.md` invents "32-bit framing" and cites `docs/net.md`, which does not exist | `terminal-protocol.md:20` |
@@ -732,14 +731,14 @@ Docs that survive as **records**: `cluster.md`, `relay.md`, `vault.md`,
 | 0.4.10 | Sidecar: Forge bridge card + bulk inventory scanner | `sidecar.md` | a mod, not documentation |
 | 0.4.11 | Bus: ports, core, metered moves between named endpoints | `bus.md` | 0.4.10 |
 | — | Reference dataset (SuSy Factory Flow) | `research-susy-planner.md` | a pinned commit and a schema read |
-| — | Multi-hall gateway/DNS | `middleware.md` | **the halls model is gone** (F35) |
 | — | Sessions / remote terminals | `sessions.md`, `terminal-protocol.md` | a new decision: decision 1 is superseded |
-| — | Second hall, real gate, real transport | `status.md:164-174` | hardware the rig does not have |
+| — | Second hall, real gate, real transport | `status.md:235-236` | hardware the rig does not have |
 
 `tc.halls`, `tc.gate` and `tc.move` exist and pass `test:field`; their in-game
 halves need hardware. Calling them "not built" (three documents do) is wrong;
 calling them "shipped" is also wrong. They are **modules built, integration
-pending, and now in conflict with decision 26** (F35).
+pending** — and decision 26-A reconciles them with decision 26: the hall module is
+the node's own name merged in memory, while the halls file and the gateway are gone.
 
 ---
 
