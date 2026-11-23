@@ -379,8 +379,10 @@ filesystem, floppy, and modem components:
 1. `TC1` frames encode and decode escaped values, reject missing or duplicate
    fields, reject field names that do not start lowercase, reject oversized
    frames, and reject malformed or non-`TC1` input.
-2. The registry loads, merges duplicate IDs, skips malformed lines, defaults an
-   invalid role, and saves back to `/var/nodes.tsv`.
+2. The registry loads, merges duplicate IDs, skips malformed lines and rows of an
+   unknown width, and saves back to `/var/nodes.tsv`. A fourteen-column file and
+   the eight-column 0.3.x file both load their fields correctly and are rewritten
+   in the eleven-column shape at that first boot.
 3. Provisioning fills a floppy with `/init.lua`, `/payload`, and `/install.log`,
    rejects a floppy that holds foreign data, and refuses a payload that does not
    fit in 512 KB.
@@ -468,7 +470,8 @@ Manual in-game checks for 0.3.0:
   that the server's EEPROM and `/etc/terracorp.cfg` on the master are untouched.
 - Remove power from one node (or let it go offline); Nodes marks it offline
   after the grace period and a **Ping** sends a frame once it returns.
-- Rename a node and cycle its role; verify `/var/nodes.tsv` and the list update.
+- Rename a node; verify `/var/nodes.tsv` and the list update. (Role cycling is
+  gone with the `role` column — F20.)
 - Press **Prepare** again with the same floppy: it arms instantly, reuses the
   bootstrap, and the notification says the payload is already there.
 - Press **Refresh**: every node with a modem is pinged and returns online via

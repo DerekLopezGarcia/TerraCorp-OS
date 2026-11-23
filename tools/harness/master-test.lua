@@ -399,6 +399,61 @@ do
 end
 
 --------------------------------------------------------------------------------
+-- Registry migration (F20)
+--------------------------------------------------------------------------------
+
+do
+  local vfs = newVfs()
+  -- A registry written before 0.4.9: role, jobs and drain are still columns 3,
+  -- 10 and 11, which is exactly the shape that must not be read as the new one.
+  vfs.write("/var/nodes.tsv",
+    "node-a\tcasing\tline\tmb-1\tonline\t900\t1400\t303\t0.4.9\t3\ttrue\t2\t1\t600\n")
+
+  local nodes = registry.load(vfs)
+  local node = registry.find(nodes, "node-a")
+  check(node ~= nil, "a fourteen-column registry still loads")
+  equal(node and node.name, "casing", "the name comes from column 2 of the old shape")
+  equal(node and node.modem, "mb-1", "the modem address survives the migration")
+  equal(node and node.mem, 900, "memory comes from column 6 of the old shape")
+  equal(node and node.v, "0.4.9", "the version comes from column 9")
+  equal(node and node.stocks, 2, "the stock count comes from column 12, not column 10")
+  equal(node and node.alarms, 1, "alarms come from column 13")
+  equal(node and node.uptime, 600, "uptime comes from column 14")
+  equal(node and node.state, "offline", "a migrated node starts offline")
+  equal(node and node.role, nil, "role is not carried into the new shape")
+  equal(node and node.jobs, nil, "jobs is not carried into the new shape")
+  equal(node and node.drain, nil, "drain is not carried into the new shape")
+
+  local after = vfs.read("/var/nodes.tsv")
+  local width = 1
+  for _ in after:gmatch("\t") do width = width + 1 end
+  equal(width, #registry.columns, "the file is rewritten in the current shape at first boot")
+  check(after:find("mb-1", 1, true) ~= nil, "the rewrite keeps the modem address")
+  check(after:find("0.4.9", 1, true) ~= nil, "the rewrite keeps the recorded version")
+  check(after:find("\tline\t", 1, true) == nil, "the rewrite drops the role")
+
+  -- The 0.3.x shape (eight columns) must load too, and migrate the same way.
+  local old = newVfs()
+  old.write("/var/nodes.tsv", "node-b\tpress\tworker\tmb-2\toffline\t450\t800\t12\n")
+  local older = registry.load(old)
+  local press = registry.find(older, "node-b")
+  check(press ~= nil, "an eight-column registry still loads")
+  equal(press and press.modem, "mb-2", "the old modem address survives")
+  equal(press and press.mem, 450, "the old memory survives")
+  local rewrote = old.read("/var/nodes.tsv")
+  local oldWidth = 1
+  for _ in rewrote:gmatch("\t") do oldWidth = oldWidth + 1 end
+  equal(oldWidth, #registry.columns, "the eight-column file is rewritten too")
+
+  -- An unreadable width is skipped, not guessed: a wrong row would be worse
+  -- than a missing one, and the rewrite still normalises what it could read.
+  local broken = newVfs()
+  broken.write("/var/nodes.tsv", "node-c\tonly-two\n")
+  local none = registry.load(broken)
+  equal(#none, 0, "a row of an unknown width is not guessed at")
+end
+
+--------------------------------------------------------------------------------
 -- Configuration push
 --------------------------------------------------------------------------------
 

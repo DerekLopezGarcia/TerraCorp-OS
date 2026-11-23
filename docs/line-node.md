@@ -169,13 +169,18 @@ after the stale window. **There is no token handshake** — the wired modem bus 
 the boundary (`master.lua:9-10`), and the frame carries the literal `token=none`
 only because `net.lua:24` requires the field.
 
-The registry writes **fourteen** columns
-(`registry.lua:14`): `id`, `name`, `role`, `modem`, `state`, `mem`, `disk`,
-`lastSeen`, `v`, `jobs`, `drain`, `stocks`, `alarms`, `uptime`. Four of them —
-`role` (still accepting `worker`/`storage`/`node`/`line`), `jobs`, `drain` and
-`modem` — are rack-era residue that the master always writes as `line`, `0`, `0`
-and the node's modem address. They stay until something decides whether the file
-keeps those columns; nothing in the product reads them.
+The registry writes **eleven** columns (`registry.lua:14`): `id`, `name`,
+`state`, `mem`, `disk`, `lastSeen`, `v`, `modem`, `stocks`, `alarms`, `uptime`.
+`modem` stays because the master needs a stored address to reach a node that has
+gone quiet (`master.lua:147,193,221,243`). The three rack-era columns — `role`
+(which duplicated the runtime role `config.lua` owns), `jobs` and `drain` — were
+removed in 0.4.9 (F20): nothing read them.
+
+A file written before that carries fourteen columns, and the 0.3.x shape has
+eight. `registry.load` decodes both by width and rewrites the file once in the
+current shape, so an upgraded machine **migrates at its first boot** and keeps
+its names and modem addresses. A row of an unknown width is skipped rather than
+guessed at, because reading the wrong columns would store a wrong record.
 
 The **Nodes app is the DNS**. One row per node that talks to the master:
 

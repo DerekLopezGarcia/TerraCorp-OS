@@ -2,19 +2,35 @@
 --
 -- One tab-separated line per node, in this order:
 --
---   id  name  role  modem  state  mem  disk  lastSeen
+--   id  name  state  mem  disk  lastSeen  v  modem  stocks  alarms  uptime
 --
 -- `lastSeen` is the master's uptime in seconds for the current session. It is
 -- not comparable across reboots, so loading the registry marks every node
 -- offline and resets lastSeen. The updater preserves this file.
+--
+-- `modem` is the address the master sends to; it is the one rack-era field with
+-- a live reader (`master.lua:147,193,221,243,393`). `role`, `jobs` and `drain`
+-- were removed in 0.4.9 (F20): nothing read them, and `role` duplicated the
+-- runtime role that `config.lua` owns. A file written before that carries 14 or
+-- 8 columns; `load` decodes either shape and rewrites the file once in the
+-- current one, so an upgraded machine migrates at its first boot.
 
 local registry = {}
 
 registry.path = "/var/nodes.tsv"
-registry.columns = { "id", "name", "role", "modem", "state", "mem", "disk", "lastSeen", "v", "jobs", "drain", "stocks", "alarms", "uptime" }
+registry.columns = { "id", "name", "state", "mem", "disk", "lastSeen", "v", "modem", "stocks", "alarms", "uptime" }
 registry.states = { online = true, offline = true, provisioning = true, conflict = true }
-registry.roles = { worker = true, storage = true, node = true, line = true }
 registry.MAX_NAME = 24
+
+-- Column positions by row width. Row shapes that ever shipped:
+--   8  id name role modem state mem disk lastSeen            (0.3.x)
+--   14 id name role modem state mem disk lastSeen v jobs drain stocks alarms uptime (0.4.0-0.4.9)
+--   11 the current shape
+local SHAPES = {
+  [8] = { id = 1, name = 2, modem = 4, state = 5, mem = 6, disk = 7 },
+  [14] = { id = 1, name = 2, modem = 4, state = 5, mem = 6, disk = 7, v = 9, stocks = 12, alarms = 13, uptime = 14 },
+  [11] = { id = 1, name = 2, state = 3, mem = 4, disk = 5, v = 7, modem = 8, stocks = 9, alarms = 10, uptime = 11 },
+}
 
 local function split(line)
   local columns = {}
@@ -78,15 +94,12 @@ function registry.upsert(nodes, record)
     node = {
       id = record.id,
       name = record.name or record.id:sub(1, 8),
-      role = "worker",
-      modem = "",
       state = "offline",
       mem = 0,
       disk = 0,
       lastSeen = 0,
       v = "",
-      jobs = 0,
-      drain = "",
+      modem = "",
       stocks = 0,
       alarms = 0,
       uptime = 0,
@@ -97,9 +110,6 @@ function registry.upsert(nodes, record)
 
   if record.name and record.name ~= "" then
     node.name = record.name
-  end
-  if record.role and registry.roles[record.role] then
-    node.role = record.role
   end
   if record.modem ~= nil then
     node.modem = clean(record.modem)
@@ -118,16 +128,6 @@ function registry.upsert(nodes, record)
   end
   if record.v ~= nil then
     node.v = clean(record.v)
-  end
-  if record.jobs ~= nil then
-    node.jobs = number(record.jobs)
-  end
-  if record.drain ~= nil then
-    if record.drain == true or record.drain == "true" then
-      node.drain = "true"
-    else
-      node.drain = ""
-    end
   end
   if record.stocks ~= nil then
     node.stocks = number(record.stocks)
@@ -149,36 +149,50 @@ function registry.load(vfs)
     return nodes
   end
 
+  local width = #registry.columns
+  local migrated = false
+
   for line in source:gmatch("[^\n]+") do
     line = line:gsub("\r$", "")
     if line ~= "" and line:sub(1, 1) ~= "#" then
       local columns = split(line)
-      -- Files written before the version, jobs, and drain columns have fewer
-      -- fields; the updater preserves the registry, so every shape loads.
-      if #columns >= 8 and columns[1] ~= "" then
+      local shape = SHAPES[#columns]
+      if not shape then
+        -- An unknown width is not guessed at: skipping a row loses a node,
+        -- reading the wrong columns writes a wrong record for it.
+        migrated = true
+      elseif columns[1] ~= "" then
+        if #columns ~= width then
+          migrated = true
+        end
         registry.upsert(nodes, {
-          id = columns[1],
-          name = columns[2],
-          role = columns[3],
-          modem = columns[4],
+          id = columns[shape.id],
+          name = columns[shape.name],
+          -- Kept so the master can still reach a node after the upgrade.
+          modem = shape.modem and columns[shape.modem],
           -- A reboot invalidates the previous session's uptime, so never trust
           -- a persisted "online" state.
           state = "offline",
-          mem = columns[6],
-          disk = columns[7],
+          mem = shape.mem and columns[shape.mem],
+          disk = shape.disk and columns[shape.disk],
           lastSeen = 0,
-          v = columns[9],
-          jobs = columns[10],
-          drain = columns[11],
-          stocks = columns[12],
-          alarms = columns[13],
-          uptime = columns[14],
+          v = shape.v and columns[shape.v],
+          stocks = shape.stocks and columns[shape.stocks],
+          alarms = shape.alarms and columns[shape.alarms],
+          uptime = shape.uptime and columns[shape.uptime],
         })
       end
     end
   end
 
   registry.sort(nodes)
+
+  -- Migrate on the first boot that reads an old file: the registry is the only
+  -- copy of the plant's names, so it is rewritten before anything can fail.
+  if migrated then
+    registry.save(vfs, nodes)
+  end
+
   return nodes
 end
 
@@ -200,15 +214,12 @@ function registry.save(vfs, nodes)
     lines[#lines + 1] = table.concat({
       clean(node.id),
       clean(node.name),
-      clean(node.role),
-      clean(node.modem),
       clean(node.state),
       tostring(number(node.mem)),
       tostring(number(node.disk)),
       tostring(number(node.lastSeen)),
       clean(node.v),
-      tostring(number(node.jobs)),
-      clean(node.drain),
+      clean(node.modem),
       tostring(number(node.stocks)),
       tostring(number(node.alarms)),
       tostring(number(node.uptime)),
@@ -220,51 +231,6 @@ function registry.save(vfs, nodes)
     data = table.concat(lines, "\n") .. "\n"
   end
   return vfs.write(registry.path, data)
-end
-
-function registry.aggregate(nodes)
-  local summary = {
-    total = #nodes,
-    online = 0,
-    offline = 0,
-    provisioning = 0,
-    mem = 0,
-    disk = 0,
-    workers = 0,
-    storage = 0,
-  }
-
-  for _, node in ipairs(nodes) do
-    if node.state == "online" then
-      summary.online = summary.online + 1
-      summary.mem = summary.mem + (node.mem or 0)
-      summary.disk = summary.disk + (node.disk or 0)
-    elseif node.state == "provisioning" then
-      summary.provisioning = summary.provisioning + 1
-    else
-      summary.offline = summary.offline + 1
-    end
-
-    if node.role == "worker" then
-      summary.workers = summary.workers + 1
-    elseif node.role == "storage" then
-      summary.storage = summary.storage + 1
-    end
-  end
-
-  return summary
-end
-
-function registry.setRole(nodes, id, role)
-  if not registry.roles[role] then
-    return nil, "invalid role"
-  end
-  local node = registry.find(nodes, id)
-  if not node then
-    return nil, "unknown node"
-  end
-  node.role = role
-  return node
 end
 
 function registry.rename(nodes, id, name)

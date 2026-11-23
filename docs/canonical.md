@@ -122,13 +122,13 @@ Any other value silently falls back to `desktop` (`config.lua:135-139`).
 Release notes (`/var/whatsnew.md`) are written **before** the role split, so a
 headless node gets them too (`kernel.lua:629-631`).
 
-**Two different `role` namespaces exist. Do not confuse them:**
+**One `role` namespace is left. Do not reintroduce the second:**
 
-- `config.get("role")` — the **OS role**: `desktop` | `line`.
-- `registry.role` — a **node record field**: `worker` | `storage` | `node` | `line`
-  (`registry.lua:16`), defaulting to `worker` (`registry.lua:81`). The master
-  always writes `line` (`master.lua:154,318`). The `worker`/`storage` values are
-  rack-era residue; `registry.setRole` has no caller.
+- `config.get("role")` — the **OS role**: `desktop` | `line` (`config.lua:33`).
+- There is **no** `registry.role` any more. The node registry lost the column with
+  F20 (2026-11-23); the master never needed it, and the `worker`/`storage` values
+  were rack-era residue that nothing read. `registry.setRole` and
+  `registry.aggregate` went with it.
 
 ## 4. The app set — eleven, no more, no fewer
 
@@ -583,9 +583,9 @@ configuration file is hand-editable and the kernel reads it.
 | ID | Sev | Finding | Where |
 |---|---|---|---|
 | F17 | H | Status frame: docs say 10 stocks, `off=<n>`, `others=<n>`; code caps at 8 with `more=<n>` | `line-node.md:157-159` vs `report.lua:20,190-193` |
-| F18 | H | Docs say the registry dropped `role`, `jobs`, `drain`; code still declares and writes them, and `roles` still lists `worker`/`storage` | `line-node.md:168-169` vs `registry.lua:14-16,200-215` |
+| F18 | H | **Fixed 2026-11-23.** The registry is 11 columns: `role`, `jobs` and `drain` are removed, `modem` stays (the master reads it). A 14-column or 8-column file loads by width and is rewritten once at first boot | `line-node.md:172-182`, `registry.lua:14-30,170-210` |
 | F19 | M | `line-node.md` says `tc.master` has a "token"; there is no handshake, the frame carries `token=none` because the field is required | `line-node.md:165-166` vs `master.lua:9-10,157-159` |
-| F20 | M | `registry.setRole`, `registry.aggregate`, `registry.rename` have no caller; the Nodes app offers no role cycling although README says it does | `registry.lua:225-268` |
+| F20 | M | **Fixed 2026-11-23.** `setRole` and `aggregate` are deleted with the `role` column; `rename` stays as the registry's own API; no document offers role cycling | `registry.lua`, `line-node.md:172` |
 | F21 | M | `masterId` config key is dead; `hostname` is read but never written | `config.lua:16,21`, `kernel.lua:597` |
 | F22 | M | Role cycling, jobs and drain remain documented as user-facing in `nodes`/`line-node`/README | `line-node.md:168-178` |
 | F23 | L | `line-node.md:89-90` still explains the floppy by reference to `boot/netboot.lua`, a file deleted with the racks | `line-node.md:89-91` |
@@ -671,7 +671,7 @@ so each one is decided rather than swept:
 | `halls.load` / `halls.save` / `halls.PATH` | **Deleted** — the last thing pretending `/etc/halls.tsv` exists |
 | `tc.move` (`move.run`) | **Kept, harness-only.** Named by decision 28 and covered by `test:field`; it becomes reachable when the bus (0.4.11) lands or the decision is retired. Not loaded into the kernel instance |
 | `gate:alarms` / `gate:status` | **Kept.** The read half of a gate; a gate has no hardware to report on yet, and deleting these would delete the only statement of what a gate reports |
-| `registry.aggregate` / `registry.setRole` | **Kept for now.** They belong with the `role` column, which is F18/P4: whether `/var/nodes.tsv` keeps rack-era columns is a data-format decision, not a cleanup |
+| `registry.aggregate` / `registry.setRole` | **Deleted** with F20. `role` is gone from the registry (it duplicated the runtime role `config.lua` owns), so there is nothing to set and nothing to count by role |
 | `registry.rename` | **Kept** — the Nodes app renames by upsert, but the helper is the registry's own API and is covered incidentally |
 | 23 inert TC1 verbs | **Kept as accepted legacy**, with a pointer to decision 25 in `net.lua`'s header; deleting verbs from a wire contract turns a clean `unknown verb` into a parser surprise for an old peer |
 | `config.masterId` | **Deleted** — no reader, no writer, and the frame field that shares the name is a different thing |
@@ -683,7 +683,7 @@ so each one is decided rather than swept:
 | F66 | M | `halls.save()` has no caller: `/etc/halls.tsv` is read every boot and never written by the OS | `halls.lua:195-204` |
 | F67 | M | `gate:alarms()` and `gate:status()` have no caller | `gate.lua:253,268` |
 | F68 | M | 23 of the 34 declared TC1 verbs are inert cluster/Relay/Vault residue | `net.lua:22-60` |
-| F69 | L | `registry.aggregate`, `registry.setRole`, `registry.rename` are exported and uncalled | `registry.lua:225-268` |
+| F69 | L | **Fixed 2026-11-23.** `registry.aggregate` and `registry.setRole` are deleted with the `role` column; `registry.rename` stays as the registry's own API | `registry.lua` |
 | F70 | L | `ui.lua:3-5` documents an app contract without `iconArt`/`iconStyle` | `ui.lua:3-5` |
 
 ## P10 — Naming and deferred designs (5)
