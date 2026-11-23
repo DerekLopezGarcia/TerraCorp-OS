@@ -89,8 +89,18 @@ function plant.new(options)
     pollInterval = self.pollInterval,
   })
   self.history = history.new({ vfs = self.vfs, log = self.log })
-  self.hallsRegistry = halls.load(self.vfs)
-  self.hall = halls.localHall(self.hallsRegistry, computer.address(), self.kernel.hostname)
+  -- Decision 26: a node's name is the root of its paths, and with the racks gone
+  -- there is no hall table to read. This machine *is* its own hall; the name is
+  -- the configured one, falling back to the hostname as before.
+  local configured = ""
+  local kernelConfig = self.kernel and self.kernel.config
+  if kernelConfig and type(kernelConfig.get) == "function" then
+    configured = tostring(kernelConfig.get("name") or "")
+  end
+  self.hall = {
+    name = configured ~= "" and configured or tostring(self.kernel.hostname or "node"),
+    address = computer.address(),
+  }
   self.thresholds = {}
   self.errors = {}
   self.alarmList = {}
@@ -269,7 +279,7 @@ function plant:status()
     link = link,
     components = #(self.components or {}),
     hall = self.hall and self.hall.name or nil,
-    halls = math.max(1, #(self.hallsRegistry and self.hallsRegistry.list or {})),
+    halls = 1,
     stocks = #(self.stock.stocks or {}),
     calls = self.stock.calls,
     scanning = self.stock.scanning,
@@ -300,14 +310,11 @@ function plant:snapshot()
 end
 
 --- The local hall plus every configured hall that has no snapshot yet. With
--- one machine this is a one-row view; a second hall shows `offline` until it
--- reports through the aggregator.
+-- one machine this is a one-row view; a second computer would show `offline`
+-- until it reported through the master.
 function plant:hallView()
-  local registry = self.hallsRegistry
-  if #(registry.list or {}) == 0 then
-    registry = halls.new()
-    halls.assign(registry, self.hall.name, self.hall.address)
-  end
+  local registry = halls.new()
+  halls.assign(registry, self.hall.name, self.hall.address)
   local snapshots = {
     [self.hall.address] = { snapshot = self:snapshot(), age = 0 },
   }

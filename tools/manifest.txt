@@ -35,6 +35,7 @@ src/lib/tc/move.lua
 src/lib/tc/naming.lua
 src/lib/tc/net.lua
 src/lib/tc/path.lua
+src/lib/tc/payload.lua
 src/lib/tc/plan.lua
 src/lib/tc/plant.lua
 src/lib/tc/registry.lua

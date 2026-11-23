@@ -344,54 +344,45 @@ in that path.
 `/etc/terracorp.cfg`; `/init.lua` sees the marker and runs `boot/install.lua`
 instead of the kernel (`init.lua:107-142`, `flash.lua:17-26`).
 
-### 8.1 Blocker: the flashed set does not fit the medium
+### 8.1 The flashed set is an explicit payload (fixed 2026-11-23)
 
-Measured on 2026-11-23:
+The flasher used to copy whole roots — `ROOTS = { /init.lua, /boot, /lib, /apps }`
+= **526,540 B (514.2 KB)** — onto a **524,288 B (512 KB)** floppy, refusing unless
+`total - used >= bytes + 8 KB`. **Every flash failed**, deterministically. The
+size gate reported 155.0 KB because it measured a hand-written 21-file list the
+flasher never read, and `test:flash` was green because its fake master volume
+held nine stub files of about 120 B.
 
-| Quantity | Bytes | KB |
-|---|---|---|
-| `src/init.lua` | 4,741 | 4.6 |
-| `src/boot/` (3 files) | 60,788 | 59.4 |
-| `src/lib/` (34 files) | 333,886 | 326.1 |
-| `src/apps/` (11 files) | 127,125 | 124.1 |
-| **what `flash.lua` writes** (`ROOTS`) | **526,540** | **514.2** |
-| floppy in Supersymmetry | 524,288 | 512 |
-| what `size.js` measures (21 files) | 158,761 | **155.0** |
+The list now lives once, in `src/lib/tc/payload.lua`:
 
-`flash:write` refuses a medium unless `total - used >= bytes + 8 KB`
-(`flash.lua:197-203`). With `bytes = 514.2 KB` and `total = 512 KB`, **every flash
-to a 512 KB floppy fails deterministically.** `size.js` cannot see this because it
-measures a 21-file *intended* payload that `flash.lua` does not honour: the
-flasher copies whole roots, not a payload list.
+| Quantity | Now |
+|---|---|
+| payload files | **22** |
+| payload bytes | **163.3 KB** |
+| medium | 512 KB floppy, 8 KB margin |
+| gate | `npm run size` — 256 KB target, and fails if image + margin exceeds the medium |
+| closure | `npm run check` — fails with `PAYLOAD GAP` |
 
-**Measured, not estimated (2026-11-23).** Running the real `tc.flash:collect()`
-against the real boot volume returns `files=49 bytes=526540 kb=514.2`, and the
-guard evaluates `524288 < 534732` → refused, **10,444 B over**. The probe is
-`flash-real-probe.js` in the session workspace; it loads `src/lib/tc/flash.lua`
-under Fengari and binds the VFS to `src/`.
+Three gates now agree, which is the whole point:
 
-**Why `npm run test:flash` is green anyway.** The test's fake master volume
-(`tools/harness/flash-test.lua:183-198`) holds nine stub files of ~120 B total, so
-`collect()` totals a few hundred bytes against a 512 KB fake medium. The test
-proves the *logic* of the flasher and never touches the *size* of the real
-payload. A green suite is therefore not evidence that the installer fits, and this
-is the single most important thing the harness currently cannot see.
+- `flash.lua` copies exactly `payload.files` and nothing else.
+- `size.js` measures that same list (plus the `/installer.lua` marker and the
+  generated config), so what it weights is what gets written.
+- `check.js` fails when a payload file asks for a module that is in neither
+  `payload.files` nor `payload.desktopOnly`. The two lists together are the
+  contract.
 
-Consequences:
+The desktop UI (`tc.theme`, `tc.gfx`, `tc.ui`, ~51 KB) is now loaded inside the
+desktop branch of the kernel, so a headless node no longer carries a screen it
+does not have.
 
-- The changelog claim for 0.4.9 ("one floppy commissions every computer",
-  `changelog.lua:126-133`) is **not true as implemented**.
-- `line-node.md` quotes three different sizes for the same artifact ("156 KB"
-  at :10, "~129 KB" at :45, "~155 KB" at :69) and `README.md:111` a fourth
-  ("133 KiB").
-- The node payload that `line-node.md` designs (~121 KB) and `size.js` budgets
-  (155 KB, including `halls.lua`, which `line-node.md:51-52` says is *excluded*)
-  disagree with each other before either is compared to the code.
+**Proof the gate bites:** delete `/lib/tc/plant.lua` from the list and
+`npm run check` fails with `PAYLOAD GAP /boot/kernel.lua:631` and `:678`, exit 1.
+An earlier version of the gate missed it entirely — it matched `require("tc.x")`
+and the kernel calls `pcall(requireModule, "tc.x")`.
 
-**Resolution is a decision for the architect, not a documentation fix** (see
-Part III, P3). The two viable answers are: (a) `flash.lua` copies an explicit
-payload manifest and `size.js` gates exactly that list; or (b) the installer
-medium is a disk (≥ 1 MB), and the "floppy" premise of decision 25 is amended.
+Still open on P3: `line-node.md`'s budget table and the 0.4.9 changelog line still
+carry the old numbers, which is a documentation edit (F16).
 
 ## 9. Verification gates — real numbers
 
@@ -564,10 +555,10 @@ a card. Severity: **H** breaks the product or a promise, **M** misleads a reader
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F13 | **H** | `flash.lua` copies whole roots (514.2 KB) onto a 512 KB floppy → refuses every flash; the 0.4.9 headline feature cannot work | `flash.lua:17,197-203` vs `changelog.lua:126-133` |
-| F14 | H | `size.js` gates a 21-file payload the flasher does not use; the gate is blind to F13 | `size.js:24-46` |
-| F15 | H | `size.js` includes `halls.lua` in the node payload while `line-node.md` says halls is excluded | `size.js:43` vs `line-node.md:51-52` |
-| F16 | M | The installer image is quoted at 4 sizes: 156 KB, ~129 KB, ~155 KB, 133 KiB | `line-node.md:10,45,69`, `status.md:110`, `README.md:111` |
+| F13 | **H** | **Fixed 2026-11-23.** `flash.lua` copied whole roots (514.2 KB) onto a 512 KB floppy and refused every flash; it now copies `tc.payload` (22 files, 163.3 KB) | `flash.lua:120`, `payload.lua` |
+| F14 | H | **Fixed 2026-11-23.** `size.js` gated a list the flasher did not read; flasher, size gate and `check` now share `src/lib/tc/payload.lua` | `tools/payload.js`, `size.js`, `check.js` |
+| F15 | H | **Resolved 2026-11-23.** `halls.lua` is in the payload because the plant genuinely needs it; `line-node.md` must drop it from its "excluded" list | `payload.lua:26` vs `line-node.md:51-52` |
+| F16 | M | The installer image is still quoted at four sizes: 156 KB, ~129 KB, ~155 KB, 133 KiB — now one measured number exists to replace them | `line-node.md:10,45,69`, `status.md:110`, `README.md:111` |
 
 ## P4 — Roles, registry, master (7)
 
@@ -601,7 +592,7 @@ a card. Severity: **H** breaks the product or a promise, **M** misleads a reader
 |---|---|---|---|
 | F33 | H | Heading "Decisions, 1-27" but 28 exist | `status.md:38` vs `:95-103` |
 | F34 | H | `roadmap.md`'s decision list stops at 27 | `roadmap.md:719-913` |
-| F35 | H | Decision 26 says "no `halls.tsv`"; the code loads it every boot and exposes `plant.halls` | `status.md:84` vs `halls.lua:11`, `plant.lua:92`, `link.lua:48` |
+| F35 | H | **Fixed 2026-11-23.** Decision 26 says no `halls.tsv`; the plant no longer reads it — the hall is the node's own name. `halls.load`/`save` remain as dead code for P9 | `status.md:84` vs `plant.lua:92`, `link.lua:48` |
 | F36 | M | Decision 25 claims to supersede 20, which it agrees with | `status.md:78` |
 | F37 | M | Decision 25 does not mark 12 (moot) or 13 (re-pointed) | `status.md:48,74-79` |
 | F38 | M | The "Implementation order" still schedules the second hall and lists work that is done | `status.md:233-236` |

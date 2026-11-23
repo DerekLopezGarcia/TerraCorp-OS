@@ -7,6 +7,7 @@
 local vfsModule = require("tc.vfs")
 local installer = require("tc.installer")
 local flash = require("tc.flash")
+local payload = require("tc.payload")
 
 local failures, checked = {}, 0
 
@@ -181,19 +182,19 @@ end
 local MASTER_ADDRESS = "master-0001"
 
 local function masterVolume()
+  -- The master carries the node payload, so the fake must carry exactly the
+  -- files tc.payload names: the flasher copies that list and nothing else.
+  local files = {
+    ["/etc/terracorp.cfg"] = "return { role = \"desktop\", name = \"master\" }\n",
+    ["/var/log/tc.log"] = "master log\n",
+    ["/var/plant/history.tsv"] = "samples\n",
+  }
+  for _, path in ipairs(payload.files) do
+    files[path] = "-- payload stub for " .. path .. "\n"
+  end
   return newVolume({
     total = 4 * 1024 * 1024,
-    files = {
-      ["/init.lua"] = "-- entry\n",
-      ["/boot/kernel.lua"] = "return { start = function() end }\n",
-      ["/lib/tc/naming.lua"] = "return {}\n",
-      ["/lib/tc/stock.lua"] = "return {}\n",
-      ["/apps/nodes.lua"] = "return {}\n",
-      ["/apps/lines.lua"] = "return {}\n",
-      ["/etc/terracorp.cfg"] = "return { role = \"desktop\", name = \"master\" }\n",
-      ["/var/log/tc.log"] = "master log\n",
-      ["/var/plant/history.tsv"] = "samples\n",
-    },
+    files = files,
     dirs = { "/boot", "/lib", "/lib/tc", "/apps", "/etc", "/var", "/var/log", "/var/plant" },
   })
 end
@@ -285,7 +286,8 @@ do
   check(written.exists("/init.lua"), "the entry point is on the medium")
   check(written.exists("/boot/kernel.lua"), "the kernel is on the medium")
   check(written.exists("/lib/tc/naming.lua"), "the libraries are on the medium")
-  check(written.exists("/apps/nodes.lua"), "the apps are on the medium")
+  -- A line node has no desktop: carrying /apps is what made the medium 514 KB.
+  check(not written.exists("/apps/nodes.lua"), "the desktop apps stay off the medium")
   check(written.exists("/installer.lua"), "the installer marker is written")
   check(written.exists("/etc/terracorp.cfg"), "the node configuration is written")
   check(not written.exists("/var/log/tc.log"), "the master's log never travels")

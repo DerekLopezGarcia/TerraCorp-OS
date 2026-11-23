@@ -179,6 +179,24 @@ if (appStatus !== lua.LUA_OK) {
 }
 lua.lua_settop(L, 0);
 
+// The node payload has to be complete and closed. A flashed medium carries
+// exactly `payload.files`, so a module one of those files requires must be in the
+// list or declared desktop-only; otherwise a freshly flashed node fails to boot
+// in the world, where nobody can debug it.
+const payload = require("../payload");
+const payloadReport = payload.measure();
+for (const file of payloadReport.missing) {
+  errors++;
+  console.error("MISSING FROM THE NODE PAYLOAD " + file);
+  console.error("      declared in src/lib/tc/payload.lua but not on disk");
+}
+for (const problem of payload.closure()) {
+  errors++;
+  console.error("PAYLOAD GAP " + problem.file + ":" + problem.line);
+  console.error("      requires " + problem.module +
+    ", which is in neither payload.files nor payload.desktopOnly");
+}
+
 console.log(files.length + " files checked, " + errors + " errors");
 console.log("manifest: " + (manifest ? manifest.length : "missing") + " files");
 process.exit(errors ? 1 : 0);

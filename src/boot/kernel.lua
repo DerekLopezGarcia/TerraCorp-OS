@@ -571,9 +571,6 @@ function kernel.start(boot)
   local text = requireModule("tc.text")
   local log = requireModule("tc.log")
   local config = requireModule("tc.config")
-  local themeModule = requireModule("tc.theme")
-  local gfxModule = requireModule("tc.gfx")
-  local uiModule = requireModule("tc.ui")
 
   -- Create /etc and /var/log before loading preferences or opening the log;
   -- manual copies of src/ do not create them.
@@ -602,16 +599,12 @@ function kernel.start(boot)
 
   log.trace("Booting " .. version.product .. " " .. version.version .. " on " .. hostname)
 
-  local theme = themeModule.build(config)
   local instance = setmetatable({
     version = version,
     util = util,
     text = text,
     log = log,
     config = config,
-    theme = theme,
-    themeModule = themeModule,
-    gfxModule = gfxModule,
     vfs = vfs,
     vfsModule = vfsModule,
     -- Apps and Lab scripts load core modules through the kernel's loader, so
@@ -669,6 +662,17 @@ function kernel.start(boot)
     return
   end
 
+  -- The desktop UI is loaded here rather than before the role split: a line node
+  -- has no screen, and theme+gfx+ui are about 51 KB it would never call.
+  local themeModule = requireModule("tc.theme")
+  local gfxModule = requireModule("tc.gfx")
+  local uiModule = requireModule("tc.ui")
+  instance.themeModule = themeModule
+  instance.gfxModule = gfxModule
+  instance.theme = themeModule.build(config)
+  -- Kept as a local too: the splash and the UI below capture it.
+  local theme = instance.theme
+
   -- The local plant readout starts before the desktop: the app only reads its
   -- cache, and the first scan is one component call per second.
   local okPlant, plantModule = pcall(requireModule, "tc.plant")
@@ -712,7 +716,6 @@ function kernel.start(boot)
   end
 
   if instance.plant then
-    instance.halls = instance.plant.hallsRegistry
     instance.hall = instance.plant.hall
   end
 

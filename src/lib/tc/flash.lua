@@ -10,11 +10,10 @@
 
 local vfsModule = require("tc.vfs")
 local installer = require("tc.installer")
+local payload = require("tc.payload")
 
 local flash = {}
 flash.__index = flash
-
-flash.ROOTS = { "/init.lua", "/boot", "/lib", "/apps" }
 flash.MARKER = "/installer.lua"
 flash.MARGIN = 8 * 1024
 flash.MARKER_TEXT = table.concat({
@@ -116,47 +115,25 @@ function flash:checkMedium(medium)
   return true, "empty", volume
 end
 
---- Walk the runtime roots of the master's own volume.
+--- The node payload, read from the master's own volume.
+--
+-- The list comes from `tc.payload`: an explicit set, not a directory walk, so
+-- what the flasher writes is exactly what `npm run size` measures.
 function flash:collect()
   local entries, total = {}, 0
 
-  local function walk(path)
-    if self.vfs.isDirectory(path) then
-      local names, reason = self.vfs.list(path)
-      if not names then
-        return nil, reason or ("could not list " .. path)
-      end
-      table.sort(names)
-      for _, raw in ipairs(names) do
-        local name = cleanName(raw)
-        if name ~= "" then
-          local ok, why = walk(path .. "/" .. name)
-          if not ok then
-            return nil, why
-          end
-        end
-      end
-      return true
+  for _, path in ipairs(payload.files) do
+    if not self.vfs.exists(path) then
+      return nil, "the payload is incomplete: " .. path .. " is missing"
     end
-
     local data, reason = self.vfs.read(path)
     if not data then
       return nil, reason or ("could not read " .. path)
     end
     entries[#entries + 1] = { path = path, data = data, size = #data }
     total = total + #data
-    return true
   end
 
-  for _, root in ipairs(flash.ROOTS) do
-    if not self.vfs.exists(root) then
-      return nil, "the runtime is incomplete: " .. root .. " is missing"
-    end
-    local ok, why = walk(root)
-    if not ok then
-      return nil, why
-    end
-  end
   table.sort(entries, function(a, b)
     return a.path < b.path
   end)
