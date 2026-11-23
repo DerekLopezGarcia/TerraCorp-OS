@@ -58,7 +58,9 @@ stops every in-world computer from self-updating: `updater.check` offers an upda
 only when the installed version is *lower* than the latest release
 (`available = compareVersions(current, latest) < 0`, `updater.lua:375`). A machine
 stamped `0.4.8` against a `v0.4.8` release therefore sits still, which is the
-intent. But it means a machine can **run 0.4.9 code while reporting `0.4.8`** — the
+intent. [`versioning.md`](versioning.md) records the decision, what not to do
+while it holds, and the four conditions that must be true before anyone tags
+0.4.9. But it means a machine can **run 0.4.9 code while reporting `0.4.8`** — the
 live rig does exactly this (§10 records the repository side of the same effect).
 So: **a version stamp cannot distinguish the last release from an untagged
 build.** `fs.read /lib/tc/version.lua` is not a reliable answer to "what is this

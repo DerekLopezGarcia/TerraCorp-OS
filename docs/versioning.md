@@ -65,11 +65,45 @@ requests are required. If there is no Internet Card, no stable release,
 insufficient disk space, or a download/validation error, the current
 installation remains in place.
 
+## Tagging 0.4.9 — held back on purpose
+
+**Decision (2026-11-23): 0.4.9 stays untagged.** `v0.4.8` remains the latest
+published release and this repository has no `v0.4.9` tag.
+
+Why: `updater.check` offers an update only when the installed version is *lower*
+than the latest release (`available = compareVersions(current, latest) < 0`,
+`src/lib/tc/updater.lua:375`). Tagging `v0.4.9` would make every machine stamped
+below 0.4.9 — including the rigs that already run 0.4.9 code with the label held
+at 0.4.8 — offer the update on their next check, all at once. The hold buys time
+to finish the in-game half of the 0.4.9 slices first.
+
+What the hold means while it lasts:
+
+- A machine may **run 0.4.9 code and still report `0.4.8`**. The stamp is not
+  evidence of what is installed; a behaviour the old build cannot produce is. See
+  [`canonical.md`](canonical.md) §1.
+- Do not "correct" a rig's `version.lua` or `/var/version` to 0.4.9. That is what
+  makes it claim to be ahead of GitHub, and the freeze depends on it not doing so.
+- The freeze is a release decision, not a defect. Nothing in the code needs to
+  change to keep it.
+
+Before the tag is created, all of the following must hold:
+
+1. The 0.4.9 in-game checks in [`tests.md`](tests.md) are recorded: the
+   bare-computer floppy boot and `setBootAddress` on a plain computer.
+2. `src/lib/tc/version.lua`, `package.json` and `package-lock.json` agree, and the
+   changelog has an entry for the exact version being tagged.
+3. `npm run check`, `npm run sim`, `npm run sim:oc` and the suites in
+   `.github/workflows/release.yml` pass on the tagged tree.
+4. Whoever tags understands that the whole fleet updates on the next check, and
+   has decided that it is time.
+
 ## Initial stable release
 
 The current build is 0.4.9 Flint, built on 2026-11-16; v0.4.8 remains the latest
 published release until v0.4.9 is tagged. 0.4.9 removes the cluster and the Vault
-app, so the manifest shrinks from 62 to 53 entries. The updater only adds and
+app, so the manifest shrinks from 62 to 54 entries (`npm run check` prints
+`manifest: 54 files`). The updater only adds and
 replaces files, so a module left behind on an updated machine is inert: the
 kernel no longer loads it. A line node is installed from its floppy, not through
 this path ([`line-node.md`](line-node.md)). Earlier versions: 0.4.8 added six
