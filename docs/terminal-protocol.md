@@ -69,11 +69,12 @@ Frames are best-effort with gap detection:
 ## Bandwidth budget
 
 Constraints from `distributed.md`: relay paths are ~4 packets/s — terminals
-must ride direct cable/Linked Card, not relays; `maxPacketSize` 8192 default.
+must ride direct cable/Linked Card, not relays. `maxPacketSize` 8192 is the
+receive guard, not the send size; frames still leave under the 1 KB policy.
 
 | Flow | Budget |
 |---|---|
-| Full redraw 80x25 | ~150 spans ≈ 3–4 KB → one packet, or 2 if fragmented by card limit |
+| Full redraw 80x25 | ~150 spans, roughly 3 to 4 KB of span data, split into ≤ 1 KB TC1 frames — 4–5 packets under the 1 KB send policy |
 | Steady state | 1 packet per frame flip; ≤ 10 Hz; typical idle frame = no packet at all (no dirty cells → no send) |
 | Input | 1 packet per event batch, ≤ 8 events; typing at 10 keys/s ≈ 1–2 packets/s |
 | Keepalive | 1 packet / 10 s each way |

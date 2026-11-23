@@ -147,8 +147,10 @@ line node publishes its status straight to the master (decision 26).
 - No peer-to-peer DNS protocol between computers inside the game. A node asks the
   master only for what the master owns — its name — and never asks it to resolve
   another node's paths.
-- A path may span nodes: each proxy resolves the members it owns and reports the
-  rest as `unreachable_members`, so a partial view is always marked as partial.
+- A combined query such as `**/ingots` asks each node for its own members and
+  the master merges the answers; it is never one cross-node path. A node that
+  cannot answer is reported as `unreachable_members`, so a partial view is
+  always marked as partial.
 - Every member keeps `first_seen` (OpenComputers has no placement timestamp; see
   [the registration flow](#first-seen-the-registration-flow)).
 

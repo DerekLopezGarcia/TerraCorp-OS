@@ -27,7 +27,7 @@ turns the 0.5.0 "Sessions" phase into a concrete module and release plan.
    `headless` feeds tests. Harness gains a two-sessions scenario.
 3. **s3 — sessions**: multi-session kernel, focus switching, per-session
    tick budget, session profiles. Exit criteria from `roadmap.md`: two
-   headless + one local session, ≤64 KB per session, boot ≤1.5 s.
+   headless + one local session under 200 KB total, boot ≤1.5 s.
 4. **s4 — Flip** (from `render.md`): VRAM double buffering, capability
    probed, only after its in-game checklist.
 
