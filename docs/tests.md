@@ -86,8 +86,8 @@ against fake components. It requires:
 5. The plant raises `STARVED`/`FULL` from `/etc/plant.tsv`, `NO POWER` below
    15%, `STALE` for an old cache, and reports version/cache age in `status`.
 
-`node tools/harness/simulate.js plant --strict` opens the eleventh app from the
-Terminal and requires the empty-configuration message. `npm run test:screens`
+`node tools/harness/simulate.js plant --strict` opens the tenth app (plant) from
+the Terminal and requires the empty-configuration message. `npm run test:screens`
 runs all ten screen scenarios at five resolutions (50 combinations), `plant`
 among them.
 
@@ -687,7 +687,8 @@ Manual in-game checks add what the harness cannot prove:
 3. Read `/var/log/tc.log` from TerraCorp's boot volume. Record the `gpu` line's
    resolution/free-memory values and the uptime on `First render OK`.
 4. Run a 30-minute session. Open all eleven apps by icon and the first ten by
-   F1-F10 (Plant is the eleventh); verify the
+   F1-F10 (`lines` is the eleventh and has no function key; Plant is the tenth);
+   verify the
    desktop selection, Enter-to-open, and taskbar chips. Drag two icons to swap
    their cells, restart, and confirm the order remains. In System, verify uptime
    advances once per second and readings refresh every two seconds. In Update,

@@ -556,9 +556,9 @@ and the four documents that listed the 0.4.8 app set were corrected.
 | F06 | H | **Fixed.** `nodes` and `notes` shared `NTS`; `nodes` is `NOD` | `nodes.lua:15` |
 | F07 | H | **Fixed.** README, AGENTS, architecture and blackbox now list the same eleven ids, with `lines` in and `vault` out | `README.md`, `AGENTS.md:26`, `architecture.md:94`, `blackbox.md:79` |
 | F08 | M | **Fixed.** `order` runs 1..11; the 8 gap is closed | `gaia.lua:23`, `lab.lua`, `plant.lua`, `lines.lua` |
-| F09 | M | **Fixed.** architecture says F1-F10 (it said F1-F9), and the text names `lines` as the one without a key | `architecture.md:130` |
+| F09 | M | **Fixed.** README says F1-F10 open the first ten apps in `order` and names `lines` as eleventh with no function key; architecture repeats the no-key fact | `README.md`, `architecture.md:132` |
 | F10 | M | **Fixed.** "all ten apps" became eleven | `architecture.md:119` |
-| F11 | M | **Fixed.** README's Nodes key map matches `nodes.lua:300-307`, and `lines` has its own entry | `README.md` |
+| F11 | M | **Fixed.** README's Nodes key map carries every binding in `nodes.lua:300-329` (arrows, PgUp/PgDn, Home/End, `R`/`P`/`F`/`I` twice, Enter/Tab), and `lines` has its own entry | `README.md`, `nodes.lua:300-329` |
 | F12 | L | **Fixed.** `check.js` fails on a duplicate icon code, a duplicate order and a missing order; both proved by reverting the fix | `check.js` |
 
 ## P3 — Node payload and the floppy (4)

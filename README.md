@@ -165,8 +165,9 @@ whole system.
   smoothly, like a dragged window. The new layout is saved on release and
   restored after a reboot or update. With no window focused, the arrow keys move
   the selection, Home/End jump to the ends, and Enter opens the selected app.
-  F1-F10 open the first ten apps directly; Plant opens from its icon or with
-`open plant` in the Terminal. Esc minimizes the focused window.
+  F1-F10 open the first ten apps in `order` (dashboard through plant); `lines` is
+  eleventh and has no function key, so it opens from its icon or with `open lines`
+  in the Terminal. Esc minimizes the focused window.
 - **Taskbar:** click a window chip to focus it; clicking the focused chip
   minimizes it.
 - **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.
@@ -182,9 +183,9 @@ whole system.
   on its own progress screen, and rolls back if anything fails. Requires an
   Internet Card. Saved 0.2.x layouts that name the old `about` app migrate to
   `update` in place.
-- **Nodes:** arrows select a node, `R` renames, `P` pings it, `F` forgets it, and
-  `I` pressed twice flashes the installer medium. Enter commits a rename and Tab
-  cancels it.
+- **Nodes:** arrows select a node, PgUp/PgDn jump six rows, Home/End jump to the
+  first or last node, `I` pressed twice flashes the installer medium, `R` renames,
+  `P` pings it and `F` forgets it. Enter commits a rename and Tab cancels it.
 - **Lines:** arrows select a line, and the threshold editor pushes `/etc/plant.tsv`
   to the node it belongs to.
 - **0.1.9 and 0.1.10 updater repair:** those builds reject the filesystem's

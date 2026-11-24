@@ -130,7 +130,8 @@ grid and a one-row taskbar; windows are drawn over the grid.
   clicking the focused chip minimizes it. The focused window is highlighted.
 - With no focused window, arrows move the icon selection, Home/End jump to the
   first/last occupied cell, and Enter opens the selected app. F1-F10 always open
-  an app by `order`, independent of the grid arrangement.
+  an app by `order`, independent of the grid arrangement; `lines` is eleventh and
+  has no function key, so it opens from its icon or the Terminal.
 - The empty-desktop hint is drawn only when no window is open and the grid
   leaves room for it.
 
