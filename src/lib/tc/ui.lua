@@ -1,8 +1,10 @@
 -- Desktop: top bar, desktop icons, taskbar, windows, and app event dispatch.
 --
 -- App contract (see docs/architecture.md):
---   module = { id, title, short, icon, order, create(ctx) -> instance }
+--   module = { id, title, short, icon, iconArt, iconStyle, order, create(ctx) -> instance }
 --   instance = { draw(ctx), handle(ctx, name, ...), blur(ctx), close(ctx) }
+-- `iconArt` is the 9-cell-wide, 5-row pictogram drawn inside the desktop tile;
+-- `iconStyle` is `nil` or `"accent"` and colors that pictogram with the accent.
 -- `ctx.view` is a clipped gfx subview with local coordinates 1..w / 1..h.
 
 local text = require("tc.text")
@@ -255,10 +257,6 @@ function ui:saveIconLayout()
   self:captureIconPlacements()
   self:notify("info", "Desktop layout saved.")
   return true
-end
-
-function ui:iconGridWidth()
-  return self.iconCols * (ICON_CELL_WIDTH + ICON_GAP_X) - ICON_GAP_X
 end
 
 function ui:iconRect(index)

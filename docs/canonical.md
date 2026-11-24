@@ -664,29 +664,31 @@ dropped with 0.3.x; roadmap F5 is marked blocked and F6 re-scoped; and
 
 ## P9 — Dead code and residue (6)
 
-**Verdict per function, 2026-11-23.** Deleting everything without a caller would
-have removed working code whose only sin is that its hardware does not exist yet,
-so each one is decided rather than swept:
+**Verdict per function, 2026-11-23; re-verified and completed 2026-11-24.** Deleting
+everything without a caller would have removed working code whose only sin is that
+its hardware does not exist yet, so each one is decided rather than swept:
 
 | Symbol | Verdict |
 |---|---|
 | `halls.load` / `halls.save` / `halls.PATH` | **Deleted** — the last thing pretending `/etc/halls.tsv` exists |
-| `tc.move` (`move.run`) | **Kept, harness-only.** Named by decision 28 and covered by `test:field`; it becomes reachable when the bus (0.4.11) lands or the decision is retired. Not loaded into the kernel instance |
-| `gate:alarms` / `gate:status` | **Kept.** The read half of a gate; a gate has no hardware to report on yet, and deleting these would delete the only statement of what a gate reports |
+| `tc.move` (`move.run`) | **Kept, harness-only.** Named by decision 28 and covered by `test:field`; it becomes reachable when the bus (0.4.11) lands or the decision is retired. The kernel loads the module at boot (`kernel.lua:737-739`) so the acting layer is instantiated when the bus lands; `move.run` itself is called only from `tools/harness/field-test.lua` |
+| `gate:alarms` / `gate:status` | **Kept, read by the Plant app.** The read half of a gate: `Plant` folds `gate:alarms()` into its alarm panel and shows `gate:status()` in its note line (`plant.lua`), so both have a `src/` caller; a gate has no hardware to report on yet, and deleting these would delete the only statement of what a gate reports |
 | `registry.aggregate` / `registry.setRole` | **Deleted** with F20. `role` is gone from the registry (it duplicated the runtime role `config.lua` owns), so there is nothing to set and nothing to count by role |
-| `registry.rename` | **Kept** — the Nodes app renames by upsert, but the helper is the registry's own API and is covered incidentally |
-| 23 inert TC1 verbs | **Kept as accepted legacy**, with a pointer to decision 25 in `net.lua`'s header; deleting verbs from a wire contract turns a clean `unknown verb` into a parser surprise for an old peer |
+| `registry.rename` | **Deleted** — no caller in `src/` or `tools/harness/`: the Nodes app renames by upsert and `test:master` exercises `master:rename`, a separate implementation, so the helper was dead code with a false coverage claim |
+| 23 inert TC1 verbs | **Kept as accepted legacy.** `net.lua`'s header names decision 25 and lists the 23 inert verbs; deleting verbs from a wire contract turns a clean `unknown verb` into a parser surprise for an old peer |
 | `config.masterId` | **Deleted** — no reader, no writer, and the frame field that shares the name is a different thing |
-| `ui.lua:3-5` app-contract docstring | **Fixed** in this pass |
+| `addr:firstSeen`, `line.termText`, `net.isModemMessage`, `stock:setPollInterval`, `ui:iconGridWidth` | **Deleted** — five exported helpers with no caller inside or outside their module |
+| `updater.releasePaths` / `updater.stageFile` | **Kept, listed.** They are the only code that can stage a release tree onto a node's volume (the staging half of decision 26); no caller yet because staging runs from `boot/apply.lua`. Listed here so this table is the one exception list |
+| `ui.lua:3-5` app-contract docstring | **Fixed** — `ui.lua:3-6` now names `iconArt` (a 9×5 pictogram) and `iconStyle` (`nil` or `"accent"`) |
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F65 | M | `tc.move` is instantiated into `instance.move` but `move.run` has no caller in `src/`; item `move` is not a link command either, so the acting layer is reachable from nowhere | `kernel.lua:734-739`, `link.lua:34-62` |
-| F66 | M | `halls.save()` has no caller: `/etc/halls.tsv` is read every boot and never written by the OS | `halls.lua:195-204` |
-| F67 | M | `gate:alarms()` and `gate:status()` have no caller | `gate.lua:253,268` |
-| F68 | M | 23 of the 34 declared TC1 verbs are inert cluster/Relay/Vault residue | `net.lua:22-60` |
-| F69 | L | **Fixed 2026-11-23.** `registry.aggregate` and `registry.setRole` are deleted with the `role` column; `registry.rename` stays as the registry's own API | `registry.lua` |
-| F70 | L | `ui.lua:3-5` documents an app contract without `iconArt`/`iconStyle` | `ui.lua:3-5` |
+| F65 | M | **Fixed 2026-11-24.** `tc.move` is instantiated into `instance.move` at boot and the verdict now says so; `move.run` has no caller in `src/` and is harness-only until the bus lands, which `test:field` covers | `kernel.lua:737-739`, `link.lua:34-62` |
+| F66 | M | **Fixed 2026-11-23.** `halls.save()` has no caller: `/etc/halls.tsv` is read every boot and never written by the OS | `halls.lua:195-204` |
+| F67 | M | **Fixed 2026-11-24.** `gate:alarms()` and `gate:status()` are read by the Plant app (`plant.lua`: the alarm panel and the note line), so the read half of a gate is no longer unreachable | `gate.lua:253,268` |
+| F68 | M | **Fixed 2026-11-24.** 23 of the 34 declared TC1 verbs are inert cluster/Relay/Vault residue; `net.lua`'s header now names decision 25 and lists the 23 | `net.lua:22-60` |
+| F69 | L | **Fixed 2026-11-23.** `registry.aggregate` and `registry.setRole` are deleted with the `role` column; `registry.rename` was dead too and is deleted | `registry.lua` |
+| F70 | L | **Fixed 2026-11-24.** `ui.lua:3-6` now documents `iconArt` and `iconStyle` alongside the rest of the app contract | `ui.lua:3-6` |
 
 ## P10 — Naming and deferred designs (5)
 

@@ -157,13 +157,6 @@ function stock:reload()
   return true
 end
 
-function stock:setPollInterval(seconds)
-  local value = tonumber(seconds)
-  if value and value > 0 then
-    self.pollInterval = value
-  end
-end
-
 local function setPhase(self)
   local item = self.stocks[self.scan.index]
   if not item then

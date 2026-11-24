@@ -8,6 +8,13 @@
 -- unknown verbs, duplicate or malformed keys, missing required fields, and
 -- oversized frames. Protocol versioning lives in the `TC1` prefix, so a future
 -- transport can reject old peers instead of misreading them.
+--
+-- Accepted legacy (decision 25): 23 of the 34 verbs below are inert residues of
+-- the rack, Relay and Vault, removed in 0.4.9. They stay parsed so an old peer
+-- gets a clean `unknown verb`, not a parser surprise. The 23: ACK, LIST, FETCH,
+-- DIRS, DATA, MISS, PULL, JOB, CLAIM, GRANT, RESULT, CANCEL, DRAIN, VDISK,
+-- VOPEN, VDATA, VDACK, VDONE, VERR, VREAD, VLST, VDIRS, VDEL. The 11 live:
+-- HELLO, ASSIGN, STATUS, PING, PONG, CFG, CFGACK, LINK, LREP, LDATA, LEND.
 
 local net = {}
 
@@ -187,11 +194,6 @@ function net.decode(frame)
   end
 
   return verb, fields
-end
-
---- True when a signal name and its arguments look like a modem message.
-function net.isModemMessage(name, count)
-  return name == "modem_message" and (count or 0) >= 5
 end
 
 local modem = {}

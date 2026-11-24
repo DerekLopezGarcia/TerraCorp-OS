@@ -102,8 +102,28 @@ function plant:draw(ctx)
   local snapshot = service:snapshot()
   local status = snapshot.status or {}
 
+  -- Gate lines are the other half of a line boundary: their alarms belong in
+  -- the same panel, and their reconciliation state belongs in the note line.
+  local gateService = ctx.kernel.gate
+  local gateRows = gateService and gateService:status() or {}
+  local alarms = {}
+  for _, alarm in ipairs(snapshot.alarms or {}) do
+    alarms[#alarms + 1] = alarm
+  end
+  if gateService then
+    for _, alarm in ipairs(gateService:alarms()) do
+      alarms[#alarms + 1] = alarm
+    end
+  end
+  local unreconciled = 0
+  for _, row in ipairs(gateRows) do
+    if row.actual ~= row.desired then
+      unreconciled = unreconciled + 1
+    end
+  end
+
   v:put(1, 1, "Plant", c.accent, c.deep)
-  local alarmCount = #(snapshot.alarms or {})
+  local alarmCount = #alarms
   local right = string.format("%d stock%s · %d alarm%s",
     #(snapshot.stocks or {}), #(snapshot.stocks or {}) == 1 and "" or "s",
     alarmCount, alarmCount == 1 and "" or "s")
@@ -121,6 +141,10 @@ function plant:draw(ctx)
   local cache = status.cacheAge and string.format("%.0fs", status.cacheAge) or "no scan"
   local note = string.format("cache %s · calls %.0f · hist %d%s", cache, status.calls or 0,
     status.historySamples or 0, status.scanning and " · scanning" or "")
+  if #gateRows > 0 then
+    note = note .. string.format(" · gates %d%s", #gateRows,
+      unreconciled > 0 and string.format(" (%d not applied)", unreconciled) or "")
+  end
   if not snapshot.configured then
     note = "no stocks configured · edit /etc/stocks.tsv and /etc/paths.tsv, then R"
   end
@@ -173,7 +197,7 @@ function plant:draw(ctx)
     v:fill(1, top, ctx.w, 1, " ", c.text, c.panel)
     v:put(1, top, "ALARMS", c.text, c.panel)
     for index = 1, math.min(alarmCount, alarmRows - 1) do
-      local alarm = snapshot.alarms[index]
+      local alarm = alarms[index]
       local color = alarm.severity == "danger" and c.danger or c.warn
       local text = string.format("%s %s · %s", alarm.code, alarm.source, alarm.message)
       v:put(2, top + index, ctx.text.truncate(text, ctx.w - 2), color, c.deep)

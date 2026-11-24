@@ -150,10 +150,6 @@ function addr:scan(kind)
   return records
 end
 
-function addr:firstSeen(component)
-  return self.seen[component]
-end
-
 --- Resolve a proxy only when the address belongs to this computer.
 function addr.proxy(record)
   local parsed = record

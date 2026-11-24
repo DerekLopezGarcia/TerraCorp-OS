@@ -317,10 +317,6 @@ local function termText(term)
   return tostring(term.qty) .. " " .. term.kind .. " " .. key
 end
 
-function line.termText(term)
-  return termText(term)
-end
-
 function line.ruleText(rule)
   local inputs, outputs = {}, {}
   for _, term in ipairs(rule.inputs or {}) do

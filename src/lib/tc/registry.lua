@@ -233,18 +233,6 @@ function registry.save(vfs, nodes)
   return vfs.write(registry.path, data)
 end
 
-function registry.rename(nodes, id, name)
-  if not registry.validName(name) then
-    return nil, "invalid name"
-  end
-  local node = registry.find(nodes, id)
-  if not node then
-    return nil, "unknown node"
-  end
-  node.name = name:match("^%s*(.-)%s*$")
-  return node
-end
-
 --- Remove a node record entirely. Returns the removed record or nil.
 function registry.remove(nodes, id)
   for index, node in ipairs(nodes) do
