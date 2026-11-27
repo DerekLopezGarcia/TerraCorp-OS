@@ -65,45 +65,46 @@ requests are required. If there is no Internet Card, no stable release,
 insufficient disk space, or a download/validation error, the current
 installation remains in place.
 
-## Tagging 0.4.9 — held back on purpose
+## Tagging 0.4.9
 
-**Decision (2026-11-23): 0.4.9 stays untagged.** `v0.4.8` remains the latest
-published release and this repository has no `v0.4.9` tag.
+**Decision (2026-11-27): cut `v0.4.9` in this checkout.** The annotated tag
+points at the release commit; pushing the branch and tag, and creating the GitHub
+Release, remain the publisher's step. Until that happens, `v0.4.8` is still the
+newest *published* release and the updater still offers 0.4.8.
 
-Why: `updater.check` offers an update only when the installed version is *lower*
+The version was held untagged from 2026-11-23 to 2026-11-27. The reason was
+`updater.check`: it offers an update only when the installed version is *lower*
 than the latest release (`available = compareVersions(current, latest) < 0`,
-`src/lib/tc/updater.lua:375`). Tagging `v0.4.9` would make every machine stamped
-below 0.4.9 — including the rigs that already run 0.4.9 code with the label held
-at 0.4.8 — offer the update on their next check, all at once. The hold buys time
-to finish the in-game half of the 0.4.9 slices first.
+`src/lib/tc/updater.lua:375`). Tagging `v0.4.9` makes every machine stamped below
+it offer the update on its next check, all at once. The hold bought time for the
+in-game half of the 0.4.9 slices; the tag was cut when the owner asked for it.
 
-What the hold means while it lasts:
+What the tag means:
 
-- A machine may **run 0.4.9 code and still report `0.4.8`**. The stamp is not
-  evidence of what is installed; a behaviour the old build cannot produce is. See
-  [`canonical.md`](canonical.md) §1.
-- Do not "correct" a rig's `version.lua` or `/var/version` to 0.4.9. That is what
-  makes it claim to be ahead of GitHub, and the freeze depends on it not doing so.
-- The freeze is a release decision, not a defect. Nothing in the code needs to
-  change to keep it.
+- `v0.4.9` now exists. A machine that self-updates is expected to move from 0.4.8
+  to 0.4.9 on its next check once the release is published.
+- A machine may still **run 0.4.9 code and report `0.4.8`** if it was stamped
+  during the hold. The stamp is not evidence of what is installed; a behaviour
+  the old build cannot produce is. See [`canonical.md`](canonical.md) §1.
+- Do not "correct" an old rig's `version.lua` or `/var/version` by hand. The
+  normal updater path is the supported one.
 
-Before the tag is created, all of the following must hold:
-
-1. The 0.4.9 in-game checks in [`tests.md`](tests.md) are recorded: the
-   bare-computer floppy boot and `setBootAddress` on a plain computer.
-2. `src/lib/tc/version.lua`, `package.json` and `package-lock.json` agree, and the
-   changelog has an entry for the exact version being tagged.
-3. `npm run check`, `npm run sim`, `npm run sim:oc` and the suites in
-   `.github/workflows/release.yml` pass on the tagged tree.
-4. Whoever tags understands that the whole fleet updates on the next check, and
-   has decided that it is time.
+Before the tag was created, these held: `src/lib/tc/version.lua`,
+`package.json` and `package-lock.json` agree on 0.4.9; the changelog has a 0.4.9
+entry; `npm run check`, `npm run sim`, `npm run sim:oc`, `test:dns`, `test:apps`,
+`test:docs` and the screen matrix pass on the release tree. The 0.4.9 in-game
+checks in [`tests.md`](tests.md) — a bare-computer floppy boot and
+`setBootAddress` on a plain computer — remain outstanding; they are recorded as
+a caveat, not claimed as done. The DNS1 M0 in-game S9 probe is likewise still
+pending.
 
 ## Initial stable release
 
-The current build is 0.4.9 Flint, built on 2026-11-16; v0.4.8 remains the latest
-published release until v0.4.9 is tagged. 0.4.9 removes the cluster and the Vault
-app, so the manifest shrinks from 62 to 55 entries (`npm run check` prints
-`manifest: 55 files`). The updater only adds and
+The current build is 0.4.9 Flint, built on 2026-11-16 and tagged `v0.4.9` on
+2026-11-27. 0.4.9 removes the cluster and the Vault app, so the manifest shrank
+from 62 entries to 55 at that point; the DNS1 slices add six modules and the
+DNS app, and `npm run check` now prints `manifest: 62 files`. The
+updater only adds and
 replaces files, so a module left behind on an updated machine is inert: the
 kernel no longer loads it. A line node is installed from its floppy, not through
 this path ([`line-node.md`](line-node.md)). Earlier versions: 0.4.8 added six
@@ -119,7 +120,8 @@ alarms. 0.4.5 adds the operated book (`/etc/recipes.tsv`, `/etc/recipe-io.tsv`,
 line rules), `plan()` with bottleneck and shortfall, and calibration exposed as
 `plant.book` and `plant.plan`. 0.4.7 adds `plant.history` and `plant.paths` and
 the read-only MCP server at `tools/bridge/mcp.js`; the MCP tool files live on
-the host, not on the computer, so they are not in the 55-file manifest. 0.4.8
+the host, not on the computer, so they are not in the computer's manifest (55
+entries then; 62 today). 0.4.8
 adds the hall registry, gate setpoints/interlocks and move-by-name modules;
 their in-game halves need hardware the rig does not have.
 Versions through 0.1.6 had Internet Card compatibility issues and rejected

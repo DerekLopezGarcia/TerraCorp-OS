@@ -10,6 +10,7 @@ const path = require("path");
 const { lua, lauxlib, lualib, to_luastring, to_jsstring } = require("fengari");
 
 const repoRoot = path.resolve(__dirname, "../..");
+const frameSource = fs.readFileSync(path.join(repoRoot, "src/lib/tc/frame.lua"), "utf8");
 const netSource = fs.readFileSync(path.join(repoRoot, "src/lib/tc/net.lua"), "utf8");
 const pathSource = fs.readFileSync(path.join(repoRoot, "src/lib/tc/path.lua"), "utf8");
 const linkSource = fs.readFileSync(path.join(repoRoot, "src/lib/tc/link.lua"), "utf8");
@@ -70,6 +71,8 @@ function runScenario(scenario) {
   const L = lauxlib.luaL_newstate();
   lualib.luaL_openlibs(L);
 
+  lua.lua_pushstring(L, to_luastring(frameSource));
+  lua.lua_setglobal(L, to_luastring("FRAME_SOURCE"));
   lua.lua_pushstring(L, to_luastring(netSource));
   lua.lua_setglobal(L, to_luastring("NET_SOURCE"));
   lua.lua_pushstring(L, to_luastring(pathSource));

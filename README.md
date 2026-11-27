@@ -5,14 +5,16 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 player's computers; it does not modify or redistribute Susy-Core.
 
 Current version: **0.4.9 Flint** (`src/lib/tc/version.lua` is the only source of
-that fact; it is built and **deliberately untagged** — see
-[`docs/versioning.md`](docs/versioning.md)). It boots into a desktop shell with
-eleven apps, persists settings, notes and the desktop icon layout, and logs
+that fact; it is tagged `v0.4.9` locally — publishing the tag is a separate
+step; see [`docs/versioning.md`](docs/versioning.md)). It boots into a desktop shell with
+twelve apps, persists settings, notes and the desktop icon layout, and logs
 errors. One desktop computer is the master: its node registry, `/var/nodes.tsv`,
 is the plant's naming service and the Nodes app is its view and editor. Each
 production line runs a line node that reads its own boundary stocks and publishes
-to the master over a wired modem. Local simulations cover the OpenComputers API
-contract; in-game testing is tracked in [`docs/tests.md`](docs/tests.md). The
+to the master over a wired modem, and answers a DNS1 registry query on port
+4201 (HELLO, DESCRIBE, allowlisted EXEC and EDIT) even when the master is down. Local
+simulations cover the OpenComputers API contract; in-game testing is tracked in
+[`docs/tests.md`](docs/tests.md). The
 authoritative definition of the whole system is
 [`docs/canonical.md`](docs/canonical.md).
 
@@ -37,6 +39,23 @@ authoritative definition of the whole system is
 - **Nodes:** the plant's naming service. One row per line node that talks to the
   master — the name it answers to, its state, its worst alarm and its stocks —
   stored in `/var/nodes.tsv`. The app is the registry's view and editor.
+- **DNS console:** browse the DNS1 registry from a tablet or a desktop. The app lists
+  every node the master knows, shows its endpoints, version, boot id and
+  document, and follows the master's cache when this computer owns the registry.
+  A client can edit a node's document (optimistic revisions, conflict reporting)
+  and run the allowlisted `dns.status` method.
+- **DNS1 direct query:** every modem also answers on port 4201. `HELLO`
+  returns the protocol version, boot id and transports; `DESCRIBE` returns the
+  node, its endpoints, paths, tags and documentation; `EXEC` runs a documented
+  method only when it is explicitly allowlisted; `EDIT` changes only a node or
+  endpoint document under an expected revision. The registry publishes a full
+  snapshot at boot, deltas as endpoints change, and a heartbeat every 45 seconds;
+  the master persists it under `/var/dns/` and a tablet can query a node directly
+  if the master is down. Harness-verified; the in-game event-shape probe (S9) is
+  still open.
+- **DNS:** arrows select a node, left/right page through a long registry, R
+  refreshes, E edits its document, P asks the node for its own status. Editing
+  needs a DNS client; the master's desktop can browse but not edit.
 - **Lines:** control over what a line watches. Edits the level thresholds of the
   selected line in the master's `/etc/plant.tsv` and pushes the file to the node,
   so the node keeps evaluating its own alarms with the same numbers. It never
@@ -165,9 +184,9 @@ whole system.
   smoothly, like a dragged window. The new layout is saved on release and
   restored after a reboot or update. With no window focused, the arrow keys move
   the selection, Home/End jump to the ends, and Enter opens the selected app.
-  F1-F10 open the first ten apps in `order` (dashboard through plant); `lines` is
-  eleventh and has no function key, so it opens from its icon or with `open lines`
-  in the Terminal. Esc minimizes the focused window.
+  F1-F10 open dashboard through plant in `order`; `lines` is
+  eleventh and `dns` is twelfth, so both open from their icons or with `open
+  lines` / `open dns` in the Terminal. Esc minimizes the focused window.
 - **Taskbar:** click a window chip to focus it; clicking the focused chip
   minimizes it.
 - **Windows:** drag the title bar, `[-]` minimizes, `[x]` closes.
@@ -248,6 +267,7 @@ npm run test:installer
 npm run test:flash
 npm run test:report
 npm run test:master
+npm run test:dns
 npm run test:gaia
 npm run test:updater
 npm run test:updater-legacy

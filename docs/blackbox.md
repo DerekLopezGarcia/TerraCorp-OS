@@ -13,7 +13,7 @@ presented as fact.
 | Field | Value | Source |
 |---|---|---|
 | Product | TerraCorp OS | `src/lib/tc/version.lua` |
-| Version | 0.4.9 "Flint", API 1 (built and deliberately untagged) | `src/lib/tc/version.lua` |
+| Version | 0.4.9 "Flint", API 1 (tagged `v0.4.9`; publishing is a separate step) | `src/lib/tc/version.lua` |
 | Vendor string | TerraCorp Industrial Systems | `src/lib/tc/version.lua` |
 | License | MIT | `LICENSE` |
 | Host | OpenComputers, Minecraft 1.12.2 + Forge, Supersymmetry pack | `README.md` |
@@ -75,11 +75,11 @@ Module resolution is fixed: `tc.*` maps to `/lib/tc/*.lua` and `apps.*` to
 
 ### Apps
 
-Eleven app ids are registered: `dashboard`, `files`, `console`, `settings`,
-`notes`, `update`, `nodes`, `gaia`, `lab`, `plant`, `lines`.
+Twelve app ids are registered: `dashboard`, `files`, `console`, `settings`,
+`notes`, `update`, `nodes`, `gaia`, `lab`, `plant`, `lines`, `dns`.
 (`src/boot/kernel.lua`)
 
-`README.md` and `AGENTS.md` describe the same eleven apps by title and by id
+`README.md` and `AGENTS.md` describe the same twelve apps by title and by id
 respectively; the ids are the contract, the titles are what the windows say.
 
 Every app must expose a desktop icon: a registered id, a 3-cell `icon` code, a
@@ -211,5 +211,5 @@ The following are unknown or unmeasured, and must not be stated as fact:
 
 Before a change is considered complete the repository requires `npm run check`,
 `npm run sim`, `npm run sim:oc`, plus the focused test for whatever was touched
-(`AGENTS.md`). `npm run check` currently reports 72 files checked, 0 errors, and
-a 55-file manifest.
+(`AGENTS.md`). `npm run check` currently reports 80 files checked, 0 errors, and
+a 62-file manifest.

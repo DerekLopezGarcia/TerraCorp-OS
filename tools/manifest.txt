@@ -1,6 +1,7 @@
 eeprom/init.lua
 src/apps/console.lua
 src/apps/dashboard.lua
+src/apps/dns.lua
 src/apps/files.lua
 src/apps/gaia.lua
 src/apps/lab.lua
@@ -18,8 +19,13 @@ src/lib/tc/addr.lua
 src/lib/tc/book.lua
 src/lib/tc/changelog.lua
 src/lib/tc/config.lua
+src/lib/tc/dnsclient.lua
+src/lib/tc/dnsmaster.lua
+src/lib/tc/dnsnet.lua
+src/lib/tc/dnsnode.lua
 src/lib/tc/driver.lua
 src/lib/tc/flash.lua
+src/lib/tc/frame.lua
 src/lib/tc/gate.lua
 src/lib/tc/gfx.lua
 src/lib/tc/halls.lua
@@ -47,6 +53,7 @@ src/lib/tc/theme.lua
 src/lib/tc/ui.lua
 src/lib/tc/updater.lua
 src/lib/tc/util.lua
+src/lib/tc/value.lua
 src/lib/tc/version.lua
 src/lib/tc/vfs.lua
 tools/check.lua

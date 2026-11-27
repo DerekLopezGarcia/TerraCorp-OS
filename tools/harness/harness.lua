@@ -1090,6 +1090,14 @@ elseif scenario == "plant" then
   typeText("open plant")
   ev("key_down", "screen-1", nil, 0x1C, "tester")
   idle(6)
+elseif scenario == "dns" then
+  -- The DNS console opens from the Terminal. With no master configured on this
+  -- desktop it explains what is missing instead of drawing an empty table.
+  ev("key_down", "screen-1", nil, 0x3D, "tester") -- F3 opens Console
+  idle(1)
+  typeText("open dns")
+  ev("key_down", "screen-1", nil, 0x1C, "tester")
+  idle(2)
 elseif scenario == "lines" then
   -- The Lines app opens from the Terminal: with no node on the wire it explains
   -- what it needs instead of drawing an empty table.
@@ -1712,6 +1720,16 @@ if STRICT then
     if not screen:find("No stocks configured", 1, true) then
       errors = errors + 1
       print("FAIL: the Plant app did not show its empty configuration")
+    end
+  end
+  if scenario == "dns" then
+    if not screen:find("DNS registry", 1, true) then
+      errors = errors + 1
+      print("FAIL: the Terminal did not open the DNS console")
+    end
+    if not screen:find("No DNS master", 1, true) then
+      errors = errors + 1
+      print("FAIL: the DNS console did not explain the missing master")
     end
   end
   if scenario == "lines" then

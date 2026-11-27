@@ -23,6 +23,18 @@ implementation. Re-verify them if the target version changes.
 `drag`, `drop`, `scroll`, `clipboard`, `screen_resized`, `component_added`,
 `component_removed`, `modem_message`, `interrupted`, and `shutdown`.
 
+`modem_message` is **assumed** to carry `(receiverAddress, senderAddress,
+port, distance, message)`: the first address is the modem that heard the frame,
+the second is the sending computer, and `message` is the frame text. This shape
+has not been recorded in-game yet (S9); the code accepts the shorter shape some
+hosts produce and locates the port and message by value, so it keeps working if
+the order differs. DNS1 uses the receiver value as the modem to answer from when
+it is a usable address or side name, caches it per peer, and otherwise falls
+back to the side map or every modem. The kernel's TC1 path unpacks from the
+second slot while `report.lua` uses the third; at most one of those is right,
+and S9 must settle it (open question — only open a bug card if the probe
+confirms a mismatch).
+
 `key_up` carries the same fields as `key_down`. It is the only way to know a
 modifier was released instead of assuming the next key still has it held.
 

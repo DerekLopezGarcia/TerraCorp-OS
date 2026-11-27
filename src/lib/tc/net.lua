@@ -16,6 +16,8 @@
 -- VOPEN, VDATA, VDACK, VDONE, VERR, VREAD, VLST, VDIRS, VDEL. The 11 live:
 -- HELLO, ASSIGN, STATUS, PING, PONG, CFG, CFGACK, LINK, LREP, LDATA, LEND.
 
+local frame = require("tc.frame")
+
 local net = {}
 
 net.PORT = 4200
@@ -66,134 +68,18 @@ local VERBS = {
   LEND = { "id", "size" },
 }
 
-local ESCAPES = {
-  ["%"] = "%25",
-  [" "] = "%20",
-  ["\t"] = "%09",
-  ["\r"] = "%0D",
-  ["\n"] = "%0A",
-  ["="] = "%3D",
-}
-
-local UNESCAPES = {
-  ["25"] = "%",
-  ["20"] = " ",
-  ["09"] = "\t",
-  ["0D"] = "\r",
-  ["0A"] = "\n",
-  ["3D"] = "=",
-}
-
-local function escape(value)
-  return (tostring(value):gsub("[%% \t\r\n=]", ESCAPES))
-end
-
-local function unescape(value)
-  return (value:gsub("%%(%x%x)", function(code)
-    return UNESCAPES[code:upper()] or string.char(tonumber(code, 16))
-  end))
-end
-
-net.escape = escape
-net.unescape = unescape
-
-local function scalar(value)
-  local kind = type(value)
-  if kind == "string" or kind == "number" then
-    return tostring(value)
-  end
-  if kind == "boolean" then
-    return value and "true" or "false"
-  end
-  return nil
-end
+net.escape = frame.escape
+net.unescape = frame.unescape
 
 --- Encode one frame. Fields must be a flat table of scalar values.
 -- Returns the frame, or nil and a reason.
 function net.encode(verb, fields)
-  if type(verb) ~= "string" or not verb:match("^[A-Z][A-Z0-9_]*$") then
-    return nil, "invalid verb"
-  end
-  if not VERBS[verb] then
-    return nil, "unknown verb: " .. tostring(verb)
-  end
-
-  fields = fields or {}
-  local keys = {}
-  for key in pairs(fields) do
-    if type(key) ~= "string" or not key:match("^[a-z][a-zA-Z0-9_]*$") then
-      return nil, "invalid field name: " .. tostring(key)
-    end
-    keys[#keys + 1] = key
-  end
-  table.sort(keys)
-
-  local parts = { net.PROTOCOL, verb }
-  local present = {}
-  for _, key in ipairs(keys) do
-    local value = scalar(fields[key])
-    if value == nil then
-      return nil, "invalid value for " .. key
-    end
-    present[key] = value
-    parts[#parts + 1] = key .. "=" .. escape(value)
-  end
-
-  for _, key in ipairs(VERBS[verb]) do
-    if present[key] == nil or present[key] == "" then
-      return nil, "missing field: " .. key
-    end
-  end
-
-  local frame = table.concat(parts, " ")
-  if #frame > net.MAX_FRAME then
-    return nil, "frame too large"
-  end
-  return frame
+  return frame.encode(net.PROTOCOL, VERBS, verb, fields, { max = net.MAX_FRAME })
 end
 
 --- Decode one frame. Returns verb, fields, or nil and a reason.
-function net.decode(frame)
-  if type(frame) ~= "string" then
-    return nil, "frame is not a string"
-  end
-  if #frame == 0 or #frame > net.MAX_FRAME then
-    return nil, "invalid frame length"
-  end
-  if frame:find("[\r\n%z]") then
-    return nil, "frame must be one line"
-  end
-
-  local protocol, verb, rest = frame:match("^(%S+)%s+(%S+)%s*(.*)$")
-  if protocol ~= net.PROTOCOL then
-    return nil, "unsupported protocol: " .. tostring(protocol)
-  end
-  if not VERBS[verb] then
-    return nil, "unknown verb: " .. tostring(verb)
-  end
-
-  local fields = {}
-  for token in rest:gmatch("%S+") do
-    local key, value = token:match("^([^=]+)=(.*)$")
-    if not key then
-      return nil, "malformed field: " .. token
-    end
-    if not key:match("^[a-z][a-zA-Z0-9_]*$") then
-      return nil, "invalid field name: " .. key
-    end
-    if fields[key] ~= nil then
-      return nil, "duplicate field: " .. key
-    end
-    fields[key] = unescape(value)
-  end
-
-  for _, key in ipairs(VERBS[verb]) do
-    if fields[key] == nil or fields[key] == "" then
-      return nil, "missing field: " .. key
-    end
-  end
-
-  return verb, fields
+function net.decode(text)
+  return frame.decode(net.PROTOCOL, VERBS, text, { max = net.MAX_FRAME })
 end
 
 local modem = {}

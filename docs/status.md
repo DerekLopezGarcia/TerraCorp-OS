@@ -35,7 +35,7 @@ OS de planta (OC)    ──  lee, cachea, alarma, muestra; gates y setpoints
 The first three rows are optional. The fourth row is the product: it must show
 exact stocks and raise its own alarms with nothing else running.
 
-## Decisions, 1-28
+## Decisions, 1-29
 
 1-7 are the original frame: system model (app server + terminals), no accounts,
 native Remote Terminals, data-center autonomy, core apps, 0.3.x split, rack
@@ -119,13 +119,23 @@ discovery.
     cap per core, no force-loading, and no cross-dimension unless a quantum link
     pair is enabled. Where a pipe reaches, the pipe wins.
     See [`bus.md`](bus.md).
+29. **DNS1 overlays port 4201 and leaves TC1 intact (2026-11-24), M5 registry.** A
+    node opens 4201 on every modem and serves HELLO/DESCRIBE/EXEC/EDIT plus the
+    documented `dns.status`, inventory, `plant`, `state` and `inbox` endpoints; a
+    desktop with `dnsMaster = "self"` persists the nodes' complete snapshots and
+    pages the catalog, and a client falls back to a direct request when the master
+    is down or has not seen the node. The first publish is full, later publishes
+    are deltas, and a heartbeat keeps a quiet node in the catalog. The DNS app is
+    the tablet console. TC1's verbs, bytes and port 4200 are unchanged. See
+    [`canonical.md`](canonical.md) §7.2.
 
 ## What exists today
 
-- **0.4.9 "Flint" is built**: the line node (installer, `role = "line"`, status
-  publisher, status page), `tc.master` with the registry as the DNS, and the
-  Nodes and Lines apps. The cluster layer and its apps are gone (decision 25);
-  the manifest is 55 files and the installer image is 161.0 KB of the 512 KB
+- **0.4.9 "Flint" is tagged**: the line node (installer, `role = "line"`, status
+  publisher, status page), `tc.master` with the registry as the DNS, the DNS1
+  M1-M5 registry protocol and the Nodes, Lines and DNS apps. The cluster layer
+  and its apps are gone (decision 25);
+  the manifest is 62 files and the installer image is 233.1 KB of the 512 KB
   floppy. Harness: `check`, `sim`, `sim:oc`, `test:naming`, `test:installer`,
   `test:report`, `test:master`, `test:apps`, `test:plant`, `test:link`,
   `test:bridge`, `test:history`, `test:book`, `test:mcp`, `test:field`,
@@ -133,7 +143,7 @@ discovery.
 - **0.3.x was built and tagged** up to `v0.3.33`; its remaining in-game checklist
   died with the cluster (decision 25) and will never be finished, because the
   features are gone. What survives into today's product: the desktop shell with
-  **eleven apps**, the GAIA app and the external-link bridge (loopback verified
+  its app set, the GAIA app and the external-link bridge (loopback verified
   in-game, including remote writes, `link.interval` and `lua`), the Lab with its
   Lua interpreter, and the Plant readout. Updates leave the notes of every skipped
   release in `/var/whatsnew.md`.
@@ -189,10 +199,27 @@ discovery.
   `plant.halls` and `gate.set` expose them over the link. The second hall, the
   gate and the transport remain pending hardware; of the three only `gate.set` is
   reachable from outside, and it answers `unknown_line` without a configured gate.
-- **Harness green**: `npm run check` (72 files, 55-file manifest), `test:link`
-  (48 scenarios), `test:bridge`, `test:history`, `test:book`, `test:mcp`,
-  `test:field`, `test:plant`, `test:line`, `sim`, `sim:oc` and the
-  50-combination screen matrix.
+- **M5 DNS1 registry**: `tc.frame`, `tc.value`, `tc.dnsnet`, `tc.dnsnode`,
+  `tc.dnsmaster` and `tc.dnsclient` add a direct query on port 4201 beside TC1.
+  A node publishes an index manifest plus endpoint parts, sends only changed
+  parts after the first full publish, and heartbeats every 45 s. The registry
+  includes `dns.status`, every inventory controller, `plant`
+  (`status`/`alarms`/`snapshot`), a persistent `state` key-value store and a
+  bounded `inbox`; paths group them as `status`, `inventory` and the legacy
+  `spike`. EDIT updates endpoint or node docs/tags with an expected revision,
+  returns the current document on conflict, and persists overrides in
+  `/var/dns/edits.value`. The desktop master persists complete snapshots in
+  `/var/dns`, reloads them at boot, and pages the catalog with totals.
+  DESCRIBE/EXEC/EDIT still work directly when the master is down. The DNS app
+  (`dns`) is the tablet console: it lists the catalog, shows a node document,
+  edits node docs with conflict reporting, and runs the status endpoint.
+  `npm run test:dns` covers the 2-node + master + tablet matrix, delta,
+  persistence, resync, EDIT conflicts and state/inbox limits. In-game S9 (event
+  argument order, side-as-address, wireless packet size) is still open.
+- **Harness green**: `npm run check` (80 files, 62-file manifest), `test:link`
+  (48 scenarios), `test:dns` (219 checks), `test:bridge`, `test:history`,
+  `test:book`, `test:mcp`, `test:field`, `test:plant`, `test:line`, `sim`,
+  `sim:oc` and the 55-combination screen matrix.
 - **The line program parser and the planner**: `tc.line` parses
   `/etc/lines/*.line` (`stock in/out`, multiple rules, multi-item/fluid terms,
   `ticks`/`limit`) without executing it, and `tc.book` + `tc.plan` are built on

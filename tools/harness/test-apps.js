@@ -1,4 +1,5 @@
-// Test the master-side apps: Nodes (the DNS) and Lines (the control).
+// Test the master-side apps: Nodes (the DNS), Lines (the control) and the DNS
+// registry console.
 //
 //   node tools/harness/test-apps.js
 
@@ -42,4 +43,4 @@ if (failures !== "") {
   process.exit(1);
 }
 
-console.log("apps: the DNS table and the line control draw, edit and push");
+console.log("apps: the Nodes table, the line control and the DNS console draw, edit and push");

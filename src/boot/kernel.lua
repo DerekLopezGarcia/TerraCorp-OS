@@ -11,7 +11,7 @@ local MODULE_ROOTS = {
   apps = "/apps/",
 }
 
-local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes", "gaia", "lab", "plant", "lines" }
+local APP_IDS = { "dashboard", "files", "console", "settings", "notes", "update", "nodes", "gaia", "lab", "plant", "lines", "dns" }
 
 local function packCall(fn, ...)
   local result = table.pack(pcall(fn, ...))
@@ -239,6 +239,9 @@ function kernel:rebindScreen()
 end
 
 function kernel:poweroff(reboot)
+  if self.dnsmaster and type(self.dnsmaster.close) == "function" then
+    pcall(self.dnsmaster.close, self.dnsmaster)
+  end
   local colors = self.theme.colors
   self.gfx:clear(colors.bg)
   self.gfx:put(2, 1, reboot and "Restarting TerraCorp OS..." or "Shutting down TerraCorp OS...", colors.dim, colors.bg)
@@ -289,6 +292,9 @@ function kernel:loop()
         if self.master then
           self.master:close()
         end
+        if self.dnsnet then
+          pcall(self.dnsnet.close, self.dnsnet)
+        end
         if self.link then
           self.link:close()
         end
@@ -304,7 +310,16 @@ function kernel:loop()
 
       if name ~= "interrupted" then
         local handled = false
-        if name == "modem_message" and self.master then
+        if name == "modem_message" and self.dnsnet then
+          local ok, routed = pcall(self.dnsnet.handle, self.dnsnet, pack)
+          if not ok then
+            self.log.error("DNS1 event: " .. tostring(routed))
+          else
+            handled = routed == true
+          end
+        end
+
+        if not handled and name == "modem_message" and self.master then
           local ok, routed = pcall(
             self.master.handle,
             self.master,
@@ -334,6 +349,12 @@ function kernel:loop()
         local ok, reason = pcall(self.master.tick, self.master)
         if not ok then
           self.log.error("master tick: " .. tostring(reason))
+        end
+      end
+      if self.dnsmaster then
+        local ok, reason = pcall(self.dnsmaster.tick, self.dnsmaster)
+        if not ok then
+          self.log.error("DNS1 master tick: " .. tostring(reason))
         end
       end
       if self.plant then
@@ -466,6 +487,219 @@ local function writeReleaseNotes(instance, requireModule)
   end
   log.info(string.format("Release notes: %d version(s), %s -> %s", included, previous, current))
   return "/var/whatsnew.md"
+end
+
+local function dnsBootId()
+  local ok, wall = pcall(os.time)
+  if ok and type(wall) == "number" then
+    return tostring(wall)
+  end
+  return tostring(computer.uptime())
+end
+
+local function registerDnsInventory(node, log)
+  local okList, list = pcall(component.list, "inventory_controller")
+  if not okList or not list then
+    log.info("DNS1: no inventory_controller found")
+    return 0, {}
+  end
+  local count = 0
+  local addresses = {}
+  local names = {}
+  if type(list) == "function" then
+    for address in list do
+      addresses[#addresses + 1] = address
+    end
+  else
+    for _, address in ipairs(list) do
+      addresses[#addresses + 1] = address
+    end
+  end
+  table.sort(addresses)
+  for _, address in ipairs(addresses) do
+    count = count + 1
+    local name = count == 1 and "inventory_controller" or ("inventory_controller_" .. count)
+    names[#names + 1] = name
+    node:registerComponent({
+      name = name,
+      componentType = "inventory_controller",
+      address = address,
+      tags = { "inventory" },
+      docs = "Read-only inventory of this node's chests and stacks.",
+      allow = { "getAllStacks" },
+      methods = {
+        getAllStacks = {
+          mode = "read",
+          description = "Returns every slot: slot, name, size, maxSize, stackSize and hasTag.",
+          args = {},
+          returns = "table",
+          examples = { "exec endpoint:inventory_controller getAllStacks" },
+        },
+        getStackInSlot = {
+          mode = "read",
+          description = "Returns one slot by index; announced but not allowed.",
+          args = { "slot:number" },
+          returns = "table",
+          examples = { "exec endpoint:inventory_controller getStackInSlot 1" },
+        },
+      },
+    })
+  end
+  return count, names
+end
+
+-- Line role: open DNS1, publish this node's snapshot. The node falls back to
+-- the TC1 master when dnsMaster is empty, and serves without publishing when
+-- neither address is configured.
+local function startDnsNode(instance, requireModule, config, version, log, vfs)
+  local okNet, dnsnetModule = pcall(requireModule, "tc.dnsnet")
+  if not okNet or type(dnsnetModule) ~= "table" then
+    log.error("DNS1 transport unavailable: " .. tostring(dnsnetModule))
+    return nil, nil
+  end
+  local port = tonumber(config.get("dnsPort")) or 4201
+  local transport = dnsnetModule.new({
+    computer = computer,
+    component = component,
+    port = port,
+    nodeId = instance.address,
+    transport = config.get("dnsTransport") or "auto",
+    log = log,
+  })
+  local opened, reason = transport:open()
+  if not opened then
+    log.warn("DNS1: not listening on port " .. tostring(port) .. ": " .. tostring(reason))
+  end
+  instance.dnsnet = transport
+
+  local okNode, nodeModule = pcall(requireModule, "tc.dnsnode")
+  if not okNode or type(nodeModule) ~= "table" then
+    log.error("DNS1 node unavailable: " .. tostring(nodeModule))
+    return transport, nil
+  end
+
+  local master = config.get("dnsMaster") or ""
+  if master == "self" then
+    master = ""
+  end
+  if master == "" then
+    master = config.get("master") or ""
+  end
+  if master == "" then
+    log.warn("DNS1: no master configured; the node serves but does not publish")
+  end
+
+  local node = nodeModule.new({
+    id = instance.address,
+    name = instance.hostname,
+    ver = version.version,
+    boot = dnsBootId(),
+    tags = { "line", "dns" },
+    docs = "TerraCorp line node. DNS1 registry, plant readout, state and inbox.",
+    transport = opened and transport or nil,
+    master = master ~= "" and master or nil,
+    computer = computer,
+    component = component,
+    dnsPort = port,
+    log = log,
+    vfs = vfs,
+  })
+  node:registerStatus()
+  node:registerState()
+  node:registerInbox()
+  if instance.plant then
+    node:registerPlant(instance.plant)
+  end
+  local _, inventoryNames = registerDnsInventory(node, log)
+
+  node:addPath({
+    name = "status",
+    members = { "dns.status" },
+    tags = { "dns", "status" },
+    docs = "DNS1 status endpoint.",
+  })
+  if #inventoryNames > 0 then
+    node:addPath({
+      name = "inventory",
+      members = inventoryNames,
+      tags = { "inventory" },
+      docs = "Every inventory controller on this node.",
+    })
+  end
+  node:addPath({
+    name = "spike",
+    members = { "dns.status", "inventory_controller" },
+    tags = { "dns", "m0" },
+    docs = "M0 read-only spike path; kept for older clients.",
+  })
+  instance.dnsnode = node
+  node:tick(computer.uptime())
+  return transport, node
+end
+
+-- Desktop role: `self` runs the DNS1 master; any other non-empty address runs
+-- the client. Empty means DNS1 is off on this desktop.
+local function startDnsDesktop(instance, requireModule, config, version, log, vfs)
+  local setting = config.get("dnsMaster") or ""
+  if setting == "" then
+    return nil
+  end
+
+  local okNet, dnsnetModule = pcall(requireModule, "tc.dnsnet")
+  if not okNet or type(dnsnetModule) ~= "table" then
+    log.error("DNS1 transport unavailable: " .. tostring(dnsnetModule))
+    return nil
+  end
+  local port = tonumber(config.get("dnsPort")) or 4201
+  local transport = dnsnetModule.new({
+    computer = computer,
+    component = component,
+    port = port,
+    nodeId = instance.address,
+    transport = config.get("dnsTransport") or "auto",
+    log = log,
+  })
+  local opened, reason = transport:open()
+  if not opened then
+    log.warn("DNS1: not listening on port " .. tostring(port) .. ": " .. tostring(reason))
+  end
+  instance.dnsnet = transport
+
+  if setting == "self" then
+    local okMaster, dnsmasterModule = pcall(requireModule, "tc.dnsmaster")
+    if not okMaster or type(dnsmasterModule) ~= "table" then
+      log.error("DNS1 master unavailable: " .. tostring(dnsmasterModule))
+      return transport
+    end
+    local master = dnsmasterModule.new({
+      id = instance.address,
+      ver = version.version,
+      boot = dnsBootId(),
+      computer = computer,
+      transport = transport,
+      vfs = vfs,
+      log = log,
+    })
+    transport.onFrame = function(side, from, verb, fields)
+      return master:onFrame(side, from, verb, fields)
+    end
+    instance.dnsmaster = master
+    log.trace("DNS1 master listening on port " .. tostring(port))
+  else
+    local okClient, dnsclientModule = pcall(requireModule, "tc.dnsclient")
+    if not okClient or type(dnsclientModule) ~= "table" then
+      log.error("DNS1 client unavailable: " .. tostring(dnsclientModule))
+      return transport
+    end
+    instance.dnsclient = dnsclientModule.new({
+      computer = computer,
+      net = transport,
+      master = setting,
+      log = log,
+    })
+    log.trace("DNS1 client targeting " .. tostring(setting))
+  end
+  return transport
 end
 
 function kernel.start(boot)
@@ -649,6 +883,7 @@ function kernel.start(boot)
 
     local okReport, reportModule = pcall(requireModule, "tc.report")
     if okReport and type(reportModule) == "table" then
+      local dns, dnsnode = startDnsNode(instance, requireModule, config, version, log, vfs)
       return reportModule.run({
         kernel = instance,
         vfs = vfs,
@@ -656,6 +891,8 @@ function kernel.start(boot)
         config = config,
         version = version,
         plant = linePlant,
+        dns = dns,
+        dnsnode = dnsnode,
       })
     end
     log.error("Report module unavailable: " .. tostring(reportModule))
@@ -845,6 +1082,10 @@ function kernel.start(boot)
   else
     log.error("Master service unavailable: " .. tostring(masterModule))
   end
+
+  -- DNS1 is independent of TC1: the master answers on 4201 and the catalog is
+  -- filled by line nodes publishing their snapshots.
+  startDnsDesktop(instance, requireModule, config, version, log, vfs)
 
   -- The flasher writes a node installer medium from this runtime: the tree, the
   -- marker that makes /init.lua run the installer, and a configuration that

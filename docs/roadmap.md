@@ -502,17 +502,17 @@ the hologram wall, sessions.
 > the 100-casing plan from the real rig (1128 exact, 592 missing, bottleneck
 > 0.0204 targets/s), each with its source line.
 
-## F3.5 — Line nodes (0.4.9) · built 2026-11-16, tag held
+## F3.5 — Line nodes (0.4.9) · built 2026-11-16, tagged 2026-11-27
 
-> Built and cut as 0.4.9 "Flint"; **deliberately untagged**, so `v0.4.8` is still
-> the newest release ([`versioning.md`](versioning.md) records the hold and its
-> four conditions). `tc.naming`, `tc.installer` with
+> Built and cut as 0.4.9 "Flint"; tagged `v0.4.9` on 2026-11-27, so `v0.4.9` is
+> the newest local tag ([`versioning.md`](versioning.md) records the tag and the
+> remaining in-game caveat). `tc.naming`, `tc.installer` with
 > `boot/install.lua`, the `role = "line"` runtime, `tc.report`, `tc.master`, the
 > Nodes app as the DNS, the Lines app with configuration push and `tc.flash` to
 > write the installer medium from the master (**Nodes**, key **I**). The rack layer
 > (cluster, node, netboot, netfetch, provision, vault, pull, jobs, the Vault app
 > and the console's vault commands) is gone; the manifest went from 62 to 55
-> files. `npm run size` holds the installer image at 161.0 KB of the 512 KB floppy
+> files. `npm run size` holds the installer image at 233.1 KB of the 512 KB floppy
 > and `test:naming`, `test:installer`, `test:report`, `test:master` and
 > `test:apps` cover the new code. Pending in-game: a never-booted computer
 > booting the floppy, and `setBootAddress` on a plain computer.

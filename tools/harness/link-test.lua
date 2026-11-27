@@ -14,6 +14,14 @@ local function check(condition, message)
   end
 end
 
+-- net.lua delegates the wire format to tc.frame. The JS runner injects that
+-- source separately, so provide the module before net.lua asks for it.
+if FRAME_SOURCE then
+  package.preload["tc.frame"] = function()
+    return assert(load(FRAME_SOURCE, "=frame.lua"))()
+  end
+end
+
 local net = assert(load(NET_SOURCE, "=net.lua"))()
 
 -- The link asks tc.lab for an environment; the test only needs the print

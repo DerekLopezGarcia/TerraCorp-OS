@@ -124,6 +124,8 @@ return {
       "The second hall, the gate and the transport are not built yet: these modules ship harness-tested and their in-game run is pending.",
     },
     ["0.4.9"] = {
+      "DNS1: a line node publishes its registry on port 4201; the master caches it and the DNS app lists nodes, edits docs and runs status.",
+      "DNS1 nodes expose state and an inbox, persist them under /var/dns and keep the master's catalog across restarts.",
       "Line node: a small OS on a floppy installs itself onto a hard disk and never writes to the floppy, so one floppy commissions every computer.",
       "Flash the installer from the master: open Nodes, put a floppy in a disk drive and press I twice. The medium leaves with the master's address already configured.",
       "The cluster is gone: no racks, no provisioning, no Relay, no waves and no Vault. A node reads its line, raises its own alarms and publishes its status to the master.",

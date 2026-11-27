@@ -49,23 +49,24 @@ everything.
 **Single source of truth for identity is `src/lib/tc/version.lua`.** No other file
 may declare a version as fact; they may only quote it.
 
-**Built ≠ published.** 0.4.9 was built and cut on 2026-11-16; **`v0.4.8` is the
-last tagged GitHub Release** (`docs/versioning.md:70-71`). Any sentence of the
-form "0.4.9 is released/available" is wrong until the tag exists.
+**Built ≠ published.** 0.4.9 was built on 2026-11-16 and tagged `v0.4.9` on
+2026-11-27. The tag is local; pushing it and creating the GitHub Release remain
+the publisher's step. Until then `v0.4.8` is still the newest published release
+and "0.4.9 is released" means "the tag exists", not "GitHub serves it".
 
-**The freeze is deliberate, and it has a consequence.** Leaving 0.4.9 untagged
-stops every in-world computer from self-updating: `updater.check` offers an update
-only when the installed version is *lower* than the latest release
-(`available = compareVersions(current, latest) < 0`, `updater.lua:375`). A machine
-stamped `0.4.8` against a `v0.4.8` release therefore sits still, which is the
-intent. [`versioning.md`](versioning.md) records the decision, what not to do
-while it holds, and the four conditions that must be true before anyone tags
-0.4.9. But it means a machine can **run 0.4.9 code while reporting `0.4.8`** — the
-live rig does exactly this (§10 records the repository side of the same effect).
-So: **a version stamp cannot distinguish the last release from an untagged
-build.** `fs.read /lib/tc/version.lua` is not a reliable answer to "what is this
-machine running"; a behaviour the old build could not produce is. Whoever writes
-a diagnostic or an update flow must design around that, not around the stamp.
+**The hold is over, and it left a consequence.** Between 2026-11-23 and
+2026-11-27, 0.4.9 was deliberately untagged so that `updater.check` would not
+move every machine at once: it offers an update only when the installed version
+is *lower* than the latest release (`available = compareVersions(current, latest)
+< 0`, `updater.lua:375`). A machine stamped `0.4.8` against a `v0.4.8` release
+sits still. That also means a machine can **run 0.4.9 code while reporting
+`0.4.8`** — the live rig did exactly this (§10 records the repository side).
+So: **a version stamp cannot distinguish the last release from a build stamped
+during the hold.** `fs.read /lib/tc/version.lua` is not a reliable answer to
+"what is this machine running"; a behaviour the old build could not produce is.
+Whoever writes a diagnostic or an update flow must design around that, not
+around the stamp. With the tag cut, a machine below 0.4.9 updates normally on
+its next check once the release is published.
 
 **Changelog:** 21 entries, 0.3.21 → 0.4.9, newest last
 (`src/lib/tc/changelog.lua`). 0.4.3 and 0.4.6 have no entry: they were cut under
@@ -113,8 +114,8 @@ Any other value silently falls back to `desktop` (`config.lua:135-139`).
 | | `desktop` (default) | `line` |
 |---|---|---|
 | Requires a GPU | **yes** (`kernel.lua:741-744`) | no |
-| Starts | `tc.plant` → `tc.book` → `tc.plan` → `tc.gate` → `tc.move` → gfx/splash → 11 apps → `ui` → `tc.master` → `tc.flash` → `tc.link` → event loop | `tc.plant` → `tc.report` |
-| Apps / UI | 11 apps, windows, taskbar | none |
+| Starts | `tc.plant` → `tc.book` → `tc.plan` → `tc.gate` → `tc.move` → gfx/splash → 12 apps → `ui` → `tc.master` → `tc.flash` → `tc.link` → event loop | `tc.plant` → `tc.report` |
+| Apps / UI | 12 apps, windows, taskbar | none |
 | Master service | always started, on every desktop | none |
 | External link | yes | none |
 | Evidence | `kernel.lua:672-901` | `kernel.lua:633-670` |
@@ -130,13 +131,13 @@ headless node gets them too (`kernel.lua:629-631`).
   were rack-era residue that nothing read. `registry.setRole` and
   `registry.aggregate` went with it.
 
-## 4. The app set — eleven, no more, no fewer
+## 4. The app set — twelve, no more, no fewer
 
 `APP_IDS` (`kernel.lua:14`), loaded in this order:
 
 ```lua
 { "dashboard", "files", "console", "settings", "notes", "update",
-  "nodes", "gaia", "lab", "plant", "lines" }
+  "nodes", "gaia", "lab", "plant", "lines", "dns" }
 ```
 
 | order | id | title | short | icon | iconArt | style |
@@ -152,6 +153,7 @@ headless node gets them too (`kernel.lua:629-631`).
 | 9 | `lab` | Lab | Lab | `LAB` | 9×5 | — |
 | 10 | `plant` | Plant | Plant | `PLT` | 9×5 | — |
 | 11 | `lines` | Lines | Lines | `LIN` | 9×5 | — |
+| 12 | `dns` | DNS | DNS | `DNS` | 9×5 | — |
 
 **Facts and rules derived from this table:**
 
@@ -164,9 +166,9 @@ headless node gets them too (`kernel.lua:629-631`).
   order. Before this, `notes` and `nodes` both shipped `NTS` and `order = 8` sat
   unused for two releases because nothing checked either.
 - **F-keys are positional, not by `order`:** `ui.lua:1327-1329` binds `F1`…`F10`
-  to the first ten apps *after sorting by `order`*. Today that is
-  dashboard…plant (F1…F10). **`lines` is 11th and has no function key.** The UI
-  correctly hints `F1-F10` (`ui.lua:820,988`).
+  to dashboard…plant *after sorting by `order`*. Today that is
+  dashboard…plant (F1…F10). **`lines` is 11th and `dns` is 12th; neither has a
+  function key.** The UI correctly hints `F1-F10` (`ui.lua:820,988`).
 - `iconStyle = "accent"` is allowed only on `dashboard` (and only `nil`/"accent"
   pass `check.js:151-153`).
 - The app contract is `{ id, title, short, icon, iconArt, iconStyle, order,
@@ -174,9 +176,9 @@ headless node gets them too (`kernel.lua:629-631`).
   `close`. `architecture.md:155-214` is correct; the short docstring at
   `ui.lua:3-5` is not (it omits `iconArt`/`iconStyle`).
 
-## 5. Modules — 34 under `lib/tc`
+## 5. Modules — 41 under `lib/tc`
 
-All 34 are referenced; none is missing or orphaned. Grouped by what they serve:
+All 41 are referenced; none is missing or orphaned. Grouped by what they serve:
 
 **Boot / platform (8):** `vfs`, `config`, `log`, `util`, `text`, `theme`,
 `version`, `gfx`.
@@ -191,25 +193,34 @@ normalisation), `plant` (readout, cache, alarms), `history` (bounded ring),
 **Line node / network (7):** `net` (TC1 frames + modem), `naming`, `registry`,
 `master`, `report`, `installer`, `flash`.
 
+**DNS1 / direct query (6):** `frame` (the shared one-line codec), `value` (the
+safe value grammar), `dnsnet` (port 4201 on every modem), `dnsnode` (documents
+and executes this node's services), `dnsmaster` (the snapshot catalog), and
+`dnsclient` (master route with a direct fallback).
+
 **Acting layer (3):** `halls`, `gate`, `move`.
 
 **External link (1):** `link`.
 
-**Release (2):** `updater`, `changelog`.
+**Release (3):** `updater`, `changelog`, `payload` (the flashed file list the
+size and closure gates share).
 
 ## 6. Data on disk
 
-Config is a serialized Lua table in `/etc/terracorp.cfg`, 15 keys, all written on
-every save (`config.lua:9-25,47-70`):
+Config is a serialized Lua table in `/etc/terracorp.cfg`, 19 keys, all written on
+every save (`config.lua:9-29,51-74`):
 
 `accent`, `charset`, `clock24`, `splash`, `logLevel`, `name`, `hostname`,
 `iconOrder`, `iconLayout`, `role`, `master`, `linkSink`, `linkToken`,
-`linkInterval`, `linkControl`.
+`linkInterval`, `linkControl`, `dnsMaster`, `dnsPort`, `dnsTransport`,
+`dnsPassword`.
 
 **`hostname` is read (`kernel.lua:594`) but never written** — Settings has no row
-for it, so the operator sets it by hand in the configuration file. **No key selects a transport:** `linkTransport` is a name used in design notes, is
-absent from `config.lua`, and `config.set` rejects unknown keys, so it could never
-be stored today.
+for it, so the operator sets it by hand in the configuration file. **No key selects the link transport:** `linkTransport` is a name used in design
+notes, is absent from `config.lua`, and `config.set` rejects unknown keys, so it
+could never be stored today. DNS1 has its own `dnsTransport`
+(`auto`/`wired`/`wireless`), which restricts sends only; it never hides an
+inbound frame.
 
 **`/etc` (operator-authored, survives updates):**
 
@@ -265,7 +276,143 @@ be stored today.
   `VREAD`, `VLST`, `VDIRS`, `VDEL`) are rack/Relay/Vault residue kept only for
   old peers.
 
-### 7.2 The node status contract
+### 7.2 DNS1 — the direct node query
+
+DNS1 is the direct node query, now through **M5** (complete registry, delta
+publishes, document edits, state, inbox and the DNS console). It runs beside TC1, on its own
+port, so a tablet can ask one node what it offers without going through the
+master. The DNS app is the tablet console; the protocol itself is feature-complete.
+
+- One line per frame: `DNS1 <VERB> key=value …` (`dnsnet.lua`). Every modem
+  answers on port **4201**. DNS1 is built to reply through the modem that heard
+  the request, not through the first wired modem: it caches the first
+  `modem_message` string as the receiver for that peer and answers through it,
+  and accepts a side name in the same slot. The harness proves the side-name and
+  address reply paths; the real first-field semantics are pending S9.
+- **Transaction limits:** a request is at most **900 B** (the TC1 send policy),
+  a received frame at most **8192 B**, and a value at most **4096 B**. A request
+  that would exceed the send limit is refused locally with `too_large`; it is
+  never put on the wire.
+- **Every request carries `rid`**, eight hex characters generated by the node or
+  client, and every reply echoes it. `id` names the sender. A transport also
+  drops a repeat of the same `(from, rid)` within five seconds, so a modem that
+  delivers an event twice cannot execute a method twice. Replies (`*ACK` and
+  `ERR`) are never deduplicated: they are idempotent above this layer, and a
+  `PUBLISHACK` sharing a client's first `rid` must not make the relayed request
+  look like a duplicate.
+- The transport parses the event defensively: it looks for the `DNS1 ` message
+  and a numeric port 4201 in the documented
+  `(receiverAddress, senderAddress, port, distance, message)` shape or the
+  shorter shape some hosts produce. **The real in-game argument order and the
+  wireless packet limit are still unverified (S9);** the parse accepts both
+  shapes, and the fallback reply path is why a1 is not signed off yet.
+
+The verbs (`dnsnet.VERBS`):
+
+| Verb | Fields | Answer |
+|---|---|---|
+| `HELLO` | `rid id node proto boot transports` | `HELLOACK rid id proto ver boot transports` |
+| `DESCRIBE` | `rid id target` | `DESCRIBEACK rid id body=<value>` |
+| `EXEC` | `rid id target method` plus `p=<value>` | `EXECACK rid id ok=true body=<value>` or `ok=false err=<code>` |
+| `EDIT` | `rid id target field rev` plus `p=<value>` | `EDITACK rid id ok=true rev=<n>` or `ok=false err=<code> rev=<n> body=<value>` |
+| `PUBLISH` | `rid id ver part rev full` plus `p=<value>` | `PUBLISHACK rid id ver part ok` or `ok=false` / `need=full` |
+| `CATALOG` | `rid id` plus optional `cursor page` | `CATALOGACK rid id body=<value> stale=<bool>` |
+| `WHO` | `rid id` | `WHOACK rid id node proto ver boot` |
+| `ERR` | `rid id err` | sent by the transport for an unknown verb |
+
+`target` is `node`, `endpoint:<name>` or `path:<name>`. `HELLOACK.ver` is the
+DNS1 protocol version (`2` in M1); the node's own version travels as `node.ver`
+in a DESCRIBE snapshot (and in `dns.status`). Values use the `tc.value` grammar:
+`nil`, booleans, numbers, quoted strings and tables with integer or string keys,
+encoded canonically (integers first, then strings); functions, userdata,
+threads, NaN and infinities are refused. The codec never calls `load`, so a
+frame cannot execute code while it is being decoded.
+
+A node registers three kinds of thing: components (a component address and a
+method list), services (a Lua handler), and paths (a named group of endpoints).
+A method is executable only when it is both **documented** and named in that
+endpoint's explicit `allow` list. An announced method outside the list answers
+`denied` without invoking the component; an unknown method answers
+`unknown_method`. `getAllStacks` is the allowed method on
+`endpoint:inventory_controller` (and `inventory_controller_2`); `getStackInSlot`
+is documented but deliberately denied. `endpoint:dns.status` is a service whose
+`status` method returns the node id, name, version, boot id, port, transports,
+uptime, snapshot version, published version and publish counters.
+`endpoint:plant` is registered when the role owns a plant; it serves `status`,
+`alarms` and `snapshot` from the same cache the desktop apps read.
+`endpoint:state` is a small persistent key-value store (`get`, `set`, `delete`,
+`list`); `endpoint:inbox` is a bounded message queue (`post`, `list`, `take`,
+`clear`). Both keep their data in the node's `/var/dns` VFS and survive a
+restart. The paths are `path:status` (`dns.status`), `path:inventory` (every
+inventory controller, only when one exists) and `path:spike` (`dns.status` +
+`inventory_controller`) kept for M0 clients. A path only groups names;
+membership is not an extra allow list.
+
+### 7.2.1 The registry index
+
+The index is a **manifest**, not a second copy of every endpoint document. Each
+entry carries only the endpoint `name` and its `rev`; `DESCRIBE
+endpoint:<name>` returns kind, type, methods, allow list, tags and docs. Keeping
+the index small lets a node with many endpoints fit its index in one frame, and
+lets a delta publish send only endpoint parts whose `rev` changed.
+
+A node publishes the index first, then endpoint parts. The fields are `ver`
+(snapshot version), `part` (`index` or `endpoint:<name>`), `rev` and `full`
+(`true` on the first publish, after a boot change, after a master requests
+`need=full`, or when the snapshot version moves backwards). The master
+acknowledges each part; the node keeps a publish in flight until every part is
+acknowledged, retries after 30 s, and counts `full`, `delta`, `heartbeat`,
+`resync` and `failed` publishes. A quiet node sends an index-only **heartbeat**
+every 45 s, which refreshes `lastSeen` without resending endpoint bodies.
+
+**EDIT** is optimistic. The caller names the `rev` it last read; the node
+compares it to the endpoint revision (or, for the `node` target, the snapshot
+version). A stale write answers `err=conflict` with the current revision and the
+current encoded document, so the console can show both sides and resend. Only
+`docs` and `tags` are editable — methods, allow lists and identity stay owned by
+the node's code. A successful edit bumps the snapshot and republishes that one
+endpoint part. Overrides are saved to `/var/dns/edits.value` and applied when
+the endpoint registers after a restart. An edit that would make a part larger
+than **800 B** is refused with `too_large` rather than breaking the frame budget.
+
+**EXEC** accepts at most **8 positional arguments** and returns a body of at
+most **760 B**; a larger result answers `too_large` before the transport has to
+drop a frame, and a non-array `p` answers `bad_args`. Paths return one result
+per member, each with its own `ok`/`err`, so one denied member does not hide the
+others. The codec is the same `tc.value` grammar: it refuses functions and
+never calls `load`.
+
+**STATE** keeps at most **32 keys**, each a `[A-Za-z0-9_.-]` name of at most
+32 characters; the encoded store is capped at **4096 bytes**. **INBOX** keeps at
+most **32 messages**, each encoded message at most **1024 bytes**, and returns
+them oldest first. A full inbox answers `full`; a missing state key or message id answers
+`missing`. Both are ordinary services, so a client reaches them with `EXEC
+endpoint:state …` or `EXEC endpoint:inbox …`; the node also exposes the same
+operations as Lua methods for the local app.
+
+
+The master's cache is persisted (`dnsmaster.lua`). Each complete node snapshot
+is encoded with `tc.value` into `/var/dns/<safe-id>.value`; the master loads the
+directory at startup, ignores an entry whose index names endpoints with no
+stored part, saves at most every 2 s while dirty, and deletes the file when an
+entry is evicted. The master serves only a **complete** snapshot. A newer
+version, or a new boot id, replaces an old snapshot; a node silent for **90 s**
+is marked stale but is not deleted. A delta whose base is missing, incomplete or
+from another boot is answered with `need=full` and the node republishes
+everything on its next tick. The catalog pages by node id, defaults to eight
+rows and caps at 32; it reports `total`, `page` and `count`, and each node a
+`loaded` flag. A client talks to `dnsMaster` when configured; if the master is
+silent, `tc.dnsclient` falls back to a direct `WHO` plus a request to the node,
+which is the path the tablet uses.
+
+`dnsMaster` is `""` (DNS1 off on this desktop), `"self"` (this desktop is the
+master), or a master address (this desktop is a client). A line node with
+`dnsMaster = ""` uses its TC1 `master` address for publishing; with both empty
+it still serves DNS1 but logs that it has nowhere to publish. `dnsPort` defaults
+to 4201 and `dnsPassword` is a reserved empty placeholder — M5 still has **no
+authentication**.
+
+### 7.3 The node status contract
 
 ```text
 TC1 HELLO  id=<address> name=casing v=0.4.9
@@ -286,7 +433,7 @@ TC1 STATUS id=<address> name=casing state=online mem=863 disk=420 uptime=612
   (`master.lua:9-10`); the frame carries the literal `token=none` only because
   `net.lua:24` requires the field.
 
-### 7.3 The External Link — a closed command set of 25
+### 7.4 The External Link — a closed command set of 25
 
 One POST per interval; `linkControl` decides how far the far side reaches
 (`link.lua:64`):
@@ -316,7 +463,7 @@ One POST per interval; `linkControl` decides how far the far side reaches
   everywhere; `open`/`closed` was a documentation error, fixed 2026-11-23. See
   the command table in [`external-link.md`](external-link.md#command-set-closed).
 
-### 7.4 The bridge and the agent
+### 7.5 The bridge and the agent
 
 - `tools/bridge/bridge.js` — HTTP bridge, default port **8787** (`bridge.js:32`),
   endpoints `/link/queue`, `/link/next`, `/link/results`, `/link/mirror`,
@@ -337,7 +484,7 @@ An in-game update installs only the **49** manifest entries under `src/`
 in that path.
 
 **Install path (line node):** a floppy flashed by the master, containing
-`/init.lua`, `/boot`, `/lib`, `/apps`, an `/installer.lua` marker and a generated
+`/init.lua`, `/boot`, `/lib`, an `/installer.lua` marker and a generated
 `/etc/terracorp.cfg`; `/init.lua` sees the marker and runs `boot/install.lua`
 instead of the kernel (`init.lua:107-142`, `flash.lua:17-26`).
 
@@ -354,8 +501,8 @@ The list now lives once, in `src/lib/tc/payload.lua`:
 
 | Quantity | Now |
 |---|---|
-| payload files | **22** |
-| payload bytes | **161.0 KB** |
+| payload files | **26** |
+| installer image (payload, marker, config) | **233.1 KB** |
 | medium | 512 KB floppy, 8 KB margin |
 | gate | `npm run size` — 256 KB target, and fails if image + margin exceeds the medium |
 | closure | `npm run check` — fails with `PAYLOAD GAP` |
@@ -378,31 +525,32 @@ does not have.
 An earlier version of the gate missed it entirely — it matched `require("tc.x")`
 and the kernel calls `pcall(requireModule, "tc.x")`.
 
-Still open on P3: `line-node.md`'s budget table and the 0.4.9 changelog line still
-carry the old numbers, which is a documentation edit (F16).
+P3 is closed: `line-node.md`'s size prose, `status.md:128` and `roadmap.md:515`
+now quote the `npm run size` line, and the gate is the single source for all of
+them (F16).
 
 ## 9. Verification gates — real numbers
 
-`npm run` exposes **57** scripts (`package.json:7-65`).
+`npm run` exposes **58** scripts (`package.json:7-66`).
 
 | Gate | Command | What it really checks | Real number |
 |---|---|---|---|
-| Compile + manifest + icons + payload | `npm run check` | every `.lua` under `src`, `eeprom`, `tools` compiles; manifest matches the tree; each app's icon shape; the node payload is complete and closed | **72** files, **55** manifest entries, 0 `PAYLOAD GAP` |
-| Manifest | `npm run manifest` | rewrites `tools/manifest.txt` | 55 |
+| Compile + manifest + icons + payload | `npm run check` | every `.lua` under `src`, `eeprom`, `tools` compiles; manifest matches the tree; each app's icon shape; the node payload is complete and closed | **80** files, **62** manifest entries, 0 `PAYLOAD GAP` |
+| Manifest | `npm run manifest` | rewrites `tools/manifest.txt` | 62 |
 | Desktop smoke | `npm run sim`, `sim:oc` | fake-component boot | — |
 | Screen matrix | `npm run test:screens` | 10 scenarios × 5 resolutions | **50** combinations |
 | Link | `npm run test:link` | the closed command set | **48** scenarios |
 | Bridge | `npm run test:bridge` | HTTP endpoints + mirror parsing | 20 asserts |
 | MCP | `npm run test:mcp` | identity, 9 tools, first answers | 20 asserts |
-| Size | `npm run size` | the payload `payload.files` describes, against a 512 KB medium / 256 KB target | **22 files, 161.0 KB** (see §8.1) |
-| Others | `test:plant`, `history`, `book`, `field`, `line`, `naming`, `installer`, `report`, `master`, `apps`, `flash`, `fetch`, `install`, `boot`, `faults`, `gaia` | module-level behaviour | ≈706 assertions |
+| Size | `npm run size` | the payload `payload.files` describes, against a 512 KB medium / 256 KB target | **26 files, 233.1 KB** (see §8.1) |
+| Others | `test:plant`, `history`, `book`, `field`, `line`, `naming`, `installer`, `report`, `master`, `apps`, `flash`, `fetch`, `install`, `boot`, `faults`, `gaia`, `dns` | module-level behaviour | ≈706 assertions + 219 DNS1 checks |
 
 **`check.js` does not validate** icon-code uniqueness or `order` uniqueness —
 which is exactly how `NTS`/`NTS` and the `order = 8` gap shipped.
 
 **The screen matrix composition** is `dashboard, desktop, console, files,
-settings, notes, updater, nodes, lines, plant` (`test-screens.js:12`) — Lines,
-not Vault. 10 × 5 = 50.
+settings, notes, updater, nodes, lines, plant, dns` (`test-screens.js:12`) —
+Lines, not Vault, and the DNS console last. 11 × 5 = 55.
 
 The harness is a smoke test, not a substitute for in-game verification
 (`AGENTS.md:122-124`, `README.md:231-233`). Two line-node facts remain unverified
@@ -410,13 +558,14 @@ in-game: a never-booted computer booting the floppy, and
 `computer.setBootAddress()` from `/init.lua` on a plain computer
 (`line-node.md:93-105`).
 
-**Baseline run, 2026-11-23** (Node v26.13.1, npm 11.20.0, dependencies installed
-with `npm install`): `check` 72 files / 0 errors / manifest 55 · `size` 22 files,
-161.0 KB (32 % of the medium) · `test:link` 48 scenarios, 0 failures · `sim` and
-`sim:oc` clean · `test:screens` 50 combinations, no failures · `test:flash`,
+**Baseline run, 2026-11-24** (Node v26.13.1, npm 11.20.0, dependencies installed
+with `npm install`): `check` 80 files / 0 errors / manifest 62 · `size` 26 files,
+233.1 KB (46 % of the medium) · `test:link` 48 scenarios, 0 failures · `sim` and
+`sim:oc` clean · `test:screens` 55 combinations, no failures · `test:flash`,
 `test:installer`, `test:naming`, `test:report`, `test:master`, `test:apps`,
 `test:plant`, `test:history`, `test:book`, `test:field`, `test:line`, `test:gaia`,
-`test:mcp`, `test:bridge`, `test:docs` all pass — 26 gates, every exit code 0.
+`test:mcp`, `test:bridge`, `test:dns`, `test:docs` all pass — 27 gates, every
+exit code 0.
 
 **Read that baseline carefully.** On 2026-11-23 it was fully green *while F13 was
 true*: the flasher wrote 514.2 KB to a 512 KB medium and no gate could see it.
@@ -429,12 +578,13 @@ that way.
 
 The folder is a git repository since 2026-11-23, tracking the real upstream:
 `main` → `origin/main` (base `7ed69d2`, "Document 0.4.9 and the sidecar transport
-decision"). Everything is committed and pushed; the working tree is clean.
+decision"). The 0.4.9 release commit is tagged `v0.4.9`; the flash-card work
+still sits uncommitted in the working tree.
 
-What it is *not* is a checkout of the last release. It is several commits past
-`v0.4.8`, which is the newest tag, because 0.4.9 is deliberately untagged (see
-§1 and `versioning.md`). So `git describe` will name `v0.4.8` while the code is
-further on — another way a stamp can mislead.
+What it is *not* is a checkout of the last published GitHub Release. The tag
+exists locally, but until it is pushed and published `v0.4.8` is the newest
+GitHub Release; `git describe` names `v0.4.9` after the local tag. Publishing is
+the owner's step.
 
 The files that were unpublished when this audit started now live in specific
 commits:
@@ -477,7 +627,7 @@ small unpublished tail.
 
 # Part II — The decision register, reconciled
 
-28 decisions (`status.md:38-121`). "Status" is this document's verdict.
+29 decisions (`status.md:38-127`). "Status" is this document's verdict.
 
 | # | Decision | Status |
 |---|---|---|
@@ -506,12 +656,13 @@ small unpublished tail.
 | 26 | The node registry is the DNS (2026-11-16) | **Active** — **reconciled by 26-A**: the hall module stays, the file and the gateway are gone |
 | 27 | The sidecar replaces the card, not the protocol | **Active, not built** (0.4.10) |
 | 28 | A bus may move stock between named endpoints | **Active, not built** (0.4.11) |
+| 29 | DNS1 overlays port 4201 and leaves TC1 intact | **Active** — M5 registry, delta publish, EDIT, state, inbox and console; no TC1 verb or byte changed |
 
 **The register was corrected on 2026-11-23 (F33-F37).** The heading said
 "Decisions, 1-27" over 28 entries, `roadmap.md`'s copy stopped at 27, decision 25
 claimed to supersede 20 — which asks for exactly the removal 25 performs — and 12
-and 13 lost their subject with the Vault. The heading now reads 1-28 and both lists
-carry 28; 25 supersedes 1, 3–7, 14 (service tiers) and F2 only; 12 is moot with its
+and 13 lost their subject with the Vault. The heading now reads 1-29 and both lists
+carry 29; 25 supersedes 1, 3–7, 14 (service tiers) and F2 only; 12 is moot with its
 rule kept, and 13 is re-pointed at the local book (`status.md:38`, `:48-54`,
 `:79-86`; `roadmap.md:764-770`, `:899-912`, `:948-955`).
 
@@ -534,8 +685,8 @@ a card. Severity: **H** breaks the product or a promise, **M** misleads a reader
 ## P1 — Identity and version (5)
 
 **All five fixed 2026-11-23.** README and blackbox say 0.4.9 Flint; the sample
-frame carries `v=0.4.9`; roadmap says "built, tag held"; and `versioning.md` holds
-the un-freeze conditions.
+frame carries `v=0.4.9`; roadmap records the 2026-11-27 tag; and `versioning.md`
+records the tag and its remaining caveat.
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
@@ -556,8 +707,8 @@ and the four documents that listed the 0.4.8 app set were corrected.
 | F06 | H | **Fixed.** `nodes` and `notes` shared `NTS`; `nodes` is `NOD` | `nodes.lua:15` |
 | F07 | H | **Fixed.** README, AGENTS, architecture and blackbox now list the same eleven ids, with `lines` in and `vault` out | `README.md`, `AGENTS.md:26`, `architecture.md:94`, `blackbox.md:79` |
 | F08 | M | **Fixed.** `order` runs 1..11; the 8 gap is closed | `gaia.lua:23`, `lab.lua`, `plant.lua`, `lines.lua` |
-| F09 | M | **Fixed.** README says F1-F10 open the first ten apps in `order` and names `lines` as eleventh with no function key; architecture repeats the no-key fact | `README.md`, `architecture.md:132` |
-| F10 | M | **Fixed.** "all ten apps" became eleven | `architecture.md:119` |
+| F09 | M | **Fixed.** README says F1-F10 map the first ten ids in `order` and names `lines` as eleventh with no function key; architecture repeats the no-key fact | `README.md`, `architecture.md:132` |
+| F10 | M | **Fixed.** "all ten" became eleven | `architecture.md:119` |
 | F11 | M | **Fixed.** README's Nodes key map carries every binding in `nodes.lua:300-329` (arrows, PgUp/PgDn, Home/End, `R`/`P`/`F`/`I` twice, Enter/Tab), and `lines` has its own entry | `README.md`, `nodes.lua:300-329` |
 | F12 | L | **Fixed.** `check.js` fails on a duplicate icon code, a duplicate order and a missing order; both proved by reverting the fix | `check.js` |
 
@@ -565,10 +716,10 @@ and the four documents that listed the 0.4.8 app set were corrected.
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F13 | **H** | **Fixed 2026-11-23.** `flash.lua` copied whole roots (514.2 KB) onto a 512 KB floppy and refused every flash; it now copies `tc.payload` (22 files, 161.0 KB) | `flash.lua:120`, `payload.lua` |
+| F13 | **H** | **Fixed 2026-11-23.** `flash.lua` copied whole roots (514.2 KB) onto a 512 KB floppy and refused every flash; it now copies `tc.payload` (26 files, 233.1 KB) | `flash.lua:122`, `payload.lua` |
 | F14 | H | **Fixed 2026-11-23.** `size.js` gated a list the flasher did not read; flasher, size gate and `check` now share `src/lib/tc/payload.lua` | `tools/payload.js`, `size.js`, `check.js` |
-| F15 | H | **Resolved 2026-11-23.** `halls.lua` is in the payload because the plant genuinely needs it; `line-node.md` must drop it from its "excluded" list | `payload.lua:26` vs `line-node.md:51-52` |
-| F16 | M | **Fixed 2026-11-23.** The installer image is now one measured artifact: `npm run size` prints `22 files, 161.0 KB of 256 KB target (32% of the 512 KB floppy)`, and every document quotes that line | `line-node.md`, `status.md:110`, `roadmap.md:509` |
+| F15 | H | **Resolved 2026-11-23.** `halls.lua` is in the payload because the plant genuinely needs it; `line-node.md` drops it from its "excluded" list | `payload.lua:27` vs `line-node.md:197-200` |
+| F16 | M | **Fixed 2026-11-23.** The installer image is one measured artifact: `npm run size` prints `26 files, 233.1 KB of 256 KB target  (46% of the 512 KB floppy)`, and `line-node.md:43`, `status.md:128` and `roadmap.md:515` carry the same figure | `line-node.md`, `status.md:128`, `roadmap.md:515` |
 
 ## P4 — Roles, registry, master (7)
 
@@ -606,7 +757,8 @@ reads it (`kernel.lua:594`).
 
 ## P6 — Decision register (7)
 
-**All seven fixed 2026-11-23.** The register reads 1-28 in both files, 25 supersedes
+**All seven fixed 2026-11-23.** At that correction the register read 1-28 in both
+files; decision 29 (DNS1) brings it to 1-29. 25 supersedes
 only what it removes, 12 and 13 are settled, 26-A reconciles decision 26 with
 `plant.lua:316-321`, the implementation order names only outstanding work, and the
 gateway is called removed everywhere (`middleware.md:3-10`).

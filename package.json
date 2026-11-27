@@ -41,6 +41,7 @@
     "test:installer": "node tools/harness/test-installer.js",
     "test:report": "node tools/harness/test-report.js",
     "test:master": "node tools/harness/test-master.js",
+    "test:dns": "node tools/harness/test-dns.js",
     "test:apps": "node tools/harness/test-apps.js",
     "test:flash": "node tools/harness/test-flash.js",
     "test:fetch": "node tools/harness/test-fetch.js",

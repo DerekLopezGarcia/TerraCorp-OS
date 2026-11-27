@@ -34,7 +34,7 @@ manager.
 | Entry point | `/init.lua` | Find the boot volume, load the kernel, bind the GPU |
 | Kernel | `/boot/kernel.lua` | VFS, module loader, services, event loop |
 | Core | `/lib/tc/` | Version, utilities, text, logging, configuration, theme, graphics, UI, updater, cluster |
-| Apps | `/apps/*.lua` | App-specific UI and behavior, including the Nodes app |
+| Apps | `/apps/*.lua` | App-specific UI and behavior, including the Nodes and DNS apps |
 
 TerraCorp does not use OpenOS `require`, `event`, `fs`, or `shell`. The kernel
 loads modules with `load(source, "=/path", "t", env)` into a sandbox containing
@@ -118,7 +118,7 @@ grid and a one-row taskbar; windows are drawn over the grid.
   background (System uses this). The art is drawn in the inverse color, so the
   tile is highlighted without an inset box.
 - Tile height shrinks from five rows to three, two, or one when the screen
-  cannot fit every app. The UI chooses the largest height that fits all eleven
+  cannot fit every app. The UI chooses the largest height that fits all twelve
   apps, then draws the app's 3-cell `icon` code instead of the 9x5 art so nothing
   is clipped; the label stays on the row below.
 - An open window is indicated by the accent-colored icon label; the tile itself
@@ -131,7 +131,8 @@ grid and a one-row taskbar; windows are drawn over the grid.
 - With no focused window, arrows move the icon selection, Home/End jump to the
   first/last occupied cell, and Enter opens the selected app. F1-F10 always open
   an app by `order`, independent of the grid arrangement; `lines` is eleventh and
-  has no function key, so it opens from its icon or the Terminal.
+  `dns` is twelfth, and neither has a function key, so both open from their icon
+  or the Terminal.
 - The empty-desktop hint is drawn only when no window is open and the grid
   leaves room for it.
 

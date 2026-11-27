@@ -22,6 +22,10 @@ config.defaults = {
   linkToken = "",
   linkInterval = 5,
   linkControl = "off",
+  dnsMaster = "",
+  dnsPort = 4201,
+  dnsTransport = "auto",
+  dnsPassword = "",
 }
 
 config.data = {}
@@ -101,6 +105,20 @@ local function accepted(key, value)
   if key == "linkControl" then
     -- `read` is its own level: `off` must not quietly mean "read-only".
     return value == "off" or value == "read" or value == "write" or value == "full"
+  end
+  if key == "dnsPort" then
+    return type(value) == "number" and value % 1 == 0 and value >= 1 and value <= 65535
+  end
+  if key == "dnsTransport" then
+    return value == "auto" or value == "wired" or value == "wireless"
+  end
+  if key == "dnsMaster" then
+    -- "" disables DNS1 master work; "self" makes this desktop the master;
+    -- any other value is the master computer's address.
+    return type(value) == "string" and #value <= 64
+  end
+  if key == "dnsPassword" then
+    return type(value) == "string" and #value <= 64
   end
   -- A node's name is stored as typed: a wrong name is reported by the node when
   -- it publishes, so the one rule that decides a legal name stays in tc.naming.

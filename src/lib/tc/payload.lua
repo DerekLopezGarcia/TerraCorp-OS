@@ -23,7 +23,10 @@ payload.files = {
   "/lib/tc/addr.lua",
   "/lib/tc/changelog.lua",
   "/lib/tc/config.lua",
+  "/lib/tc/dnsnet.lua",
+  "/lib/tc/dnsnode.lua",
   "/lib/tc/driver.lua",
+  "/lib/tc/frame.lua",
   "/lib/tc/halls.lua",
   "/lib/tc/history.lua",
   "/lib/tc/installer.lua",
@@ -37,12 +40,15 @@ payload.files = {
   "/lib/tc/tank.lua",
   "/lib/tc/text.lua",
   "/lib/tc/util.lua",
+  "/lib/tc/value.lua",
   "/lib/tc/version.lua",
   "/lib/tc/vfs.lua",
 }
 
 payload.desktopOnly = {
   "tc.book",
+  "tc.dnsclient",
+  "tc.dnsmaster",
   "tc.flash",
   "tc.gate",
   "tc.gfx",

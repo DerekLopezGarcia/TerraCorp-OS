@@ -1,4 +1,5 @@
--- Tests for the two master-side apps: Nodes (the DNS) and Lines (the control).
+-- Tests for the master-side apps: Nodes (the DNS), Lines (the control) and the
+-- DNS console.
 --
 -- Run through tools/harness/test-apps.js. The context is fake and records what
 -- the apps draw and what they call; the master service is a stub with the same
@@ -7,6 +8,7 @@
 local keys = require("tc.keys")
 local nodesApp = require("apps.nodes")
 local linesApp = require("apps.lines")
+local dnsApp = require("apps.dns")
 
 local failures, checked = {}, 0
 
@@ -238,6 +240,151 @@ do
   local app = linesApp.create()
   app:draw(ctx)
   contains(ctx.view.lines[2], "unavailable", "without a master the app says so")
+end
+
+--------------------------------------------------------------------------------
+-- DNS
+--------------------------------------------------------------------------------
+
+local function newDnsClient(paged)
+  local client = { calls = {}, details = {
+    ["node-a"] = { v = 7, node = { id = "node-a", name = "casing", ver = "0.4.9", boot = "boot-a",
+      docs = "Main line" }, endpoints = { { name = "dns.status", rev = 2 }, { name = "plant", rev = 3 } } },
+    ["node-b"] = { v = 4, node = { id = "node-b", name = "caster", ver = "0.4.9", boot = "boot-b",
+      docs = "Caster line" }, endpoints = { { name = "dns.status", rev = 1 } } },
+  } }
+  function client:nodes(cursor, limit)
+    local nodes = {
+      { id = "node-a", name = "casing", state = "online", endpoints = 2 },
+      { id = "node-b", name = "caster", state = "stale", endpoints = 1 },
+    }
+    if paged then
+      if cursor == "node-a" then
+        return { nodes[2] }, { total = 2, page = 2, count = 1, next = "-" }
+      end
+      return { nodes[1] }, { total = 2, page = 1, count = 1, next = "node-a" }
+    end
+    return nodes, { total = 2, page = 1, next = "-" }
+  end
+  function client:describe(id, target)
+    local detail = client.details[id]
+    if not detail then
+      return nil, "timeout"
+    end
+    return detail
+  end
+  function client:edit(id, target, field, value, rev)
+    client.calls[#client.calls + 1] = { "edit", id, target, field, value, rev }
+    local detail = client.details[id]
+    if rev ~= detail.v then
+      return { ok = false, err = "conflict", rev = detail.v, body = detail }
+    end
+    detail.v = detail.v + 1
+    detail.node.docs = value
+    return { ok = true, rev = detail.v }
+  end
+  function client:exec(id, target, method, args)
+    client.calls[#client.calls + 1] = { "exec", id, target, method }
+    return { snapshot = 9, published = 8, calls = 3 }
+  end
+  return client
+end
+
+local function newDnsMasterStub()
+  local stub = {}
+  function stub:catalog(cursor, limit)
+    return { nodes = { { id = "node-m", name = "master", state = "online", endpoints = 1 } }, total = 1 }
+  end
+  function stub:describe(id, target)
+    return { v = 2, node = { id = "node-m", name = "master", ver = "0.4.9", boot = "boot-m",
+      docs = "Master node" }, endpoints = { { name = "dns.status", rev = 1 } } }
+  end
+  return stub
+end
+
+do
+  local client = newDnsClient()
+  local ctx = newContext(nil)
+  ctx.kernel.dnsclient = client
+  local app = dnsApp.create()
+
+  app:draw(ctx)
+  contains(ctx.view.lines[3], "Loading registry", "before the first tick the app says it is loading")
+  check(app:tick(ctx), "the first tick refreshes the registry")
+  equal(#app.rows, 2, "the app keeps both catalog rows")
+  equal(app.detail.id, "node-a", "the app loads the selected node")
+  app:draw(ctx)
+  contains(ctx.view.lines[1], "DNS registry", "the app draws its title")
+  contains(ctx.view.lines[3], "casing", "the first node is listed")
+  contains(ctx.view.lines[16], "casing", "the node identity is shown")
+  contains(ctx.view.lines[17], "Main line", "the node document is shown")
+
+  key(ctx, app, nil, keys.down)
+  equal(app.detail.id, "node-b", "moving down loads the next node")
+
+  key(ctx, app, "e", nil)
+  equal(app.mode, "edit", "E starts editing the document")
+  equal(app.buffer, "Caster line", "the editor starts with the current document")
+  key(ctx, app, nil, keys.enter)
+  equal(app.mode, "list", "Enter leaves the editor")
+  local editCall = client.calls[#client.calls]
+  equal(editCall[1], "edit", "the edit reaches the client")
+  equal(editCall[2], "node-b", "the edit names the selected node")
+  equal(editCall[3], "node", "the edit targets the node document")
+  equal(editCall[6], 4, "the edit carries the revision the app displayed")
+  contains(ctx.notifications[#ctx.notifications], "revision 5", "the app reports the new revision")
+
+  client.details["node-b"].v = 8
+  key(ctx, app, "e", nil)
+  client.details["node-b"].v = 9
+  key(ctx, app, nil, keys.enter)
+  contains(ctx.notifications[#ctx.notifications], "revision 9", "a conflict names the winning revision")
+
+  key(ctx, app, "p", nil)
+  local execCall = client.calls[#client.calls]
+  equal(execCall[1], "exec", "P reaches the client")
+  equal(execCall[3], "endpoint:dns.status", "P runs the allowlisted status method")
+  contains(ctx.notifications[#ctx.notifications], "snapshot 9", "the status reaches the app")
+end
+
+do
+  local client = newDnsClient(true)
+  local ctx = newContext(nil)
+  ctx.kernel.dnsclient = client
+  local app = dnsApp.create()
+  app:tick(ctx)
+  equal(#app.rows, 1, "the first page holds one row")
+  equal(app.detail.id, "node-a", "the first page loads its node")
+  equal(app.nextCursor, "node-a", "the page keeps the next cursor")
+  key(ctx, app, nil, keys.right)
+  equal(#app.rows, 1, "the second page holds one row")
+  equal(app.detail.id, "node-b", "the second page loads the next node")
+  equal(app.nextCursor, "-", "the last page has no cursor")
+  key(ctx, app, nil, keys.left)
+  equal(app.detail.id, "node-a", "the previous page returns to the first node")
+  key(ctx, app, nil, keys.left)
+  contains(ctx.notifications[#ctx.notifications], "first page", "the app reports the first page")
+end
+
+do
+  local ctx = newContext(nil)
+  ctx.kernel.dnsmaster = newDnsMasterStub()
+  local app = dnsApp.create()
+  app:tick(ctx)
+  app:draw(ctx)
+  contains(ctx.view.lines[3], "master", "the master cache is listed")
+  contains(ctx.view.lines[16], "master", "the master identity is shown")
+  contains(ctx.view.lines[17], "Master node", "the master describes its cache")
+  key(ctx, app, "e", nil)
+  contains(ctx.notifications[#ctx.notifications], "needs a DNS client", "the master desktop refuses edits")
+end
+
+do
+  local ctx = newContext(nil)
+  local app = dnsApp.create()
+  app:tick(ctx)
+  app:draw(ctx)
+  contains(ctx.view.lines[3], "No DNS master", "without either service the app explains why")
 end
 
 if checked == 0 then

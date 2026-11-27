@@ -1,13 +1,13 @@
 # Line node
 
-Status: **0.4.9, built and harness-tested 2026-11-16.** The line node is the
+Status: **0.4.9, built and harness-tested 2026-11-16, tagged 2026-11-27.** The line node is the
 smallest thing that keeps one production line observable and published. It
 replaced the cluster layer: no racks, no provisioning, no Vault, no desktop, no
 editor (decision 25).
 
 Built as designed: `tc.naming`, `tc.installer` + `boot/install.lua`, the
 `role = "line"` runtime, `tc.report`, `tc.master`, and the Nodes and Lines apps.
-`npm run size` holds the installer image at 161.0 KB of the 512 KB floppy, and
+`npm run size` holds the installer image at 233.1 KB of the 512 KB floppy, and
 `test:naming`, `test:installer`, `test:report`, `test:master` and `test:apps`
 cover it. Two facts are still pending an in-game session: a never-booted computer
 booting the floppy, and `setBootAddress` on a plain computer.
@@ -40,24 +40,24 @@ asks for a module the list does not carry. Measured on 2026-11-23:
 
 ```text
 $ npm run size
-  22 files, 161.0 KB of 256 KB target  (32% of the 512 KB floppy)
+  26 files, 233.1 KB of 256 KB target  (46% of the 512 KB floppy)
 ```
 
-The desktop is genuinely out: `tc.theme`, `tc.gfx` and `tc.ui` (about 51 KB) load
-only inside the desktop branch of the kernel, and the eleven apps (138 KB) and
-`tc.link` (47 KB) are not in the list at all. Before this, the flasher walked
+The desktop is genuinely out: `tc.theme`, `tc.gfx` and `tc.ui` load only inside
+the desktop branch of the kernel, and the twelve apps and `tc.link` are not in
+the list at all. Before this, the flasher walked
 whole roots and wrote 514.2 KB — more than the medium — while the size gate
 measured a different, hand-written set and reported 155 KB.
 
 Because the installed node runs from the HDD, the floppy no longer caps what the
-node may contain — 163 KB of 512 is a third of the medium. The real limits are
-RAM and the tick budget, and both say keep it small. If `link` or `gate` earn
-their place later, they can join without a redesign; the budget below stays as
-the target, not as a ceiling imposed by the medium.
+node may contain — 233.1 KB is about two fifths of the medium. The real
+limits are RAM and the tick budget, and both say keep it small. If `link` or
+`gate` earn their place later, they can join without a redesign; the 256 KB
+target stays the design target, not a ceiling imposed by the medium.
 
-`npm run size` holds the installer image inside its budget of the 512 KB floppy,
-and `npm run check` holds the payload closed, so "it fits on a floppy" cannot rot
-in three releases.
+`npm run size` holds the installer image inside its 256 KB target on the
+512 KB floppy, and `npm run check` holds the payload closed, so "it fits on a
+floppy" cannot rot in three releases.
 
 ## Boot and install
 
@@ -65,8 +65,8 @@ One floppy installs every computer in the plant, and it never gets written to:
 
 1. Flash the installer medium from the master (decision 26): put a blank floppy
    in a disk drive connected to the master, open **Nodes** and press **I** twice.
-   The flasher writes the payload named in `/lib/tc/payload.lua` (22 files,
-   about 163 KB of the 512 KB floppy), the `/installer.lua` marker that makes `/init.lua` run the
+   The flasher writes the payload named in `/lib/tc/payload.lua` (26 files; the
+   flashed set is 233.1 KB of the 512 KB floppy), the `/installer.lua` marker that makes `/init.lua` run the
    installer, and `/etc/terracorp.cfg` with `role = "line"`, an empty name (the
    node names itself from its output) and this master's address. It refuses a
    floppy holding foreign data and rewrites a floppy it flashed before.
@@ -191,6 +191,40 @@ The **Nodes app is the DNS**. One row per node that talks to the master:
 
 Racks being gone, the app has no role cycling, no draining, no job counts and no
 Vault usage, and does not depend on `tc.cluster`.
+
+## Direct query (DNS1)
+
+The node also listens on **port 4201** on every modem it owns. This is the M5
+direct registry: documents are editable, and the node carries a small persistent
+state store and inbox. The DNS app is the matching tablet console. `HELLO` answers with the protocol, version, boot id and
+transports; `DESCRIBE` returns the node, its endpoints, paths, tags, versions and
+documentation; `EXEC` runs a documented method that is also named in that
+endpoint's `allow` list; `EDIT` changes endpoint or node `docs`/`tags` when the
+caller supplies the revision it read. `endpoint:dns.status` is the node's own
+service; `endpoint:plant` serves the local readout (`status`, `alarms`,
+`snapshot`); `endpoint:state` stores up to 32 small values and `endpoint:inbox`
+keeps up to 32 messages, both under `/var/dns`; every inventory controller allows
+`getAllStacks` and documents `getStackInSlot` without allowing it. `path:status`,
+`path:inventory` and the legacy `path:spike` group them.
+
+The index is a manifest: each endpoint appears as `name` + `rev`, while
+`DESCRIBE endpoint:<name>` returns the full document. The first publish sends
+the index and every endpoint; later publishes send only changed parts, and a
+quiet node sends an index-only heartbeat every 45 s. A master that lost the base
+answers `need=full`, and the node republishes everything on its next tick. Each
+part is at most 900 B; an edit that would exceed 800 B is refused. EXEC accepts
+at most eight arguments and returns at most 760 B. The node publishes to
+`dnsMaster` when that key is set (or to the TC1 `master` when it is empty). A
+desktop with `dnsMaster = "self"` persists complete snapshots in `/var/dns` and serves the catalog; a desktop with
+any other address runs `tc.dnsclient` and can query the node directly when the
+master is down. A request is a single `DNS1` line with a `rid`, and the reply is
+built to leave from the modem that heard it: the first `modem_message` field is
+assumed to be that modem's address, so the transport caches it per peer and
+sends the answer from it. It also accepts a side name in that slot and falls
+back to every modem. The real event argument order, whether that value is a
+valid send address, and the wireless packet limit are the S9 probe: the
+transport accepts both shapes, but the in-game transcript has not been recorded
+yet.
 
 ## Not here
 

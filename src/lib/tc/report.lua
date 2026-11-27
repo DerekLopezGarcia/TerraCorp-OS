@@ -474,19 +474,41 @@ function report.run(options)
       pcall(plant.tick, plant)
     end
     self:tick(now)
+    if options.dnsnode and type(options.dnsnode.tick) == "function" then
+      local ok, reason = pcall(options.dnsnode.tick, options.dnsnode, now)
+      if not ok and self.log and self.log.error then
+        self.log:error("DNS1 node tick: " .. tostring(reason))
+      end
+    end
 
     local pack = table.pack(pcall(self.computer.pullSignal, 0.25))
     if pack[1] and pack[2] == "modem_message" then
-      local _, remote, port, _, message = table.unpack(pack, 3, pack.n)
-      if tonumber(port) == net.PORT then
-        local verb, fields = net.decode(message)
-        if verb then
-          self:handle(verb, fields, remote)
+      local dnsHandled = false
+      if options.dns and type(options.dns.handle) == "function" then
+        local ok, routed = pcall(options.dns.handle, options.dns, pack)
+        if not ok then
+          if self.log and self.log.error then
+            self.log:error("DNS1 event: " .. tostring(routed))
+          end
+        else
+          dnsHandled = routed == true
+        end
+      end
+      if not dnsHandled then
+        local _, remote, port, _, message = table.unpack(pack, 3, pack.n)
+        if tonumber(port) == net.PORT then
+          local verb, fields = net.decode(message)
+          if verb then
+            self:handle(verb, fields, remote)
+          end
         end
       end
     elseif pack[1] and (pack[2] == "shutdown" or pack[2] == "reboot") then
       if plant and type(plant.stop) == "function" then
         pcall(plant.stop, plant)
+      end
+      if options.dns and type(options.dns.close) == "function" then
+        pcall(options.dns.close, options.dns)
       end
       return false
     end

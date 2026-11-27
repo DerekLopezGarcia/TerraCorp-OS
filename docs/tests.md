@@ -43,29 +43,99 @@ and regression test, not a replacement for the game test.
 
 ## 0.4.9 build gate checks
 
-The 0.4.9 build is the tree on `main` at `9e93fd6` (`git describe --tags`:
-`v0.4.8-21-g9e93fd6`). It is **built and deliberately untagged**: `v0.4.8` is
-still the last release, and `versioning.md` holds the four conditions that must
-be met before a `v0.4.9` tag is cut. This section is the gate record for that
-build, not a release note.
+The 0.4.9 release tree is the commit tagged `v0.4.9` on 2026-11-27. Earlier
+build gates were recorded at `9e93fd6`; the final gates were re-run on the
+release tree after the DNS1 slices, and this section records them.
 
-Run from the repository root on 2026-11-23; all seven commands exited 0:
+The table below records the build gates on 2026-11-24; the release tag was
+verified on 2026-11-27 with `check`, `test:dns`, `test:apps`, `test:docs`,
+`sim`, `sim:oc` and the screen matrix.
+
+Run from the repository root on 2026-11-24; all eight commands exited 0:
 
 | Gate | Output |
 |---|---|
-| `npm run check` | `72 files checked, 0 errors`; `manifest: 55 files` |
-| `npm run size` | installer image `22 files, 161.0 KB of 256 KB target` — 31% of the 512 KB floppy |
+| `npm run check` | `80 files checked, 0 errors`; `manifest: 62 files` |
+| `npm run size` | installer image `26 files, 233.1 KB of 256 KB target` — 46% of the 512 KB floppy |
 | `npm run test:naming` | slugs, validation, the label guess and qualification passed |
 | `npm run test:installer` | the image installs, refuses, resumes and never writes the floppy |
 | `npm run test:report` | names, status frames, cadence, backoff and the page passed |
 | `npm run test:master` | registration, names, the merged view and the registry passed |
-| `npm run test:apps` | the DNS table and the line control draw, edit and push |
+| `npm run test:dns` | `PASS dns: 219 checks passed` — DNS1 M0-M4 transport, registry, delta publish, EDIT, EXEC, state/inbox and persistence |
+| `npm run test:apps` | the Nodes table, line control and DNS console draw, edit and push |
 
 The same run also passed `npm run test:docs` (36 documents agree), `npm run sim`
 (no errors), `npm run sim:oc` (7 scenarios, no failures) and `npm run test:link`
 (48 link scenarios, 0 failures). These are harness results: they show the build
 is internally consistent, not that it has booted in-game. The in-game record for
 0.4.9 is the sub-second link interval run in the results log below.
+
+## DNS1 matrix (harness)
+
+`npm run test:dns` builds the whole DNS1 slice in one in-memory bus: two published
+line nodes (node A on a wired modem, node B on a wireless-only modem), one
+unpublished node C for the master-offline fallback, one node D with both a wired
+and a wireless modem, a desktop master with a fake VFS, and tablet clients. The
+matrix below is what that run executes; every row is an assertion in
+`tools/harness/dns-test.lua`. Rows from `CATALOG` down through the transport
+matrix are M0; the M1 rows are the registry, delta, heartbeat, resync,
+pagination and persistence block; the EDIT, frame-limit, STATE and INBOX rows
+cover M2-M4. The M5 DNS console is covered by `test:apps` and the screen matrix.
+
+| Request | Target | Expected | Result |
+|---|---|---|---|
+| `WHO` | node A | `WHOACK` with node id, protocol, version, boot id | pass |
+| `HELLO` | node A | version, boot id, transports | pass |
+| `DESCRIBE node` | node A | node fields, endpoint list, path list, docs | pass |
+| `DESCRIBE endpoint:inventory_controller` | node A | methods, docs, `allow = { getAllStacks }` | pass |
+| `DESCRIBE endpoint:dns.status` | node A | service documentation | pass |
+| `EXEC getAllStacks` | node A | `ok=true`, two stacks | pass |
+| `EXEC getStackInSlot` | node A (not in `allow`) | `ok=false err=denied`, component never invoked | pass |
+| `EXEC noSuchMethod` | node A | `ok=false err=unknown_method` | pass |
+| `EXEC status` | node A, `endpoint:dns.status` | node id, port 4201, call count | pass |
+| `CATALOG` | master | both nodes, endpoints and paths | pass |
+| `DESCRIBE endpoint:dns.status` | master cache | documentation returned from cache | pass |
+| `EXEC getAllStacks` | master → node A | forwarded result, client accepts the relayed id | pass |
+| first `EXEC` via master after a publish | fresh client → node A | publish ack does not poison `(from, rid)`; relay executes, `stats().dup == 0` | pass |
+| `DESCRIBE endpoint:dns.status` | tablet with a missing master | direct `WHO` + request, no master | pass |
+| `EXEC getAllStacks` | tablet with a missing master | direct result | pass |
+| `DESCRIBE endpoint:dns.status` | tablet via master, node C uncached | master answers `offline`, then direct `WHO` + request | pass |
+| `EXEC getAllStacks` | tablet via master, node C uncached | direct result after the offline answer | pass |
+| repeat `(from, rid)` | node B | one execution, `stats().dup == 1` | pass |
+| `DNS1` on port 4200 | node A | dropped, not answered | pass |
+| own frame | node A | ignored | pass |
+| unknown verb | node A | `ERR err=unknown_verb`, `rid` echoed | pass |
+| request over 900 B | node A | local `too_large`, never sent | pass |
+| answer over 900 B | node C, `endpoint:big` | `ERR err=too_large`, client does not time out | pass |
+| `WHO` via wireless side | node D, two modems | 4201 opened on both; reply leaves through the wireless modem | pass |
+| `WHO` via wired address | node D, two modems | reply leaves through the wired modem | pass |
+| first publish | node A, line role | index plus `dns.status`, inventory and `plant` parts; all acknowledged | pass |
+| `EXEC status/alarms/snapshot` | node A → master → `endpoint:plant` | three local readout methods execute; unknown method answers `unknown_method` | pass |
+| `registerService("extra")` after the first publish | node A | delta publish sends the index and only the new endpoint part | pass |
+| quiet node at +45 s | node A | index-only heartbeat; no endpoint part resent; `lastSeen` refreshed | pass |
+| master loses the base snapshot | node A | `need=full`, node arms a full publish, next tick restores a complete snapshot | pass |
+| `CATALOG` page size 1 | master | `total=2`, `page=1`, `count=1`; cursor pages node A then node B, then `-` | pass |
+| master save and reload | fake `/var/dns` | both snapshots written, a new master loads 2 complete entries and serves `DESCRIBE endpoint:plant` | pass |
+| `EDIT` with current `rev` | node A, `endpoint:extra` | docs change, snapshot bumps, delta republishes that part | pass |
+| stale `EDIT` | node A, `endpoint:extra` | `err=conflict`, current revision and document returned; local document unchanged | pass |
+| invalid `EDIT` | node A | bad tags `bad_value`, `methods` `unknown_field`, over-size part `too_large` | pass |
+| `EDIT node` and restart | node A | node docs use the snapshot revision; overrides load from `/var/dns/edits.value` | pass |
+| `EXEC` 2 arguments / 9 arguments | node A, `endpoint:echo` | order preserved; 9 arguments answer `bad_args` | pass |
+| `EXEC` 900 B result | node A, `endpoint:big` | `too_large` before the transport drops a frame | pass |
+| `STATE set/get/list/delete` | node A, `endpoint:state` | value round-trips, keys list, delete reports `removed`; invalid key `bad_args` | pass |
+| `STATE` restart | fake `/var/dns` | key survives in `/var/dns/state.value` | pass |
+| `INBOX post/list/take/clear` | node A, `endpoint:inbox` | ids returned, list oldest first, take removes, clear reports the count | pass |
+| `STATE`/`INBOX` publish | node A | each part fits one frame; both arrive as delta parts | pass |
+
+The run also proves the TC1 bytes are unchanged (`net.lua` delegates to
+`tc.frame`, and the golden strings for `HELLO`, `STATUS` and `CFG` are
+byte-identical), that `tc.value` round-trips booleans followed by delimiters,
+`nil` followed by whitespace, and refuses functions, NaN and over-long values,
+and that the transport opens 4201 on every modem and replies
+through the ingress receiver (both side-name and address shapes). **S9 is not
+this table:** the real OpenComputers `modem_message` argument
+order, the side-as-send-address assumption and the wireless packet limit are
+still an in-game probe, so no row here is an in-game result.
 
 ## 0.4.1 Plant readout checks
 
@@ -276,7 +346,7 @@ The finding ledger (`canonical.md`), the roadmap and the deferred designs
 their job is to discuss removed and planned things, and the ledger would have no
 substance without naming what was wrong.
 
-Proved both ways on 2026-11-23: changing `manifest is 55 files` to 54, and the
+Proved both ways on 2026-11-23: changing the manifest count to 60, and the
 installer size to the old 163.3 KB, each fails the gate with the file and the
 number; restoring them exits 0.
 
@@ -476,9 +546,9 @@ filesystem, floppy, and modem components:
     once per staged version, and only when `nodeAutoUpdate` is enabled.
 
 `npm run test:nodes` runs the Nodes app in the desktop harness with a fake
-floppy, rack drive, and wired modem. It presses F7, verifies the rack list, and
-presses P to prepare the installer. The strict pass requires `Rack nodes`,
-`Installer armed`, and `/payload/.ready` on the fake floppy.
+floppy, a disk drive, and a wired modem. It presses F7 and requires the window
+titled `Node registry` with its empty-registry line, `No line node has
+reported`. It does not press P and does not check an installer payload.
 
 Manual in-game checks for 0.3.0:
 
@@ -663,8 +733,8 @@ Manual in-game checks for 0.2.1:
 show exactly one window titled Files. At 0.2.0, `npm run test:screens` ran nine
 scenarios (System, desktop, Terminal, Files, Settings, Notes, updater, Nodes,
 Vault) across five resolutions (160x50, 120x40, 80x25, 60x20, 40x16), for 45
-combinations. The current matrix drops Vault and adds Lines and Plant: ten
-scenarios × five resolutions = 50 combinations. GAIA has its own gate,
+combinations. The current matrix drops Vault and adds Lines, Plant and the DNS
+console: eleven scenarios × five resolutions = 55 combinations. GAIA has its own gate,
 `npm run test:gaia`, because the screen matrix does not open it.
 Each combination must adopt the requested resolution, finish without errors,
 and paint visible content.
@@ -686,8 +756,9 @@ Manual in-game checks add what the harness cannot prove:
 2. Reboot and time startup until the desktop appears.
 3. Read `/var/log/tc.log` from TerraCorp's boot volume. Record the `gpu` line's
    resolution/free-memory values and the uptime on `First render OK`.
-4. Run a 30-minute session. Open all eleven apps by icon and the first ten by
-   F1-F10 (`lines` is the eleventh and has no function key; Plant is the tenth);
+4. Run a 30-minute session. Open all twelve apps by icon and the first 10 by
+   F1-F10 (`lines` is the eleventh and `dns` the twelfth, and neither has a
+   function key; Plant is the tenth);
    verify the
    desktop selection, Enter-to-open, and taskbar chips. Drag two icons to swap
    their cells, restart, and confirm the order remains. In System, verify uptime
@@ -1115,15 +1186,16 @@ What this does and does not settle:
 - **Settled in-game:** both ends accept a fractional interval — the bridge queued
   the frame, the OS applied it and reported `0.5s` — and the value round-trips
   back to the configured 5 s.
-- **The stamp on that rig is deliberate.** `version.lua` says `0.4.8 "Keystone"`
-  although `config.lua` and `link.lua` carry the 0.4.9 code, because 0.4.9 is
-  intentionally **not tagged** in the repository. `updater.check` offers an
+- **The stamp on that rig was deliberate.** `version.lua` says `0.4.8 "Keystone"`
+  although `config.lua` and `link.lua` carry the 0.4.9 code, because 0.4.9 was
+  intentionally **not tagged** when the rig was stamped; it has since been tagged
+  `v0.4.9`. `updater.check` offers an
   update only when the installed version is lower than the latest GitHub Release
   (`available = compareVersions(current, latest) < 0`, `src/lib/tc/updater.lua:375`),
-  so stamping the rig `0.4.9` while the newest release is `v0.4.8` would leave it
-  claiming to be ahead of GitHub. Holding the stamp at 0.4.8 keeps every OC quiet
-  until a real tag exists. **The rig is the 0.4.9 code, frozen at the 0.4.8
-  label on purpose.**
+  so stamping the rig `0.4.9` while the newest release was `v0.4.8` would have
+  left it claiming to be ahead of GitHub. Holding the stamp at 0.4.8 kept every OC
+  quiet until the tag existed. **The rig is the 0.4.9 code, stamped at 0.4.8 on
+  purpose while the tag was held.**
 - The consequence to keep in mind when diagnosing: **a stamp cannot distinguish
   the release from an untagged build.** `fs.read /lib/tc/version.lua` is not a
   reliable answer to "what is this machine running"; a behaviour the old build
@@ -1141,11 +1213,11 @@ and still refused for `fs.read`. Both fail when the change is reverted.
 
 0.4.9 build gates (2026-11-23): the six gates that accept the build all pass on
 `main` at `9e93fd6` — `test:naming`, `test:installer`, `test:report`,
-`test:master`, `test:apps` and `npm run size` (`22 files, 161.0 KB`), with
-`npm run check` at `72 files checked, 0 errors` and `manifest: 55 files`. The
+`test:master`, `test:apps` and `npm run size` (`26 files, 233.1 KB`), with
+`npm run check` and the manifest passing at that commit. The
 full table, including `test:docs`, `sim`, `sim:oc` and `test:link`, is in
-[0.4.9 build gate checks](#049-build-gate-checks). The build stays deliberately
-untagged: `v0.4.8` is the last release.
+[0.4.9 build gate checks](#049-build-gate-checks). The release tree is tagged
+`v0.4.9`; `v0.4.8` remains the newest published release until the tag is pushed.
 
 ## F0 exit checklist
 
@@ -1156,7 +1228,7 @@ untagged: `v0.4.8` is the last release.
 | At least 250 KB free on Tier 2 | **Met**: recorded logs exceed the threshold; CPU/GPU tiers confirmed by the user's session |
 | First render within 2 seconds | **Met**: recorded values 1.05 s and 1.25 s are within budget; confirmed in-game |
 | Resolution adaptation and GPU retry tests | Verified by `npm run test:screens` and `npm run test:faults` |
-| Desktop icons, taskbar, and keyboard selection | `npm run test:desktop` clicks the Files icon and requires exactly one window; `npm run test:screens` covers 50 combinations; reported working in-game on 2026-10-25 |
+| Desktop icons, taskbar, and keyboard selection | `npm run test:desktop` clicks the Files icon and requires exactly one window; `npm run test:screens` covers 55 combinations; reported working in-game on 2026-10-25 |
 | Icon layout persists | `npm run test:icon-order` verifies swap, move-to-empty-slot, saving `iconLayout`/`iconOrder`, and loading both formats after boot; confirm in-game across a restart and update |
 | About → Update SYSTEM section shows live values | Harness screens pass; confirm values and R refresh in-game |
 | Updater detects, stages, installs, and restarts from a stable release | Modern/legacy response paths, full manifest filtering, backup recovery, rollback, and the boot-time applier (including a successful close with no return value) pass in the harness; the 0.1.9 → 0.1.11 repair path and the normal 0.1.11 → 0.2.0 update were confirmed in-game; keep log and pending-file evidence for F0 |
