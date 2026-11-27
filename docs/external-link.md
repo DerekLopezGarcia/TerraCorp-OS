@@ -558,7 +558,7 @@ once it does not.
 2. **Automation.** `fs.write`, `fs.append`, `fs.mkdir`, `fs.remove`, `fs.move`,
    `app.open`, `app.close`, `reboot`, behind `linkControl`. Shipped.
 3. **The sidecar.** The same command surface over a card component instead of the
-   Internet Card, with a bulk inventory read — [`sidecar.md`](sidecar.md), 0.4.10.
+   Internet Card, with a bulk inventory read — [`sidecar.md`](sidecar.md), 0.4.11.
    The rack-bus option (row B in Options above) is **retired**: it needed hardware decision 25
    deleted.
 

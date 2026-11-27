@@ -13,7 +13,7 @@ presented as fact.
 | Field | Value | Source |
 |---|---|---|
 | Product | TerraCorp OS | `src/lib/tc/version.lua` |
-| Version | 0.4.9 "Flint", API 1 (tagged `v0.4.9`; publishing is a separate step) | `src/lib/tc/version.lua` |
+| Version | 0.4.10 "Compass", API 1 (tagged `v0.4.10`; publishing is a separate step) | `src/lib/tc/version.lua` |
 | Vendor string | TerraCorp Industrial Systems | `src/lib/tc/version.lua` |
 | License | MIT | `LICENSE` |
 | Host | OpenComputers, Minecraft 1.12.2 + Forge, Supersymmetry pack | `README.md` |

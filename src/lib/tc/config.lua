@@ -33,7 +33,9 @@ config.data = {}
 local ACCENTS = { "cyan", "orange", "lime", "lightblue", "yellow", "purple" }
 local CHARSETS = { "unicode", "ascii" }
 local LOG_LEVELS = { "debug", "info", "warn", "error" }
-local ROLES = { desktop = true, line = true }
+-- `slave` is the product name. `line` stays accepted so volumes written by
+-- 0.4.9 and earlier keep booting after the rename.
+local ROLES = { desktop = true, slave = true, line = true }
 
 config.accents = ACCENTS
 config.charsets = CHARSETS
@@ -126,6 +128,38 @@ local function accepted(key, value)
     return type(value) == "string" and #value <= 64
   end
   return type(value) == "string"
+end
+
+-- Shared by the file loader and by Settings. The app should not grow a second
+-- copy of these limits: ask here first and show the reason.
+config.accepts = accepted
+
+function config.validate(key, value)
+  if key == nil or config.defaults[key] == nil then
+    return false, "unknown preference"
+  end
+  if key == "dnsPort" then
+    if type(value) ~= "number" or value % 1 ~= 0 or value < 1 or value > 65535 then
+      return false, "Port must be a whole number from 1 to 65535."
+    end
+    return true
+  end
+  if key == "dnsTransport" then
+    if value ~= "auto" and value ~= "wired" and value ~= "wireless" then
+      return false, "Transport must be auto, wired or wireless."
+    end
+    return true
+  end
+  if key == "role" then
+    if ROLES[value] ~= true then
+      return false, "Role must be desktop, slave or line."
+    end
+    return true
+  end
+  if not accepted(key, value) then
+    return false, "The value is not accepted for " .. key .. "."
+  end
+  return true
 end
 
 function config.reset()

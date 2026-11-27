@@ -151,7 +151,7 @@ function master:assign(node, name, remote)
   local ok, reason = self.modem:send(target, "ASSIGN", {
     id = node.id,
     name = name,
-    role = "line",
+    role = "slave",
     master = self:address(),
     masterId = self:address(),
     -- The frame contract still requires a token and refuses an empty one. There
@@ -315,7 +315,7 @@ function master:handle(name, remote, port, broadcast, message)
   local node = registry.upsert(self.nodes, {
     id = fields.id,
     name = nodeName,
-    role = "line",
+    role = "slave",
     modem = remote,
     state = "online",
     mem = fields.mem,

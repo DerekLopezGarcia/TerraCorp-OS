@@ -1,13 +1,14 @@
-# Line node
+# Slave node
 
-Status: **0.4.9, built and harness-tested 2026-11-16, tagged 2026-11-27.** The line node is the
+Status: **0.4.10, built and harness-tested 2026-11-27.** The slave node is the
 smallest thing that keeps one production line observable and published. It
 replaced the cluster layer: no racks, no provisioning, no Vault, no desktop, no
-editor (decision 25).
+editor (decision 25). The `line` role remains a 0.4.9 compatibility alias; new
+installs write `slave`.
 
 Built as designed: `tc.naming`, `tc.installer` + `boot/install.lua`, the
-`role = "line"` runtime, `tc.report`, `tc.master`, and the Nodes and Lines apps.
-`npm run size` holds the installer image at 233.1 KB of the 512 KB floppy, and
+`role = "slave"` runtime, `tc.report`, `tc.master`, and the Nodes and Lines apps.
+`npm run size` holds the installer image at 237.3 KB of the 512 KB floppy, and
 `test:naming`, `test:installer`, `test:report`, `test:master` and `test:apps`
 cover it. Two facts are still pending an in-game session: a never-booted computer
 booting the floppy, and `setBootAddress` on a plain computer.
@@ -40,7 +41,7 @@ asks for a module the list does not carry. Measured on 2026-11-23:
 
 ```text
 $ npm run size
-  26 files, 233.1 KB of 256 KB target  (46% of the 512 KB floppy)
+  26 files, 237.3 KB of 256 KB target  (46% of the 512 KB floppy)
 ```
 
 The desktop is genuinely out: `tc.theme`, `tc.gfx` and `tc.ui` load only inside
@@ -50,7 +51,7 @@ whole roots and wrote 514.2 KB — more than the medium — while the size gate
 measured a different, hand-written set and reported 155 KB.
 
 Because the installed node runs from the HDD, the floppy no longer caps what the
-node may contain — 233.1 KB is about two fifths of the medium. The real
+node may contain — 237.3 KB is about two fifths of the medium. The real
 limits are RAM and the tick budget, and both say keep it small. If `link` or
 `gate` earn their place later, they can join without a redesign; the 256 KB
 target stays the design target, not a ceiling imposed by the medium.
@@ -66,8 +67,8 @@ One floppy installs every computer in the plant, and it never gets written to:
 1. Flash the installer medium from the master (decision 26): put a blank floppy
    in a disk drive connected to the master, open **Nodes** and press **I** twice.
    The flasher writes the payload named in `/lib/tc/payload.lua` (26 files; the
-   flashed set is 233.1 KB of the 512 KB floppy), the `/installer.lua` marker that makes `/init.lua` run the
-   installer, and `/etc/terracorp.cfg` with `role = "line"`, an empty name (the
+   flashed set is 237.3 KB of the 512 KB floppy), the `/installer.lua` marker that makes `/init.lua` run the
+   installer, and `/etc/terracorp.cfg` with `role = "slave"`, an empty name (the
    node names itself from its output) and this master's address. It refuses a
    floppy holding foreign data and rewrites a floppy it flashed before.
 2. Put the floppy in the new computer and power it on. The BIOS runs `/init.lua`
@@ -145,7 +146,7 @@ are percent-escaped, and extra scalar fields are allowed so a newer peer adds
 data without breaking an older one (see `src/lib/tc/net.lua`).
 
 ```text
-TC1 HELLO  id=<address> name=casing v=0.4.9
+TC1 HELLO  id=<address> name=casing v=0.4.10
 TC1 STATUS id=<address> name=casing state=online mem=863 disk=420 uptime=612
     alarm=starved:95 stocks=2
     s=casing/ingots:744:exact:4.8 s=casing/casings:5:exact:0.0

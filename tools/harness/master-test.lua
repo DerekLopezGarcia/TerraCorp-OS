@@ -204,7 +204,7 @@ do
   equal(verb, "ASSIGN", "a new node is told its name")
   equal(fields and fields.name, "casing", "the assignment carries the accepted name")
   equal(fields and fields.master, MASTER_ADDRESS, "the assignment names the master")
-  equal(fields and fields.role, "line", "the assignment carries the line role")
+  equal(fields and fields.role, "slave", "the assignment carries the slave role")
 end
 
 do

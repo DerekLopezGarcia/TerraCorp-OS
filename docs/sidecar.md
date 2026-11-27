@@ -185,14 +185,14 @@ In-game, numbered, none of it done yet:
 
 ## Phasing
 
-**0.4.10, after the line nodes (0.4.9).** Two slices:
+**0.4.11, after the DNS settings release (0.4.10).** Two slices:
 
-- **0.4.10a — bridge card.** Transport parity: `tc.link` gains two backends behind
+- **0.4.11a — bridge card.** Transport parity: `tc.link` gains two backends behind
   one interface (`linkHttp`, `linkSidecar`), `linkTransport` joins the config, and
   the harness gains a fake card so `npm run test:link` runs every scenario on both
   transports. A fake that answers `queue_full` and a fake that times out are part
   of the matrix.
-- **0.4.10b — scanner.** `snapshot()` behind the existing stock reader, so
+- **0.4.11b — scanner.** `snapshot()` behind the existing stock reader, so
   `tc.stock` gains a bulk path without a second identifier format.
   `npm run test:sidecar` covers a 540-slot fake with the 50 ms budget applied.
 

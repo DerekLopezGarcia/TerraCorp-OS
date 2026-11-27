@@ -287,7 +287,7 @@ function installer.configText(values)
     string.format("  logLevel = %q,", "info"),
     string.format("  master = %q,", tostring(values.master or "")),
     string.format("  name = %q,", tostring(values.name or "")),
-    string.format("  role = %q,", "line"),
+    string.format("  role = %q,", "slave"),
     "  splash = false,",
     "}",
   }

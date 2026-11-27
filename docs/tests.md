@@ -1,7 +1,7 @@
 # Test plan and in-game results
 
 This is the whole test plan, from the F0 exit protocol through every slice up to
-0.4.9. F0 is the first section, not the whole document: it exits when the OS has
+0.4.10. F0 is the first section, not the whole document: it exits when the OS has
 run for 30 minutes without `ERR` log entries, retains
 at least 250 KB free on a Tier 2 node, and reaches its first render within 2
 seconds in Supersymmetry. The updater must also detect and install a published
@@ -41,46 +41,52 @@ npm run test:plant
 The harness models components and a filesystem in memory. Treat it as a smoke
 and regression test, not a replacement for the game test.
 
-## 0.4.9 build gate checks
+## 0.4.10 build gate checks
 
-The 0.4.9 release tree is the commit tagged `v0.4.9` on 2026-11-27. Earlier
-build gates were recorded at `9e93fd6`; the final gates were re-run on the
-release tree after the DNS1 slices, and this section records them.
+The 0.4.10 release tree is the commit tagged `v0.4.10` on 2026-11-27. The 0.4.9
+gates below still pass; Compass adds the Settings DNS page, the slave role name
+and two DNS checks. Earlier build gates were recorded at `9e93fd6`; the final
+gates were re-run on the release tree after the DNS1 slices, and this section
+records them.
 
-The table below records the build gates on 2026-11-24; the release tag was
-verified on 2026-11-27 with `check`, `test:dns`, `test:apps`, `test:docs`,
+The table below records the build gates on 2026-11-27; the release tag was
+verified on the same day with `check`, `test:dns`, `test:apps`, `test:docs`,
 `sim`, `sim:oc` and the screen matrix.
 
-Run from the repository root on 2026-11-24; all eight commands exited 0:
+Run from the repository root on 2026-11-27; all eight commands exited 0:
 
 | Gate | Output |
 |---|---|
 | `npm run check` | `80 files checked, 0 errors`; `manifest: 62 files` |
-| `npm run size` | installer image `26 files, 233.1 KB of 256 KB target` — 46% of the 512 KB floppy |
+| `npm run size` | installer image `26 files, 237.3 KB of 256 KB target` — 46% of the 512 KB floppy |
 | `npm run test:naming` | slugs, validation, the label guess and qualification passed |
-| `npm run test:installer` | the image installs, refuses, resumes and never writes the floppy |
+| `npm run test:installer` | the image installs, refuses, resumes, never writes the floppy, and accepts slave/line roles |
 | `npm run test:report` | names, status frames, cadence, backoff and the page passed |
 | `npm run test:master` | registration, names, the merged view and the registry passed |
-| `npm run test:dns` | `PASS dns: 219 checks passed` — DNS1 M0-M4 transport, registry, delta publish, EDIT, EXEC, state/inbox and persistence |
-| `npm run test:apps` | the Nodes table, line control and DNS console draw, edit and push |
+| `npm run test:dns` | `PASS dns: 222 checks passed` — DNS1 M0-M4 transport, registry, delta publish, EDIT, EXEC, state/inbox, persistence and master cache reload |
+| `npm run test:apps` | the Nodes table, slave control, DNS console and Settings DNS page draw, validate, apply and push |
 
-The same run also passed `npm run test:docs` (36 documents agree), `npm run sim`
+The same run also passed `npm run test:docs` (37 documents agree), `npm run sim`
 (no errors), `npm run sim:oc` (7 scenarios, no failures) and `npm run test:link`
 (48 link scenarios, 0 failures). These are harness results: they show the build
 is internally consistent, not that it has booted in-game. The in-game record for
-0.4.9 is the sub-second link interval run in the results log below.
+0.4.9 is the sub-second link interval run in the results log below; the 0.4.10
+Settings walk-through is still manual.
 
 ## DNS1 matrix (harness)
 
 `npm run test:dns` builds the whole DNS1 slice in one in-memory bus: two published
-line nodes (node A on a wired modem, node B on a wireless-only modem), one
+slave nodes (node A on a wired modem, node B on a wireless-only modem), one
 unpublished node C for the master-offline fallback, one node D with both a wired
 and a wireless modem, a desktop master with a fake VFS, and tablet clients. The
 matrix below is what that run executes; every row is an assertion in
 `tools/harness/dns-test.lua`. Rows from `CATALOG` down through the transport
 matrix are M0; the M1 rows are the registry, delta, heartbeat, resync,
 pagination and persistence block; the EDIT, frame-limit, STATE and INBOX rows
-cover M2-M4. The M5 DNS console is covered by `test:apps` and the screen matrix.
+cover M2-M4. The M5 DNS console and the Settings → DNS page (mode, address,
+port, transport, validation, live apply and rollback) are covered by
+`test:apps`; the Settings screen scenario applies Master through the page and
+asserts the live status in the screen matrix.
 
 | Request | Target | Expected | Result |
 |---|---|---|---|
@@ -109,7 +115,7 @@ cover M2-M4. The M5 DNS console is covered by `test:apps` and the screen matrix.
 | answer over 900 B | node C, `endpoint:big` | `ERR err=too_large`, client does not time out | pass |
 | `WHO` via wireless side | node D, two modems | 4201 opened on both; reply leaves through the wireless modem | pass |
 | `WHO` via wired address | node D, two modems | reply leaves through the wired modem | pass |
-| first publish | node A, line role | index plus `dns.status`, inventory and `plant` parts; all acknowledged | pass |
+| first publish | node A, slave role | index plus `dns.status`, inventory and `plant` parts; all acknowledged | pass |
 | `EXEC status/alarms/snapshot` | node A → master → `endpoint:plant` | three local readout methods execute; unknown method answers `unknown_method` | pass |
 | `registerService("extra")` after the first publish | node A | delta publish sends the index and only the new endpoint part | pass |
 | quiet node at +45 s | node A | index-only heartbeat; no endpoint part resent; `lastSeen` refreshed | pass |
@@ -547,7 +553,7 @@ filesystem, floppy, and modem components:
 
 `npm run test:nodes` runs the Nodes app in the desktop harness with a fake
 floppy, a disk drive, and a wired modem. It presses F7 and requires the window
-titled `Node registry` with its empty-registry line, `No line node has
+titled `Node registry` with its empty-registry line, `No slave node has
 reported`. It does not press P and does not check an installer payload.
 
 Manual in-game checks for 0.3.0:
@@ -1213,7 +1219,7 @@ and still refused for `fs.read`. Both fail when the change is reverted.
 
 0.4.9 build gates (2026-11-23): the six gates that accept the build all pass on
 `main` at `9e93fd6` — `test:naming`, `test:installer`, `test:report`,
-`test:master`, `test:apps` and `npm run size` (`26 files, 233.1 KB`), with
+`test:master`, `test:apps` and `npm run size` (`26 files, 237.3 KB`), with
 `npm run check` and the manifest passing at that commit. The
 full table, including `test:docs`, `sim`, `sim:oc` and `test:link`, is in
 [0.4.9 build gate checks](#049-build-gate-checks). The release tree is tagged

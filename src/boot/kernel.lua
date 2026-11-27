@@ -239,7 +239,9 @@ function kernel:rebindScreen()
 end
 
 function kernel:poweroff(reboot)
-  if self.dnsmaster and type(self.dnsmaster.close) == "function" then
+  if self.stopDns then
+    pcall(self.stopDns, self)
+  elseif self.dnsmaster and type(self.dnsmaster.close) == "function" then
     pcall(self.dnsmaster.close, self.dnsmaster)
   end
   local colors = self.theme.colors
@@ -594,8 +596,8 @@ local function startDnsNode(instance, requireModule, config, version, log, vfs)
     name = instance.hostname,
     ver = version.version,
     boot = dnsBootId(),
-    tags = { "line", "dns" },
-    docs = "TerraCorp line node. DNS1 registry, plant readout, state and inbox.",
+    tags = { "slave", "dns" },
+    docs = "TerraCorp slave node. DNS1 registry, plant readout, state and inbox.",
     transport = opened and transport or nil,
     master = master ~= "" and master or nil,
     computer = computer,
@@ -648,7 +650,7 @@ local function startDnsDesktop(instance, requireModule, config, version, log, vf
   local okNet, dnsnetModule = pcall(requireModule, "tc.dnsnet")
   if not okNet or type(dnsnetModule) ~= "table" then
     log.error("DNS1 transport unavailable: " .. tostring(dnsnetModule))
-    return nil
+    return nil, "DNS transport unavailable"
   end
   local port = tonumber(config.get("dnsPort")) or 4201
   local transport = dnsnetModule.new({
@@ -669,7 +671,9 @@ local function startDnsDesktop(instance, requireModule, config, version, log, vf
     local okMaster, dnsmasterModule = pcall(requireModule, "tc.dnsmaster")
     if not okMaster or type(dnsmasterModule) ~= "table" then
       log.error("DNS1 master unavailable: " .. tostring(dnsmasterModule))
-      return transport
+      pcall(transport.close, transport)
+      instance.dnsnet = nil
+      return nil, "DNS master unavailable"
     end
     local master = dnsmasterModule.new({
       id = instance.address,
@@ -689,7 +693,9 @@ local function startDnsDesktop(instance, requireModule, config, version, log, vf
     local okClient, dnsclientModule = pcall(requireModule, "tc.dnsclient")
     if not okClient or type(dnsclientModule) ~= "table" then
       log.error("DNS1 client unavailable: " .. tostring(dnsclientModule))
-      return transport
+      pcall(transport.close, transport)
+      instance.dnsnet = nil
+      return nil, "DNS client unavailable"
     end
     instance.dnsclient = dnsclientModule.new({
       computer = computer,
@@ -700,6 +706,77 @@ local function startDnsDesktop(instance, requireModule, config, version, log, vf
     log.trace("DNS1 client targeting " .. tostring(setting))
   end
   return transport
+end
+
+local function shortId(value)
+  value = tostring(value or "")
+  if #value <= 12 then
+    return value
+  end
+  return value:sub(1, 8) .. "…"
+end
+
+--- Stop the DNS1 transport and both possible roles. Safe when DNS is off.
+function kernel:stopDns()
+  if self.dnsclient and type(self.dnsclient.detach) == "function" then
+    pcall(self.dnsclient.detach, self.dnsclient)
+  end
+  self.dnsclient = nil
+
+  if self.dnsmaster and type(self.dnsmaster.close) == "function" then
+    pcall(self.dnsmaster.close, self.dnsmaster)
+  end
+  self.dnsmaster = nil
+
+  if self.dnsnet then
+    self.dnsnet.onFrame = nil
+    pcall(self.dnsnet.close, self.dnsnet)
+  end
+  self.dnsnet = nil
+end
+
+--- Apply the DNS keys already stored in `config` without restarting the desktop.
+-- Returns true when the selected mode started (including Off), or nil and a
+-- reason when the configuration asks for a role that could not be built.
+function kernel:restartDns()
+  self:stopDns()
+  if self.config.get("role") ~= "desktop" then
+    return nil, "DNS settings are desktop-only"
+  end
+  local transport, reason = startDnsDesktop(
+    self, self.require, self.config, self.version, self.log, self.vfs
+  )
+  if reason then
+    return nil, reason
+  end
+  if self.config.get("dnsMaster") ~= "" and not transport then
+    return nil, "DNS transport did not start"
+  end
+  return true
+end
+
+--- One short line for Settings and the DNS app.
+function kernel:dnsStatus()
+  local port = self.config.get("dnsPort") or 4201
+  local noModem = self.dnsnet and self.dnsnet.modems and #self.dnsnet.modems == 0
+  if self.dnsmaster then
+    local total = 0
+    local ok, body = pcall(self.dnsmaster.catalog, self.dnsmaster, nil, 1)
+    if ok and type(body) == "table" then
+      total = tonumber(body.total) or 0
+    end
+    if noModem then
+      return "Master · port " .. tostring(port) .. " not open"
+    end
+    return "Master · port " .. tostring(port) .. " · " .. total ..
+      (total == 1 and " node" or " nodes")
+  elseif self.dnsclient then
+    if noModem then
+      return "Client · no modem open"
+    end
+    return "Client · " .. shortId(self.dnsclient.master)
+  end
+  return "Off"
 end
 
 function kernel.start(boot)
@@ -857,10 +934,12 @@ function kernel.start(boot)
   -- starts so a headless server gets the file too.
   instance.notesPath = writeReleaseNotes(instance, requireModule)
 
-  -- A line node has no desktop and reads its own line: the plant service, its
+  -- A slave node has no desktop and reads its own line: the plant service, its
   -- own level alarms and the status publisher. It never needs a GPU.
-  if config.get("role") == "line" then
-    log.trace("Line role: starting the line node runtime")
+  local role = config.get("role")
+  if role == "slave" or role == "line" then
+    log.trace((role == "slave" and "Slave" or "Legacy line") ..
+      " role: starting the node runtime")
     local linePlant = nil
     local okPlant, plantModule = pcall(requireModule, "tc.plant")
     if okPlant and type(plantModule) == "table" then
@@ -1084,8 +1163,11 @@ function kernel.start(boot)
   end
 
   -- DNS1 is independent of TC1: the master answers on 4201 and the catalog is
-  -- filled by line nodes publishing their snapshots.
-  startDnsDesktop(instance, requireModule, config, version, log, vfs)
+  -- filled by slave nodes publishing their snapshots.
+  local dnsOk, dnsReason = startDnsDesktop(instance, requireModule, config, version, log, vfs)
+  if not dnsOk and dnsReason then
+    log.warn("DNS1 settings did not start: " .. tostring(dnsReason))
+  end
 
   -- The flasher writes a node installer medium from this runtime: the tree, the
   -- marker that makes /init.lua run the installer, and a configuration that

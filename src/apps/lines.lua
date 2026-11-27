@@ -164,7 +164,7 @@ function lines:draw(ctx)
 
   if #rows == 0 then
     v:put(2, bodyTop, "No stocks reported yet.", c.text, c.deep)
-    v:put(2, bodyTop + 1, "A line node publishes its two boundary stocks.", c.dim, c.deep)
+    v:put(2, bodyTop + 1, "A slave node publishes its two boundary stocks.", c.dim, c.deep)
   end
 
   for index = 1, visible do

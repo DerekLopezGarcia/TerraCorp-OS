@@ -243,7 +243,7 @@ should be scripted against yet.
 | `driver.list` | read | designed | Registered drivers: kind, capabilities, source file |
 | `driver.dump` | read | designed | `component.methods` + `component.doc` for one address — data, safe to paste |
 | `driver.reload` | **write** | designed | Re-parses `/etc/drivers/*.lua` without a reboot; a broken file degrades that kind to `unknown` |
-| `move` | **write** | designed, arrives with the bus (0.4.11) | Bounded transfer by path (above) |
+| `move` | **write** | designed, arrives with the bus (0.4.12) | Bounded transfer by path (above) |
 | `gate.set` | **write** | **shipped over the link** | Desired state of a line's gate, guarded by the cache |
 
 Errors are first-class and never guessed around: `unknown_path`,

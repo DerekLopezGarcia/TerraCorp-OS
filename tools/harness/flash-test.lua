@@ -294,7 +294,7 @@ do
   check(not written.exists("/var/plant/history.tsv"), "the master's samples never travel")
 
   local config = written.read("/etc/terracorp.cfg")
-  contains(config, 'role = "line"', "the medium boots as a line node")
+  contains(config, 'role = "slave"', "the medium boots as a slave node")
   contains(config, "master = " .. '"' .. MASTER_ADDRESS .. '"', "the medium already knows its master")
 end
 
@@ -348,7 +348,7 @@ do
   check(disk.exists("/init.lua"), "the disk has the entry point")
   check(disk.exists("/boot/kernel.lua"), "the disk has the kernel")
   check(not disk.exists("/installer.lua"), "the marker stays off the disk")
-  contains(disk.read("/etc/terracorp.cfg"), 'role = "line"', "the disk keeps the node configuration")
+  contains(disk.read("/etc/terracorp.cfg"), 'role = "slave"', "the disk keeps the node configuration")
 end
 
 if checked == 0 then

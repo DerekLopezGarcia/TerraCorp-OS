@@ -512,7 +512,7 @@ the hologram wall, sessions.
 > write the installer medium from the master (**Nodes**, key **I**). The rack layer
 > (cluster, node, netboot, netfetch, provision, vault, pull, jobs, the Vault app
 > and the console's vault commands) is gone; the manifest went from 62 to 55
-> files. `npm run size` holds the installer image at 233.1 KB of the 512 KB floppy
+> files. `npm run size` holds the installer image at 237.3 KB of the 512 KB floppy
 > and `test:naming`, `test:installer`, `test:report`, `test:master` and
 > `test:apps` cover the new code. Pending in-game: a never-booted computer
 > booting the floppy, and `setBootAddress` on a plain computer.
@@ -538,7 +538,24 @@ the node keeps them locally so it still alarms with the master gone; the rack
 modules and their tests are gone and `npm run check`, `npm run sim` and
 `npm run sim:oc` stay green.
 
-## F3.6 — Sidecar (0.4.10) · decided 2026-11-16, not built
+## F3.5b — DNS Settings and the slave role (0.4.10) · built 2026-11-27, tagged 2026-11-27
+
+> Built and cut as 0.4.10 "Compass". Settings → DNS is the operator path for the
+> three modes: Off, Master and Client, with the master address, port and
+> transport, a live status line, validation and rollback. Apply restarts only
+> the DNS runtime, not the desktop; leaving Master asks for confirmation. The
+> headless publisher is now the `slave` role, with `line` kept as the 0.4.9
+> compatibility alias. See [`dns-settings-ui.md`](dns-settings-ui.md).
+> Harness: `test:apps`, `test:dns` (222 checks), `test:installer`, `test:flash`,
+> `test:master`, the 55-screen matrix and the docs gate.
+
+**Exit criteria:** the three modes start and stop from Settings without a
+reboot; a malformed address, port or transport is refused before the file is
+written; a failed start restores the previous mode; the master cache survives a
+trip through Off; a 0.4.9 volume with `role = "line"` still boots; new installs
+write `role = "slave"`. The in-game settings walk-through remains manual.
+
+## F3.6 — Sidecar (0.4.11) · decided 2026-11-16, not built
 
 **Goal:** take the Internet Card out of the plant's critical path, read a container
 without giving it a Transposer, and move stock between named endpoints that a pipe
@@ -551,9 +568,9 @@ and the price of a sweep and a move do ([`sidecar.md`](sidecar.md),
 [`bus.md`](bus.md)).
 
 Slices: `linkTransport` with two backends behind one `tc.link` interface and a
-fake card in the harness (0.4.10a); `snapshot()` behind `tc.stock` with the
-20-container budget test (0.4.10b); the bus — ports and core, `move` behind the
-existing `transfer` capability, then fluids, power and rate (0.4.11) — whose
+fake card in the harness (0.4.11a); `snapshot()` behind `tc.stock` with the
+20-container budget test (0.4.11b); the bus — ports and core, `move` behind the
+existing `transfer` capability, then fluids, power and rate (0.4.12) — whose
 policy wiring lands in F7 ([`bus.md`](bus.md)).
 
 **Exit criteria:** `npm run test:link` passes every scenario on both transports;
@@ -731,6 +748,8 @@ action; the wall shows the same numbers as the panel.
 | 18 | Naming: `tc.naming`, the name in `/etc/terracorp.cfg`, `ASSIGN` from the master, `conflict` state | 0.4.9 · done | M |
 | 19 | `tc.master`, registry columns and the Nodes app as the DNS view | 0.4.9 · done | M |
 | 20 | `npm run size`: the node payload budget as a failing gate | 0.4.9 · done | S |
+| 21 | [DNS settings UI](dns-settings-ui.md): Off/Master/Client, address, port and transport in Settings, applied without a reboot | 0.4.10 · done | M |
+| 22 | Slave role name: installer, kernel and node tags write `slave`; `line` stays a 0.4.9 alias | 0.4.10 · done | S |
 
 ## Decisions
 

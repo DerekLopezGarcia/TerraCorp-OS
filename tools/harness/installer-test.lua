@@ -407,10 +407,40 @@ end
 
 do
   local text = installer.configText({ name = "casing", master = "abc" })
-  contains(text, 'role = "line"', "the node boots in the line role")
+  contains(text, 'role = "slave"', "the node boots in the slave role")
   contains(text, 'name = "casing"', "the name is written")
   contains(text, 'master = "abc"', "the master address is written")
   contains(installer.configText({}), 'name = ""', "an unnamed node starts with an empty name")
+end
+
+--------------------------------------------------------------------------------
+-- roles: slave is the name, line is the 0.4.9 compatibility alias
+--------------------------------------------------------------------------------
+
+do
+  local config = require("tc.config")
+  local ok = config.validate("role", "slave")
+  check(ok, "slave is an accepted role")
+  local legacy = config.validate("role", "line")
+  check(legacy, "line still validates for old volumes")
+  local desktop = config.validate("role", "desktop")
+  check(desktop, "desktop remains an accepted role")
+  local bad, badReason = config.validate("role", "server")
+  check(not bad, "an unknown role is refused")
+  contains(badReason, "desktop, slave or line", "the role error names the accepted values")
+  local portOk = config.validate("dnsPort", 4202)
+  check(portOk, "a valid DNS port validates")
+  local portBad, portReason = config.validate("dnsPort", 70000)
+  check(not portBad, "an out-of-range DNS port is refused")
+  contains(portReason, "1 to 65535", "the DNS port error is shared with the app")
+  local transportOk = config.validate("dnsTransport", "wireless")
+  check(transportOk, "a supported DNS transport validates")
+  local transportBad, transportReason = config.validate("dnsTransport", "radio")
+  check(not transportBad, "an unknown DNS transport is refused")
+  contains(transportReason, "auto, wired or wireless", "the transport error names the accepted values")
+  local unknown, unknownReason = config.validate("bogusPreference", "secret")
+  check(not unknown, "an unknown preference is refused by the shared validator")
+  contains(unknownReason, "unknown preference", "the unknown-key error is explicit")
 end
 
 --------------------------------------------------------------------------------

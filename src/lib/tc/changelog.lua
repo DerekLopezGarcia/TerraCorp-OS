@@ -30,6 +30,7 @@ return {
     "0.4.7",
     "0.4.8",
     "0.4.9",
+    "0.4.10",
   },
   notes = {
     ["0.3.21"] = {
@@ -132,6 +133,12 @@ return {
       "A line names itself after what it produces (EV Machine Casing becomes ev-machine-casing) and the master's node registry is the DNS: rename it in Nodes and the node adopts the name.",
       "Nodes shows the DNS table with rename, ping and forget; Lines edits a line's level thresholds and pushes them to the node, which keeps them and still alarms with the master gone.",
       "Configuration over the link: the node only accepts plant.tsv, stocks.tsv and paths.tsv, never a path, and reloads the plant after writing.",
+    },
+    ["0.4.10"] = {
+      "Settings → DNS: choose Off, Master or Client, set the master address, port and transport, and apply without rebooting.",
+      "Master mode shows this computer's full address so a second machine can be pointed at it; leaving Master asks for confirmation because the catalog stops being served.",
+      "A failed DNS start restores the previous mode and reports why, and the master cache survives a trip through Off.",
+      "The headless publisher is now the slave role; line remains a legacy alias so 0.4.9 volumes still boot.",
     },
   },
 }

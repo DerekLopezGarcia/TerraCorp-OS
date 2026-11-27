@@ -149,14 +149,14 @@ programmable part. The storage model stays where decisions 11 and 12 put it.
 
 ## Phasing
 
-**0.4.11, after the card and the scanner (0.4.10).** The bus is the third slice of
+**0.4.12, after the card and the scanner (0.4.11).** The bus is the third slice of
 the same mod and it is useless before the index exists: a move cannot be decided
 for a stock that cannot be named.
 
-- **0.4.11a — ports and core**, local range, items only, `move` behind the
+- **0.4.12a — ports and core**, local range, items only, `move` behind the
   existing `transfer` capability.
-- **0.4.11b — fluids, power and rate**, the trunk pair and the refusal reasons.
-- **0.4.11c — cross-dimension**, off by default.
+- **0.4.12b — fluids, power and rate**, the trunk pair and the refusal reasons.
+- **0.4.12c — cross-dimension**, off by default.
 
 Wiring the **policy** — orders that cross halls, a `STARVED` becoming a move —
 stays in F7 ([`roadmap.md`](roadmap.md)), where the agent gets hands.

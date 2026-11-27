@@ -1,6 +1,6 @@
 # Status — where the plan stands
 
-Last updated: 2026-11-16. This is the "pick it up cold" page: what we decided,
+Last updated: 2026-11-27. This is the "pick it up cold" page: what we decided,
 what exists, what is only on paper, and what blocks what. The authoritative
 detail lives in the linked documents; this page is the index and the honest
 ledger.
@@ -35,7 +35,7 @@ OS de planta (OC)    ──  lee, cachea, alarma, muestra; gates y setpoints
 The first three rows are optional. The fourth row is the product: it must show
 exact stocks and raise its own alarms with nothing else running.
 
-## Decisions, 1-29
+## Decisions, 1-30
 
 1-7 are the original frame: system model (app server + terminals), no accounts,
 native Remote Terminals, data-center autonomy, core apps, 0.3.x split, rack
@@ -76,7 +76,7 @@ discovery.
 24. **Lines are black boxes with an input and an output (2026-11-15).**
     Transposers sit only at the boundary stocks; the machines inside are not
     read; the line's rate comes from the input/output deltas.
-25. **Racks dropped, line nodes instead (2026-11-16).** The cluster layer — rack
+25. **Racks dropped, slave nodes instead (2026-11-16).** The cluster layer — rack
     discovery, netboot, Relay, waves, Vault, worker and storage roles — leaves the
     product. One ordinary computer per line, booting from a 512 KB floppy that is
     the whole install, reading, alarming and publishing to a master. Supersedes
@@ -126,16 +126,26 @@ discovery.
     pages the catalog, and a client falls back to a direct request when the master
     is down or has not seen the node. The first publish is full, later publishes
     are deltas, and a heartbeat keeps a quiet node in the catalog. The DNS app is
-    the tablet console. TC1's verbs, bytes and port 4200 are unchanged. See
-    [`canonical.md`](canonical.md) §7.2.
+    the tablet console. Settings → DNS switches Off/Master/Client, edits the
+    address, port and transport, and applies the change by restarting only the
+    DNS runtime (0.4.10). TC1's verbs, bytes and port 4200 are unchanged. See
+    [`canonical.md`](canonical.md) §7.2 and
+    [`dns-settings-ui.md`](dns-settings-ui.md).
+30. **The headless role is `slave` (2026-11-27), 0.4.10.** `slave` is the
+    product-facing name for a computer that publishes its document to a master,
+    whatever it watches. `line` remains accepted as a compatibility alias so a
+    0.4.9 volume still boots; the installer, flasher, node tags and status text
+    write `slave`. Settings does not switch the OS role.
 
 ## What exists today
 
-- **0.4.9 "Flint" is tagged**: the line node (installer, `role = "line"`, status
-  publisher, status page), `tc.master` with the registry as the DNS, the DNS1
-  M1-M5 registry protocol and the Nodes, Lines and DNS apps. The cluster layer
-  and its apps are gone (decision 25);
-  the manifest is 62 files and the installer image is 233.1 KB of the 512 KB
+- **0.4.10 "Compass" is tagged**: Settings → DNS, the `slave` role name with
+  `line` kept as a compatibility alias, live DNS apply and rollback. 0.4.9
+  remains the previous release: the slave node (installer, `role = "line"` then,
+  status publisher, status page), `tc.master` with the registry as the DNS, the
+  DNS1 M1-M5 registry protocol and the Nodes, Lines and DNS apps. The cluster
+  layer and its apps are gone (decision 25);
+  the manifest is 62 files and the installer image is 237.3 KB of the 512 KB
   floppy. Harness: `check`, `sim`, `sim:oc`, `test:naming`, `test:installer`,
   `test:report`, `test:master`, `test:apps`, `test:plant`, `test:link`,
   `test:bridge`, `test:history`, `test:book`, `test:mcp`, `test:field`,
@@ -213,11 +223,14 @@ discovery.
   DESCRIBE/EXEC/EDIT still work directly when the master is down. The DNS app
   (`dns`) is the tablet console: it lists the catalog, shows a node document,
   edits node docs with conflict reporting, and runs the status endpoint.
+  Settings → DNS is the operator path for the same three `dnsMaster` modes,
+  with validation, live apply and a status line; it rewrites only the DNS keys
+  and restarts only the DNS runtime. It ships in 0.4.10.
   `npm run test:dns` covers the 2-node + master + tablet matrix, delta,
   persistence, resync, EDIT conflicts and state/inbox limits. In-game S9 (event
   argument order, side-as-address, wireless packet size) is still open.
 - **Harness green**: `npm run check` (80 files, 62-file manifest), `test:link`
-  (48 scenarios), `test:dns` (219 checks), `test:bridge`, `test:history`,
+  (48 scenarios), `test:dns` (222 checks), `test:bridge`, `test:history`,
   `test:book`, `test:mcp`, `test:field`, `test:plant`, `test:line`, `sim`,
   `sim:oc` and the 55-combination screen matrix.
 - **The line program parser and the planner**: `tc.line` parses
@@ -253,8 +266,8 @@ discovery.
 | Area | Document | Slice |
 |---|---|---|
 | Reference dataset (SuSy Factory Flow) | [`research-susy-planner.md`](research-susy-planner.md) | optional |
-| Sidecar transport (bridge card) and bulk reads (scanner) | [`sidecar.md`](sidecar.md) | 0.4.10 |
-| Bus: ports, core and metered moves between named endpoints | [`bus.md`](bus.md) | 0.4.11 |
+| Sidecar transport (bridge card) and bulk reads (scanner) | [`sidecar.md`](sidecar.md) | 0.4.11 |
+| Bus: ports, core and metered moves between named endpoints | [`bus.md`](bus.md) | 0.4.12 |
 
 Nothing here has a line of code yet, and none of it is required for F3: the
 reference dataset is optional. The gateway was **removed**, not deferred
@@ -278,9 +291,9 @@ F3**: a line is a black box and its rate comes from the boundary deltas
 the RAID probe were removed with the cluster (decision 25). They will never be
 verified because they no longer exist; `tests.md` keeps the section as the record.
 
-**4. What actually remains, in order:** the sidecar (0.4.10), the bus (0.4.11),
+**4. What actually remains, in order:** the sidecar (0.4.11), the bus (0.4.12),
 and the documentation reconciliation tracked in
-[`canonical.md`](canonical.md) Part III. Everything from 0.4.1 to 0.4.9 is
+[`canonical.md`](canonical.md) Part III. Everything from 0.4.1 to 0.4.10 is
 delivered except two in-game facts in [`line-node.md`](line-node.md): a bare
 computer booting the flashed floppy, and `setBootAddress` on a plain computer.
 

@@ -529,10 +529,34 @@ local labReplScenario = rawget(_G, "SCENARIO") == "lab_repl"
 local filesScrollScenario = rawget(_G, "SCENARIO") == "files_scroll"
 local updateScenario = fakeUpdates or fakeUpdateRollback or fakeLegacyInternet
   or fakeUpdateRecover or fakeBootUpdate or fakeBootUpdateMaster
+local runningVersion = files["/lib/tc/version.lua"]:match('version%s*=%s*"([^"]+)"')
+
+local function versionTuple(text)
+  local major, minor, patch = tostring(text):match("^(%d+)%.(%d+)%.(%d+)$")
+  if not major then
+    return nil
+  end
+  return tonumber(major), tonumber(minor), tonumber(patch)
+end
+
+local function versionLess(left, right)
+  local amaj, amin, apat = versionTuple(left)
+  local bmaj, bmin, bpat = versionTuple(right)
+  if not amaj or not bmaj then
+    return false
+  end
+  if amaj ~= bmaj then
+    return amaj < bmaj
+  end
+  if amin ~= bmin then
+    return amin < bmin
+  end
+  return apat < bpat
+end
+
 local mockedReleaseVersion
 if updateScenario then
-  local currentVersion = files["/lib/tc/version.lua"]:match('version%s*=%s*"([^"]+)"')
-  local major, minor, patch = currentVersion:match("^(%d+)%.(%d+)%.(%d+)$")
+  local major, minor, patch = runningVersion:match("^(%d+)%.(%d+)%.(%d+)$")
   mockedReleaseVersion = string.format("%s.%s.%d", major, minor, tonumber(patch) + 1)
 end
 if fakeBootUpdate then
@@ -568,10 +592,9 @@ if fakeBootUpdateMaster then
       written[stagedPath] = body
     end
   end
-  local currentVersion = files["/lib/tc/version.lua"]:match('version%s*=%s*"([^"]+)"')
   written["/var/update/stage/" .. mockedReleaseVersion .. "/lib/tc/version.lua"] =
     files["/lib/tc/version.lua"]:gsub(
-      'version%s*=%s*"' .. currentVersion .. '"',
+      'version%s*=%s*"' .. runningVersion .. '"',
       'version = "' .. mockedReleaseVersion .. '"'
     )
 end
@@ -616,7 +639,7 @@ if notesOneScenario then
   written["/var/version"] = "0.4.7\n"
 end
 if notesSameScenario then
-  written["/var/version"] = "0.4.8\n"
+  written["/var/version"] = runningVersion .. "\n"
 end
 local nodesFloppy = nodesScenario and newVolume(512 * 1024) or nil
 local modemPackets = 0
@@ -1066,7 +1089,12 @@ elseif scenario == "files" then
   idle(2)
 elseif scenario == "settings" then
   ev("key_down", "screen-1", nil, 0x3E, "tester") -- F4 opens Settings
-  idle(3)
+  idle(1)
+  ev("key_down", "screen-1", nil, 0x0F, "tester") -- Tab opens the DNS page
+  idle(1)
+  typeText("m")                                    -- Off -> Master
+  ev("key_down", "screen-1", nil, 0x1C, "tester") -- Enter applies and starts it
+  idle(2)
 elseif scenario == "notes" then
   ev("key_down", "screen-1", nil, 0x3F, "tester") -- F5 opens Notes
   idle(1)
@@ -1707,7 +1735,7 @@ if STRICT then
       errors = errors + 1
       print("FAIL: F7 did not open the Nodes app")
     end
-    if not screen:find("No line node has reported", 1, true) then
+    if not screen:find("No slave node has reported", 1, true) then
       errors = errors + 1
       print("FAIL: the Nodes app did not explain the empty registry")
     end
@@ -1720,6 +1748,12 @@ if STRICT then
     if not screen:find("No stocks configured", 1, true) then
       errors = errors + 1
       print("FAIL: the Plant app did not show its empty configuration")
+    end
+  end
+  if scenario == "settings" then
+    if not screen:find("Master · port 4201", 1, true) then
+      errors = errors + 1
+      print("FAIL: applying the DNS page did not start the master")
     end
   end
   if scenario == "dns" then
@@ -1895,7 +1929,14 @@ if STRICT then
   end
   if scenario == "notes_many" then
     local notes = written["/var/whatsnew.md"] or ""
-    for _, version in ipairs({ "0.3.30", "0.3.31", "0.3.32", "0.3.33", "0.4.0", "0.4.1", "0.4.2", "0.4.4", "0.4.5", "0.4.7", "0.4.8" }) do
+    local expected = {}
+    for version in (files["/lib/tc/changelog.lua"] or ""):gmatch('%["(%d+%.%d+%.%d+)"%]%s*=%s*{') do
+      if versionLess("0.3.29", version) and versionLess(version, runningVersion) then
+        expected[#expected + 1] = version
+      end
+    end
+    table.sort(expected, versionLess)
+    for _, version in ipairs(expected) do
       if not notes:find("## " .. version, 1, true) then
         errors = errors + 1
         print("FAIL: the release notes missed " .. version)
@@ -1909,14 +1950,14 @@ if STRICT then
       errors = errors + 1
       print("FAIL: the desktop did not announce the release notes")
     end
-    if (readReal("/var/version") or ""):gsub("%s+$", "") ~= "0.4.8" then
+    if (readReal("/var/version") or ""):gsub("%s+$", "") ~= runningVersion then
       errors = errors + 1
       print("FAIL: /var/version did not record the running build")
     end
   end
   if scenario == "notes_one" then
     local notes = written["/var/whatsnew.md"] or ""
-    if not notes:find("## 0.4.8", 1, true) then
+    if not notes:find("## " .. runningVersion, 1, true) then
       errors = errors + 1
       print("FAIL: the release notes did not include the new version")
     end

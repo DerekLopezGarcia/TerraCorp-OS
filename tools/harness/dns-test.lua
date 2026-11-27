@@ -959,6 +959,20 @@ local loadedCatalog = loadedMaster:catalog(nil, 8)
 equal(loadedCatalog.total, 2, "loaded catalog has both nodes")
 check(loadedCatalog.nodes[1].loaded, "catalog exposes the loaded flag")
 
+-- Turning the master Off closes it; back On must reload the same cache.
+check(m1Master.master:close(), "stopping the master saves its cache")
+local offAndBack = dnsmaster.new({
+  id = "addrM1",
+  transport = m1Bus,
+  vfs = m1Vfs,
+  now = function() return 1049 end,
+})
+equal(offAndBack:catalog(nil, 8).total, 2,
+  "a master started after Off reloads the catalog")
+check(offAndBack:describe("addrM1", "endpoint:plant") ~= nil,
+  "the reloaded master still serves a node document")
+offAndBack:close()
+
 --------------------------------------------------------------------------------
 -- M2: EDIT with revisions, conflicts and resync
 --------------------------------------------------------------------------------

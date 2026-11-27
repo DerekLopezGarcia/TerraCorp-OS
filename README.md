@@ -4,13 +4,13 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 **Supersymmetry** modpack (Minecraft 1.12.2 + Forge). TerraCorp OS runs on the
 player's computers; it does not modify or redistribute Susy-Core.
 
-Current version: **0.4.9 Flint** (`src/lib/tc/version.lua` is the only source of
-that fact; it is tagged `v0.4.9` locally — publishing the tag is a separate
+Current version: **0.4.10 Compass** (`src/lib/tc/version.lua` is the only source of
+that fact; it is tagged `v0.4.10` locally — publishing the tag is a separate
 step; see [`docs/versioning.md`](docs/versioning.md)). It boots into a desktop shell with
 twelve apps, persists settings, notes and the desktop icon layout, and logs
 errors. One desktop computer is the master: its node registry, `/var/nodes.tsv`,
 is the plant's naming service and the Nodes app is its view and editor. Each
-production line runs a line node that reads its own boundary stocks and publishes
+production line runs a slave node that reads its own boundary stocks and publishes
 to the master over a wired modem, and answers a DNS1 registry query on port
 4201 (HELLO, DESCRIBE, allowlisted EXEC and EDIT) even when the master is down. Local
 simulations cover the OpenComputers API contract; in-game testing is tracked in
@@ -28,7 +28,9 @@ authoritative definition of the whole system is
   scrollable pager.
 - **Terminal:** built-in shell (`ls`, `cd`, `cat`, `lua`, `log`, `open`,
   `theme`, etc.).
-- **Settings:** accent color, character set, clock format, boot splash, and log level.
+- **Settings:** accent color, character set, clock format, boot splash, log
+  level, and the DNS mode (Off, Master or Client) with master address, port and
+  transport. Applying DNS restarts only that service, not the desktop.
 - **Notes:** a persistent multi-line scratchpad stored at `/var/notes.txt`.
 - **Lab:** write and run Lua against the live OS, or keep an interpreter session
   whose names survive between lines; output and errors are kept at
@@ -36,7 +38,7 @@ authoritative definition of the whole system is
 - **Update:** version details, a SYSTEM section (memory, storage, screen,
   devices, boot volume, address), a GitHub Releases updater, and release
   notes in /var/whatsnew.md after an update.
-- **Nodes:** the plant's naming service. One row per line node that talks to the
+- **Nodes:** the plant's naming service. One row per slave node that talks to the
   master — the name it answers to, its state, its worst alarm and its stocks —
   stored in `/var/nodes.tsv`. The app is the registry's view and editor.
 - **DNS console:** browse the DNS1 registry from a tablet or a desktop. The app lists
@@ -53,6 +55,9 @@ authoritative definition of the whole system is
   the master persists it under `/var/dns/` and a tablet can query a node directly
   if the master is down. Harness-verified; the in-game event-shape probe (S9) is
   still open.
+- **Settings DNS:** Tab to the DNS page; M cycles the mode, T the transport, A
+  edits the master address, P the port, and Enter applies. The page validates
+  before saving and reports the live status.
 - **DNS:** arrows select a node, left/right page through a long registry, R
   refreshes, E edits its document, P asks the node for its own status. Editing
   needs a DNS client; the master's desktop can browse but not edit.
@@ -155,9 +160,9 @@ settings. It does not need Internet and does not write the EEPROM. If it finds
 multiple eligible target volumes, provide the TerraCorp filesystem address as
 the final argument.
 
-## Line node
+## Slave node
 
-Each production line gets one ordinary computer running `role = "line"`: it reads
+Each production line gets one ordinary computer running `role = "slave"`: it reads
 the two boundary stocks, caches the answers, raises its own level alarms and
 publishes its status to the master over a wired modem. It has no desktop and
 needs no GPU, and it keeps reading, alarming and writing `/var/status/last.tsv`
@@ -193,7 +198,8 @@ whole system.
 - **System:** readings refresh every two seconds; R samples immediately.
 - **Files:** arrows select, Enter opens, Backspace goes up, R reloads.
 - **Terminal:** type commands and press Enter; `help` lists commands.
-- **Settings:** click a value to cycle it.
+- **Settings:** click a value to cycle it; Tab switches to DNS, where M, T, A,
+  P and Enter are the keyboard path.
 - **Notes:** type to edit; Enter starts a line and saves. PgUp/PgDn scroll,
   arrows/Home/End move the cursor, and clicking a line places the cursor.
   Losing focus also saves.
@@ -219,10 +225,10 @@ whole system.
 src/                  boot-volume contents
   init.lua            entry point; also runs the installer and a pending update
   boot/kernel.lua     filesystem, services, module loader, event loop
-  boot/install.lua    line node installer, run from the flashed medium
+  boot/install.lua    slave installer, run from the flashed medium
   boot/apply.lua      boot-time update applier
-  lib/tc/             core libraries, display, UI, plant readout, link, line node
-  lib/tc/payload.lua  the files a line node carries (the flash and size contract)
+  lib/tc/             core libraries, display, UI, plant readout, link, slave node
+  lib/tc/payload.lua  the files a slave node carries (the flash and size contract)
   apps/               dashboard, files, console, settings, notes, update, nodes,
                       gaia, lab, plant, lines
 eeprom/init.lua       optional boot manager (not required for normal installs)
@@ -289,7 +295,7 @@ designed, and what blocks what — is kept in [`docs/status.md`](docs/status.md)
 
 ## Design notes
 
-- The OS must remain useful on one offline node with 1 MB of storage.
+- The OS must remain useful on one offslave node with 1 MB of storage.
 - Colors use the OpenComputers palette; the T3 palette is initialized at boot.
 - One Unicode code point occupies one screen cell; wide CJK characters and emoji
   are not supported.

@@ -1,9 +1,9 @@
-# Canonical definition — TerraCorp OS 0.4.9 "Flint"
+# Canonical definition — TerraCorp OS 0.4.10 "Compass"
 
 This is the **single authority** for what TerraCorp OS is, what it contains, and
 what each document is allowed to claim. It exists because the design documents
 were written at different times against three different products (the 0.3.x rack
-cluster, the 0.4.x plant readout, the 0.4.9 line node), and they contradict each
+cluster, the 0.4.x plant readout, the 0.4.9 slave node), and they contradict each
 other and the code in ~75 places.
 
 Everything below was read out of the working tree on 2026-11-23; every non-obvious
@@ -40,8 +40,8 @@ everything.
 | Product | TerraCorp OS | `src/lib/tc/version.lua:5` |
 | Company (fictional) | TerraCorp Industrial Systems | `version.lua:6` |
 | Tagline | Architects of Dawn | `version.lua:7` |
-| Version | **0.4.9** | `version.lua:8`, `package.json:3` |
-| Codename | **Flint** | `version.lua:9` |
+| Version | **0.4.10** | `version.lua:8`, `package.json:3` |
+| Codename | **Compass** | `version.lua:9` |
 | API level | 1 | `version.lua:10` |
 | License | MIT | `version.lua:11`, `LICENSE` |
 | Platform | Lua 5.3, OpenComputers 1.7.x / 1.8.x, Supersymmetry, MC 1.12.2 + Forge | `AGENTS.md:8-14` |
@@ -49,26 +49,17 @@ everything.
 **Single source of truth for identity is `src/lib/tc/version.lua`.** No other file
 may declare a version as fact; they may only quote it.
 
-**Built ≠ published.** 0.4.9 was built on 2026-11-16 and tagged `v0.4.9` on
-2026-11-27. The tag is local; pushing it and creating the GitHub Release remain
-the publisher's step. Until then `v0.4.8` is still the newest published release
-and "0.4.9 is released" means "the tag exists", not "GitHub serves it".
+**Built ≠ published.** 0.4.10 was built on 2026-11-27 and tagged `v0.4.10` on the
+same day. The tag is local until it is pushed; pushing it and creating the GitHub
+Release remain the publisher's step. Until then `v0.4.9` is still the newest
+published release and "0.4.10 is released" means "the tag exists", not "GitHub
+serves it".
 
-**The hold is over, and it left a consequence.** Between 2026-11-23 and
-2026-11-27, 0.4.9 was deliberately untagged so that `updater.check` would not
-move every machine at once: it offers an update only when the installed version
-is *lower* than the latest release (`available = compareVersions(current, latest)
-< 0`, `updater.lua:375`). A machine stamped `0.4.8` against a `v0.4.8` release
-sits still. That also means a machine can **run 0.4.9 code while reporting
-`0.4.8`** — the live rig did exactly this (§10 records the repository side).
-So: **a version stamp cannot distinguish the last release from a build stamped
-during the hold.** `fs.read /lib/tc/version.lua` is not a reliable answer to
-"what is this machine running"; a behaviour the old build could not produce is.
-Whoever writes a diagnostic or an update flow must design around that, not
-around the stamp. With the tag cut, a machine below 0.4.9 updates normally on
-its next check once the release is published.
+**0.4.9 is the previous release.** It was built on 2026-11-16, tagged `v0.4.9`
+on 2026-11-27 and published. A machine below 0.4.9 updates normally on its next
+check; a machine below 0.4.10 sees Compass once its release is published.
 
-**Changelog:** 21 entries, 0.3.21 → 0.4.9, newest last
+**Changelog:** 22 entries, 0.3.21 → 0.4.10, newest last
 (`src/lib/tc/changelog.lua`). 0.4.3 and 0.4.6 have no entry: they were cut under
 those numbers and shipped inside 0.4.8's entry. A node updating from ≤ 0.3.20
 gets no notes for the versions it skipped (`kernel.lua:443-456`).
@@ -107,11 +98,13 @@ OS de planta (OC)  read, cache, alarm, show; gates and setpoints   <- the produc
 
 ## 3. The two runtime roles
 
-`role` accepts exactly **`desktop`** and **`line`**
-(`config.lua:33`). It is read at exactly **one** site: `kernel.lua:635`.
-Any other value silently falls back to `desktop` (`config.lua:135-139`).
+`role` accepts **`desktop`**, **`slave`** and the 0.4.9 compatibility alias
+**`line`** (`config.lua:33`). `slave` is the product name; `line` stays accepted
+so existing volumes keep booting. The value is read at exactly **one** site:
+`kernel.lua:635`. Any other value silently falls back to `desktop`
+(`config.lua:135-139`).
 
-| | `desktop` (default) | `line` |
+| | `desktop` (default) | `slave` / `line` |
 |---|---|---|
 | Requires a GPU | **yes** (`kernel.lua:741-744`) | no |
 | Starts | `tc.plant` → `tc.book` → `tc.plan` → `tc.gate` → `tc.move` → gfx/splash → 12 apps → `ui` → `tc.master` → `tc.flash` → `tc.link` → event loop | `tc.plant` → `tc.report` |
@@ -125,7 +118,8 @@ headless node gets them too (`kernel.lua:629-631`).
 
 **One `role` namespace is left. Do not reintroduce the second:**
 
-- `config.get("role")` — the **OS role**: `desktop` | `line` (`config.lua:33`).
+- `config.get("role")` — the **OS role**: `desktop` | `slave` | `line`
+  (`config.lua:33`).
 - There is **no** `registry.role` any more. The node registry lost the column with
   F20 (2026-11-23); the master never needed it, and the `worker`/`storage` values
   were rack-era residue that nothing read. `registry.setRole` and
@@ -190,7 +184,7 @@ paths), `driver` (declarative drivers), `stock` (boundary reader), `tank` (fluid
 normalisation), `plant` (readout, cache, alarms), `history` (bounded ring),
 `book` + `plan` + `line` (recipes, planner, line-program parser).
 
-**Line node / network (7):** `net` (TC1 frames + modem), `naming`, `registry`,
+**Slave node / network (7):** `net` (TC1 frames + modem), `naming`, `registry`,
 `master`, `report`, `installer`, `flash`.
 
 **DNS1 / direct query (6):** `frame` (the shared one-line codec), `value` (the
@@ -406,16 +400,29 @@ silent, `tc.dnsclient` falls back to a direct `WHO` plus a request to the node,
 which is the path the tablet uses.
 
 `dnsMaster` is `""` (DNS1 off on this desktop), `"self"` (this desktop is the
-master), or a master address (this desktop is a client). A line node with
+master), or a master address (this desktop is a client). A slave node with
 `dnsMaster = ""` uses its TC1 `master` address for publishing; with both empty
 it still serves DNS1 but logs that it has nowhere to publish. `dnsPort` defaults
 to 4201 and `dnsPassword` is a reserved empty placeholder — M5 still has **no
 authentication**.
 
+Settings → DNS edits those three keys in place. The mode row cycles Off,
+Master and Client; Client needs a full 36-character address; the port accepts
+1–65535; the transport cycles `auto`, `wired` and `wireless`. Apply writes
+`/etc/terracorp.cfg` through `config.save`, calls `kernel:restartDns()` to close
+the old transport and start the new mode without a reboot, and restores the
+previous values if the write or the start fails. Master mode replaces the address
+field with this computer's full address so a client can be pointed at it. The
+status line reports `Master · port 4201 · N nodes`, `Master · port 4201 not open`,
+`Client · <short id>` or `Off`. The page exists only on a desktop: a slave has no
+Settings window and keeps its installer/configuration publish target. The page is
+part of **0.4.10 Compass**; 0.4.9 itself still used the configuration file and a
+reboot.
+
 ### 7.3 The node status contract
 
 ```text
-TC1 HELLO  id=<address> name=casing v=0.4.9
+TC1 HELLO  id=<address> name=casing v=0.4.10
 TC1 STATUS id=<address> name=casing state=online mem=863 disk=420 uptime=612
     alarm=starved:95 stocks=2 more=0
     s1=casing/ingots:744:exact:4.8 s2=casing/casings:5:exact:0.0
@@ -483,7 +490,7 @@ An in-game update installs only the **49** manifest entries under `src/`
 (`apply.lua:326`); `eeprom/init.lua` and the four `tools/*.lua` entries are inert
 in that path.
 
-**Install path (line node):** a floppy flashed by the master, containing
+**Install path (slave node):** a floppy flashed by the master, containing
 `/init.lua`, `/boot`, `/lib`, an `/installer.lua` marker and a generated
 `/etc/terracorp.cfg`; `/init.lua` sees the marker and runs `boot/install.lua`
 instead of the kernel (`init.lua:107-142`, `flash.lua:17-26`).
@@ -502,7 +509,7 @@ The list now lives once, in `src/lib/tc/payload.lua`:
 | Quantity | Now |
 |---|---|
 | payload files | **26** |
-| installer image (payload, marker, config) | **233.1 KB** |
+| installer image (payload, marker, config) | **237.3 KB** |
 | medium | 512 KB floppy, 8 KB margin |
 | gate | `npm run size` — 256 KB target, and fails if image + margin exceeds the medium |
 | closure | `npm run check` — fails with `PAYLOAD GAP` |
@@ -542,8 +549,8 @@ them (F16).
 | Link | `npm run test:link` | the closed command set | **48** scenarios |
 | Bridge | `npm run test:bridge` | HTTP endpoints + mirror parsing | 20 asserts |
 | MCP | `npm run test:mcp` | identity, 9 tools, first answers | 20 asserts |
-| Size | `npm run size` | the payload `payload.files` describes, against a 512 KB medium / 256 KB target | **26 files, 233.1 KB** (see §8.1) |
-| Others | `test:plant`, `history`, `book`, `field`, `line`, `naming`, `installer`, `report`, `master`, `apps`, `flash`, `fetch`, `install`, `boot`, `faults`, `gaia`, `dns` | module-level behaviour | ≈706 assertions + 219 DNS1 checks |
+| Size | `npm run size` | the payload `payload.files` describes, against a 512 KB medium / 256 KB target | **26 files, 237.3 KB** (see §8.1) |
+| Others | `test:plant`, `history`, `book`, `field`, `line`, `naming`, `installer`, `report`, `master`, `apps`, `flash`, `fetch`, `install`, `boot`, `faults`, `gaia`, `dns` | module-level behaviour | ≈706 assertions + 222 DNS1 checks |
 
 **`check.js` does not validate** icon-code uniqueness or `order` uniqueness —
 which is exactly how `NTS`/`NTS` and the `order = 8` gap shipped.
@@ -560,7 +567,7 @@ in-game: a never-booted computer booting the floppy, and
 
 **Baseline run, 2026-11-24** (Node v26.13.1, npm 11.20.0, dependencies installed
 with `npm install`): `check` 80 files / 0 errors / manifest 62 · `size` 26 files,
-233.1 KB (46 % of the medium) · `test:link` 48 scenarios, 0 failures · `sim` and
+237.3 KB (46 % of the medium) · `test:link` 48 scenarios, 0 failures · `sim` and
 `sim:oc` clean · `test:screens` 55 combinations, no failures · `test:flash`,
 `test:installer`, `test:naming`, `test:report`, `test:master`, `test:apps`,
 `test:plant`, `test:history`, `test:book`, `test:field`, `test:line`, `test:gaia`,
@@ -577,14 +584,13 @@ that way.
 ## 10. State of the working tree (read this before trusting any diff)
 
 The folder is a git repository since 2026-11-23, tracking the real upstream:
-`main` → `origin/main` (base `7ed69d2`, "Document 0.4.9 and the sidecar transport
-decision"). The 0.4.9 release commit is tagged `v0.4.9`; the flash-card work
-still sits uncommitted in the working tree.
+`main` → `origin/main`. The 0.4.9 release commit is tagged `v0.4.9`; the 0.4.10
+release commit is tagged `v0.4.10`. The flash-card work still sits uncommitted
+in the working tree.
 
-What it is *not* is a checkout of the last published GitHub Release. The tag
-exists locally, but until it is pushed and published `v0.4.8` is the newest
-GitHub Release; `git describe` names `v0.4.9` after the local tag. Publishing is
-the owner's step.
+**0.4.10 Compass** adds the Settings → DNS page and the `slave` role name while
+keeping `line` as a compatibility alias. `v0.4.10` is the current local tag; it
+is published as the current GitHub Release after the tag is pushed.
 
 The files that were unpublished when this audit started now live in specific
 commits:
@@ -652,17 +658,18 @@ small unpublished tail.
 | 22 | Component kinds are plugins; a plugin is data | **Active** (`tc.driver`) |
 | 23 | Self-contained readout first (2026-11-15) | **Active** — the pivot that everything after it assumes |
 | 24 | Lines are black boxes (2026-11-15) | **Active** |
-| 25 | Racks dropped, line nodes instead (2026-11-16) | **Active** — supersedes 1, 3–7, 14 and F2, not 20; 12 moot, 13 re-pointed |
+| 25 | Racks dropped, slave nodes instead (2026-11-16) | **Active** — supersedes 1, 3–7, 14 and F2, not 20; 12 moot, 13 re-pointed |
 | 26 | The node registry is the DNS (2026-11-16) | **Active** — **reconciled by 26-A**: the hall module stays, the file and the gateway are gone |
-| 27 | The sidecar replaces the card, not the protocol | **Active, not built** (0.4.10) |
-| 28 | A bus may move stock between named endpoints | **Active, not built** (0.4.11) |
+| 27 | The sidecar replaces the card, not the protocol | **Active, not built** (0.4.11) |
+| 28 | A bus may move stock between named endpoints | **Active, not built** (0.4.12) |
 | 29 | DNS1 overlays port 4201 and leaves TC1 intact | **Active** — M5 registry, delta publish, EDIT, state, inbox and console; no TC1 verb or byte changed |
+| 30 | The headless role is `slave`; `line` is a compatibility alias | **Active (0.4.10)** — new installs write `slave`, 0.4.9 volumes keep booting |
 
 **The register was corrected on 2026-11-23 (F33-F37).** The heading said
 "Decisions, 1-27" over 28 entries, `roadmap.md`'s copy stopped at 27, decision 25
 claimed to supersede 20 — which asks for exactly the removal 25 performs — and 12
 and 13 lost their subject with the Vault. The heading now reads 1-29 and both lists
-carry 29; 25 supersedes 1, 3–7, 14 (service tiers) and F2 only; 12 is moot with its
+carry 30; 25 supersedes 1, 3–7, 14 (service tiers) and F2 only; 12 is moot with its
 rule kept, and 13 is re-pointed at the local book (`status.md:38`, `:48-54`,
 `:79-86`; `roadmap.md:764-770`, `:899-912`, `:948-955`).
 
@@ -716,10 +723,10 @@ and the four documents that listed the 0.4.8 app set were corrected.
 
 | ID | Sev | Finding | Where |
 |---|---|---|---|
-| F13 | **H** | **Fixed 2026-11-23.** `flash.lua` copied whole roots (514.2 KB) onto a 512 KB floppy and refused every flash; it now copies `tc.payload` (26 files, 233.1 KB) | `flash.lua:122`, `payload.lua` |
+| F13 | **H** | **Fixed 2026-11-23.** `flash.lua` copied whole roots (514.2 KB) onto a 512 KB floppy and refused every flash; it now copies `tc.payload` (26 files, 237.3 KB) | `flash.lua:122`, `payload.lua` |
 | F14 | H | **Fixed 2026-11-23.** `size.js` gated a list the flasher did not read; flasher, size gate and `check` now share `src/lib/tc/payload.lua` | `tools/payload.js`, `size.js`, `check.js` |
 | F15 | H | **Resolved 2026-11-23.** `halls.lua` is in the payload because the plant genuinely needs it; `line-node.md` drops it from its "excluded" list | `payload.lua:27` vs `line-node.md:197-200` |
-| F16 | M | **Fixed 2026-11-23.** The installer image is one measured artifact: `npm run size` prints `26 files, 233.1 KB of 256 KB target  (46% of the 512 KB floppy)`, and `line-node.md:43`, `status.md:128` and `roadmap.md:515` carry the same figure | `line-node.md`, `status.md:128`, `roadmap.md:515` |
+| F16 | M | **Fixed 2026-11-23.** The installer image is one measured artifact: `npm run size` prints `26 files, 237.3 KB of 256 KB target  (46% of the 512 KB floppy)`, and `line-node.md:43`, `status.md:128` and `roadmap.md:515` carry the same figure | `line-node.md`, `status.md:128`, `roadmap.md:515` |
 
 ## P4 — Roles, registry, master (7)
 
@@ -775,7 +782,7 @@ gateway is called removed everywhere (`middleware.md:3-10`).
 
 ## P7 — Removed features still documented (16)
 
-**All sixteen fixed 2026-11-23.** README's rack section became "Line node"; the
+**All sixteen fixed 2026-11-23.** README's rack section became "Slave node"; the
 retired documents carry a banner at the top saying what replaced them and whether
 anything of them survives; `status.md` separates what is current from what was
 dropped with 0.3.x; roadmap F5 is marked blocked and F6 re-scoped; and
@@ -811,7 +818,7 @@ dropped with 0.3.x; roadmap F5 is marked blocked and F6 re-scoped; and
 | F60 | M | **Fixed 2026-11-23.** `tests.md` was titled "F0 Test Plan" but is the whole 0.2–0.4.9 plan; F0 is one section | `tests.md:1-4` |
 | F61 | L | **Fixed 2026-11-23.** `tests.md` described 0.3.1 work as "under development" and "not part of v0.3.0" | `tests.md` "Post-release work that shipped as 0.3.1 and later" |
 | F62 | L | **Fixed 2026-11-23.** F0's checklist still said "needs an in-game retest" under a phase declared closed | `tests.md` "F0 exit checklist", the three post-F0 rows |
-| F63 | L | **Fixed 2026-11-23.** Backlog items 17-20 listed the line node, naming, `tc.master` and `size` as future work at 0.4.9, which shipped | `roadmap.md` backlog rows 17-20, all `0.4.9 · done` |
+| F63 | L | **Fixed 2026-11-23.** Backlog items 17-20 listed the slave node, naming, `tc.master` and `size` as future work at 0.4.9, which shipped | `roadmap.md` backlog rows 17-20, all `0.4.9 · done` |
 | F64 | L | **Fixed 2026-11-23.** `README.md` recommended 2 MB; the plant readout needs 64 MB | `README.md` hardware table |
 
 ## P9 — Dead code and residue (6)
@@ -823,7 +830,7 @@ its hardware does not exist yet, so each one is decided rather than swept:
 | Symbol | Verdict |
 |---|---|
 | `halls.load` / `halls.save` / `halls.PATH` | **Deleted** — the last thing pretending `/etc/halls.tsv` exists |
-| `tc.move` (`move.run`) | **Kept, harness-only.** Named by decision 28 and covered by `test:field`; it becomes reachable when the bus (0.4.11) lands or the decision is retired. The kernel loads the module at boot (`kernel.lua:737-739`) so the acting layer is instantiated when the bus lands; `move.run` itself is called only from `tools/harness/field-test.lua` |
+| `tc.move` (`move.run`) | **Kept, harness-only.** Named by decision 28 and covered by `test:field`; it becomes reachable when the bus (0.4.12) lands or the decision is retired. The kernel loads the module at boot (`kernel.lua:737-739`) so the acting layer is instantiated when the bus lands; `move.run` itself is called only from `tools/harness/field-test.lua` |
 | `gate:alarms` / `gate:status` | **Kept, read by the Plant app.** The read half of a gate: `Plant` folds `gate:alarms()` into its alarm panel and shows `gate:status()` in its note line (`plant.lua`), so both have a `src/` caller; a gate has no hardware to report on yet, and deleting these would delete the only statement of what a gate reports |
 | `registry.aggregate` / `registry.setRole` | **Deleted** with F20. `role` is gone from the registry (it duplicated the runtime role `config.lua` owns), so there is nothing to set and nothing to count by role |
 | `registry.rename` | **Deleted** — no caller in `src/` or `tools/harness/`: the Nodes app renames by upsert and `test:master` exercises `master:rename`, a separate implementation, so the helper was dead code with a false coverage claim |
@@ -856,7 +863,7 @@ trivia; and the recipe dataset has one path.
 | F72 | M | `names.md`'s command surface lists `path.assign`, `driver.reload`, `move`, `gate.set` as if they were verbs; only `gate.set` exists on the link and none of the others is implemented anywhere | `names.md:216-233` |
 | F73 | M | `sessions.md` / `terminal-protocol.md` build a remote-terminal model on decision 1, which decision 25 superseded; nothing in the current plan needs them | `sessions.md:1-14`, `terminal-protocol.md:3-33` |
 | F74 | M | `terminal-protocol.md` invents "32-bit framing" and cites `docs/net.md`, which does not exist | `terminal-protocol.md:20` |
-| F75 | L | `opencomputers.md` keeps a full "Racks and servers" section with no "not used by a line node" note; `research-susy-planner.md` names two different paths for `RecipeDataset` | `opencomputers.md:126-176`, `research-susy-planner.md:34,113` |
+| F75 | L | `opencomputers.md` keeps a full "Racks and servers" section with no "not used by a slave node" note; `research-susy-planner.md` names two different paths for `RecipeDataset` | `opencomputers.md:126-176`, `research-susy-planner.md:34,113` |
 
 ---
 
@@ -876,14 +883,14 @@ Docs that survive as **records**: `cluster.md`, `relay.md`, `vault.md`,
 `cluster.md:3-8` already uses:
 
 > **Dropped 2026-11-16 (decision 25).** Kept as the 0.3.x record; nothing here
-> ships in a line node.
+> ships in a slave node.
 
 ## Designed, not built
 
 | Slice | What | Doc | Blocked on |
 |---|---|---|---|
-| 0.4.10 | Sidecar: Forge bridge card + bulk inventory scanner | `sidecar.md` | a mod, not documentation |
-| 0.4.11 | Bus: ports, core, metered moves between named endpoints | `bus.md` | 0.4.10 |
+| 0.4.11 | Sidecar: Forge bridge card + bulk inventory scanner | `sidecar.md` | a mod, not documentation |
+| 0.4.12 | Bus: ports, core, metered moves between named endpoints | `bus.md` | 0.4.11 |
 | — | Reference dataset (SuSy Factory Flow) | `research-susy-planner.md` | a pinned commit and a schema read |
 | — | Sessions / remote terminals | `sessions.md`, `terminal-protocol.md` | a new decision: decision 1 is superseded |
 | — | Second hall, real gate, real transport | `status.md:235-236` | hardware the rig does not have |

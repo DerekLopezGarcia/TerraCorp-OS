@@ -1,5 +1,5 @@
--- Tests for the master-side apps: Nodes (the DNS), Lines (the control) and the
--- DNS console.
+-- Tests for the master-side apps (Nodes, Lines, DNS console) and the desktop
+-- Settings DNS page.
 --
 -- Run through tools/harness/test-apps.js. The context is fake and records what
 -- the apps draw and what they call; the master service is a stub with the same
@@ -9,6 +9,7 @@ local keys = require("tc.keys")
 local nodesApp = require("apps.nodes")
 local linesApp = require("apps.lines")
 local dnsApp = require("apps.dns")
+local settingsApp = require("apps.settings")
 
 local failures, checked = {}, 0
 
@@ -46,6 +47,7 @@ local function newContext(master, vfs)
   local view = { lines = {} }
   function view:clear() end
   function view:fill() end
+  function view:hline() end
   function view:put(x, y, text)
     view.lines[y] = tostring(text)
     return true
@@ -55,15 +57,74 @@ local function newContext(master, vfs)
     return true
   end
 
-  local context = {
+  local configData = {
+    accent = "cyan",
+    charset = "unicode",
+    clock24 = true,
+    splash = true,
+    logLevel = "info",
+    dnsMaster = "",
+    dnsPort = 4201,
+    dnsTransport = "auto",
+  }
+  local context
+  local config = {
+    path = "/etc/terracorp.cfg",
+    accents = { "cyan", "orange" },
+    charsets = { "unicode", "ascii" },
+    logLevels = { "debug", "info", "warn", "error" },
+    get = function(key)
+      return configData[key]
+    end,
+    set = function(key, value)
+      configData[key] = value
+      return true
+    end,
+    cycle = function(key, values)
+      for index, value in ipairs(values) do
+        if value == configData[key] then
+          configData[key] = values[(index % #values) + 1]
+          return configData[key]
+        end
+      end
+    end,
+    reset = function()
+      configData.dnsMaster = ""
+      configData.dnsPort = 4201
+      configData.dnsTransport = "auto"
+    end,
+    validate = function(key, value)
+      if key == "dnsPort" then
+        if type(value) ~= "number" or value % 1 ~= 0 or value < 1 or value > 65535 then
+          return false, "Port must be a whole number from 1 to 65535."
+        end
+        return true
+      end
+      if key == "dnsTransport" then
+        if value ~= "auto" and value ~= "wired" and value ~= "wireless" then
+          return false, "Transport must be auto, wired or wireless."
+        end
+        return true
+      end
+      return true
+    end,
+  }
+
+  context = {
     w = 70,
     h = 22,
     colors = COLORS,
+    glyphs = { h = "─", v = "│", block = "█" },
     view = view,
     notifications = {},
+    saved = 0,
+    restarts = 0,
     text = {
       truncate = function(value, width)
         return tostring(value):sub(1, width)
+      end,
+      width = function(value)
+        return #tostring(value)
       end,
     },
     util = {
@@ -71,9 +132,32 @@ local function newContext(master, vfs)
         return tostring(value) .. "s"
       end,
     },
+    config = config,
     kernel = {
       master = master,
+      address = "81dd02d0-91ef-4c9b-8b22-273979f1e637",
       vfs = vfs or { read = function() return nil end, write = function() return true end },
+      saveConfig = function()
+        context.saved = context.saved + 1
+        return true
+      end,
+      applyTheme = function() end,
+      restartDns = function()
+        context.restarts = context.restarts + 1
+        local master = configData.dnsMaster
+        if master == "" then
+          context.dnsStatusText = "Off"
+        elseif master == "self" then
+          context.dnsStatusText = "Master · port 4201 not open"
+        else
+          context.dnsStatusText = "Client · " .. master:sub(1, 8) .. "…"
+        end
+        return true
+      end,
+      dnsStatus = function()
+        return context.dnsStatusText or "Off"
+      end,
+      poweroff = function() end,
     },
   }
   context.ui = {
@@ -149,6 +233,14 @@ end
 
 local function key(ctx, app, char, code)
   return app:handle(ctx, "key", char, code)
+end
+
+local function findHit(app, id)
+  for _, hit in ipairs(app.hits) do
+    if hit.id == id then
+      return hit
+    end
+  end
 end
 
 --------------------------------------------------------------------------------
@@ -385,6 +477,143 @@ do
   app:tick(ctx)
   app:draw(ctx)
   contains(ctx.view.lines[3], "No DNS master", "without either service the app explains why")
+end
+
+--------------------------------------------------------------------------------
+-- Settings / DNS
+--------------------------------------------------------------------------------
+
+do
+  local ctx = newContext(nil)
+  local app = settingsApp.create()
+
+  app:draw(ctx)
+  check(findHit(app, "tab:station") ~= nil, "the station tab is available")
+  check(findHit(app, "tab:dns") ~= nil, "the DNS tab is available")
+
+  key(ctx, app, nil, keys.tab)
+  app:draw(ctx)
+  contains(ctx.view.lines[2], "DNS for this desktop", "Tab opens the DNS page")
+  equal(app.dns.mode, "off", "DNS starts in Off when dnsMaster is empty")
+
+  findHit(app, "dns:mode").action(ctx)
+  equal(app.dns.mode, "master", "the mode cycles to Master")
+  app:draw(ctx)
+  contains(ctx.view.lines[6], "81dd02d0", "Master mode shows this machine's address")
+  findHit(app, "dns:Apply").action(ctx)
+  equal(ctx.config.get("dnsMaster"), "self", "Master saves dnsMaster=self")
+  equal(ctx.restarts, 1, "Apply restarts DNS once")
+  findHit(app, "dns:Apply").action(ctx)
+  equal(ctx.config.get("dnsMaster"), "self", "applying the same mode keeps one master setting")
+  equal(ctx.restarts, 2, "applying the same mode replaces the listener instead of stacking it")
+
+  app:draw(ctx)
+  findHit(app, "dns:mode").action(ctx)
+  equal(app.dns.mode, "client", "the mode cycles to Client")
+  app:draw(ctx)
+  findHit(app, "dns:transport").action(ctx)
+  equal(app.dns.transport, "wired", "the transport cycles to wired")
+  findHit(app, "dns:port").action(ctx)
+  for _ = 1, 4 do
+    key(ctx, app, nil, keys.back)
+  end
+  for _, digit in ipairs({ "4", "2", "0", "2" }) do
+    key(ctx, app, digit, nil)
+  end
+  key(ctx, app, nil, keys.enter)
+  equal(app.dns.port, 4202, "a valid port is accepted")
+  equal(app.edit, nil, "Enter closes the port editor")
+
+  app:draw(ctx)
+  findHit(app, "dns:port").action(ctx)
+  for _ = 1, 4 do
+    key(ctx, app, nil, keys.back)
+  end
+  for _, digit in ipairs({ "7", "0", "0", "0", "0" }) do
+    key(ctx, app, digit, nil)
+  end
+  key(ctx, app, nil, keys.enter)
+  equal(app.dns.port, 4202, "an out-of-range port is refused")
+  equal(app.edit, "port", "the editor stays open after a bad port")
+  contains(app.message, "1 to 65535", "the port error is explained")
+
+  key(ctx, app, nil, keys.tab)
+  equal(app.edit, nil, "Tab cancels the field editor")
+  app:draw(ctx)
+  findHit(app, "dns:mode").action(ctx)
+  equal(app.dns.mode, "off", "the mode cycles back to Off")
+  findHit(app, "dns:Apply").action(ctx)
+  contains(app.message, "Stopping Master", "leaving Master asks for confirmation")
+  equal(ctx.config.get("dnsMaster"), "self", "the first Apply keeps Master running")
+  findHit(app, "dns:Apply").action(ctx)
+  equal(ctx.config.get("dnsPort"), 4202, "a valid port is saved")
+  equal(ctx.config.get("dnsTransport"), "wired", "a valid transport is saved")
+
+  ctx.w, ctx.h = 40, 8
+  app:draw(ctx)
+  check(findHit(app, "dns:mode") ~= nil, "the mode control fits a 40x16 screen")
+  check(findHit(app, "dns:Apply") ~= nil, "Apply fits a 40x16 screen")
+  check(findHit(app, "dns:Reset") ~= nil, "Reset fits a 40x16 screen")
+  contains(ctx.view.lines[3], "Off", "the compact layout keeps the mode visible")
+  contains(ctx.view.lines[4], "Port 4202", "the compact layout shows the effective port")
+  contains(ctx.view.lines[5], "Off", "the status line fits a 40x16 screen")
+end
+
+do
+  local ctx = newContext(nil)
+  local app = settingsApp.create()
+  local uuid = "01234567-89ab-cdef-0123-456789abcdef"
+
+  key(ctx, app, nil, keys.tab)
+  app:draw(ctx)
+  findHit(app, "dns:mode").action(ctx)
+  findHit(app, "dns:mode").action(ctx)
+  equal(app.dns.mode, "client", "two mode clicks select Client")
+  app:draw(ctx)
+  findHit(app, "dns:master").action(ctx)
+  equal(app.edit, "master", "the address row opens its editor")
+
+  for index = 1, #uuid do
+    key(ctx, app, uuid:sub(index, index), nil)
+  end
+  key(ctx, app, nil, keys.enter)
+  equal(app.dns.master, uuid, "a full UUID is accepted")
+  app:draw(ctx)
+  findHit(app, "dns:Apply").action(ctx)
+  equal(ctx.config.get("dnsMaster"), uuid, "Client saves the master UUID")
+  equal(ctx.restarts, 1, "Client applies in place")
+
+  app:draw(ctx)
+  findHit(app, "dns:master").action(ctx)
+  for _ = 1, #uuid do
+    key(ctx, app, nil, keys.back)
+  end
+  key(ctx, app, "n", nil)
+  key(ctx, app, nil, keys.enter)
+  equal(app.edit, "master", "a short address is refused")
+  contains(app.message, "36-character", "the address error names the expected shape")
+end
+
+do
+  local ctx = newContext(nil)
+  local app = settingsApp.create()
+  local first = true
+  ctx.kernel.restartDns = function()
+    ctx.restarts = ctx.restarts + 1
+    if first then
+      first = false
+      return nil, "no modem answered"
+    end
+    return true
+  end
+
+  key(ctx, app, nil, keys.tab)
+  app:draw(ctx)
+  findHit(app, "dns:mode").action(ctx)
+  findHit(app, "dns:Apply").action(ctx)
+  equal(ctx.config.get("dnsMaster"), "", "a failed apply restores the previous mode")
+  equal(ctx.restarts, 2, "a failed apply also restarts the previous mode")
+  contains(app.message, "previous mode restored", "the failure is reported")
 end
 
 if checked == 0 then

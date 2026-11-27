@@ -65,7 +65,21 @@ requests are required. If there is no Internet Card, no stable release,
 insufficient disk space, or a download/validation error, the current
 installation remains in place.
 
-## Tagging 0.4.9
+## Tagging 0.4.10
+
+**Decision (2026-11-27): cut `v0.4.10` in this checkout.** Compass adds the
+Settings → DNS page and the `slave` role name while keeping `line` as a
+compatibility alias. The annotated tag points at the release commit; pushing the
+branch and tag, and creating the GitHub Release, are the publication step.
+
+The release tree has `src/lib/tc/version.lua`, `package.json` and
+`package-lock.json` on 0.4.10, a changelog entry, and green `check`, `sim`,
+`sim:oc`, `test:dns`, `test:apps`, `test:installer`, `test:docs` and screen
+matrix runs. `v0.4.9` remains the previous published release; the updater offers
+0.4.10 once its GitHub Release exists. The in-game Settings walk-through and the
+DNS1 M0 S9 probe remain outstanding, and are recorded as caveats.
+
+## Previous release: 0.4.9
 
 **Decision (2026-11-27): cut `v0.4.9` in this checkout.** The annotated tag
 points at the release commit; pushing the branch and tag, and creating the GitHub
@@ -100,8 +114,8 @@ pending.
 
 ## Initial stable release
 
-The current build is 0.4.9 Flint, built on 2026-11-16 and tagged `v0.4.9` on
-2026-11-27. 0.4.9 removes the cluster and the Vault app, so the manifest shrank
+The current build is 0.4.10 Compass, built on 2026-11-27 and tagged `v0.4.10` on
+the same day. 0.4.9 removed the cluster and the Vault app, so the manifest shrank
 from 62 entries to 55 at that point; the DNS1 slices add six modules and the
 DNS app, and `npm run check` now prints `manifest: 62 files`. The
 updater only adds and

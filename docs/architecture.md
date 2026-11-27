@@ -10,7 +10,7 @@ OpenComputers BIOS or optional EEPROM manager
   -> load core modules from /lib/tc
   -> read /etc/terracorp.cfg and draw the splash
   -> desktop role: create the desktop and load /apps modules
-     line role: start the plant readout and the status publisher instead
+     slave role: start the plant readout and the status publisher instead
   -> process computer.pullSignal events
 ```
 
@@ -350,7 +350,7 @@ desktop and no GPU ([`line-node.md`](line-node.md)).
 
 The master owns the node registry, which is the plant's DNS: it assigns the name
 a node answers to, marks a silent node offline and merges what the nodes publish
-into a view keyed by path. A line node reads its own boundary stocks, caches the
+into a view keyed by path. A slave node reads its own boundary stocks, caches the
 answers, evaluates its local level alarms and publishes its status over the wired
 modem; with no master it keeps reading, alarming and writing
 `/var/status/last.tsv`. The external link (`docs/external-link.md`) mirrors the

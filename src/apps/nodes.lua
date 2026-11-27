@@ -108,7 +108,7 @@ function nodes:draw(ctx)
   self.top = math.max(0, math.min(self.top, maximum))
 
   if #rows == 0 then
-    v:put(2, bodyTop, "No line node has reported yet.", c.text, c.deep)
+    v:put(2, bodyTop, "No slave node has reported yet.", c.text, c.deep)
     if not compact then
       v:put(2, bodyTop + 1, "Install a node from its floppy and power it on.", c.dim, c.deep)
     end
