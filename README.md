@@ -5,8 +5,8 @@ A Lua desktop operating system for **OpenComputers**, designed for the
 player's computers; it does not modify or redistribute Susy-Core.
 
 Current version: **0.4.10 Compass** (`src/lib/tc/version.lua` is the only source of
-that fact; it is tagged `v0.4.10` locally — publishing the tag is a separate
-step; see [`docs/versioning.md`](docs/versioning.md)). It boots into a desktop shell with
+that fact; it is tagged `v0.4.10` and published as a GitHub Release — see
+[`docs/versioning.md`](docs/versioning.md)). It boots into a desktop shell with
 twelve apps, persists settings, notes and the desktop icon layout, and logs
 errors. One desktop computer is the master: its node registry, `/var/nodes.tsv`,
 is the plant's naming service and the Nodes app is its view and editor. Each

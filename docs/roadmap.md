@@ -504,9 +504,9 @@ the hologram wall, sessions.
 
 ## F3.5 — Line nodes (0.4.9) · built 2026-11-16, tagged 2026-11-27
 
-> Built and cut as 0.4.9 "Flint"; tagged `v0.4.9` on 2026-11-27, so `v0.4.9` is
-> the newest local tag ([`versioning.md`](versioning.md) records the tag and the
-> remaining in-game caveat). `tc.naming`, `tc.installer` with
+> Built and cut as 0.4.9 "Flint"; tagged and published as `v0.4.9` on
+> 2026-11-27; `v0.4.10` is now the newest release ([`versioning.md`](versioning.md)
+> records both and the remaining in-game caveat). `tc.naming`, `tc.installer` with
 > `boot/install.lua`, the `role = "line"` runtime, `tc.report`, `tc.master`, the
 > Nodes app as the DNS, the Lines app with configuration push and `tc.flash` to
 > write the installer medium from the master (**Nodes**, key **I**). The rack layer
@@ -538,9 +538,9 @@ the node keeps them locally so it still alarms with the master gone; the rack
 modules and their tests are gone and `npm run check`, `npm run sim` and
 `npm run sim:oc` stay green.
 
-## F3.5b — DNS Settings and the slave role (0.4.10) · built 2026-11-27, tagged 2026-11-27
+## F3.5b — DNS Settings and the slave role (0.4.10) · built 2026-11-27, published 2026-11-27
 
-> Built and cut as 0.4.10 "Compass". Settings → DNS is the operator path for the
+> Built, cut and published as 0.4.10 "Compass". Settings → DNS is the operator path for the
 > three modes: Off, Master and Client, with the master address, port and
 > transport, a live status line, validation and rollback. Apply restarts only
 > the DNS runtime, not the desktop; leaving Master asks for confirmation. The

@@ -67,24 +67,24 @@ installation remains in place.
 
 ## Tagging 0.4.10
 
-**Decision (2026-11-27): cut `v0.4.10` in this checkout.** Compass adds the
+**Decision (2026-11-27): cut and publish `v0.4.10`.** Compass adds the
 Settings → DNS page and the `slave` role name while keeping `line` as a
-compatibility alias. The annotated tag points at the release commit; pushing the
-branch and tag, and creating the GitHub Release, are the publication step.
+compatibility alias. The annotated tag points at the release commit; the branch,
+tag and GitHub Release were published on 2026-11-27.
 
 The release tree has `src/lib/tc/version.lua`, `package.json` and
 `package-lock.json` on 0.4.10, a changelog entry, and green `check`, `sim`,
 `sim:oc`, `test:dns`, `test:apps`, `test:installer`, `test:docs` and screen
-matrix runs. `v0.4.9` remains the previous published release; the updater offers
-0.4.10 once its GitHub Release exists. The in-game Settings walk-through and the
+matrix runs. `v0.4.10` is the newest published release and the updater offers it
+now. The in-game Settings walk-through and the
 DNS1 M0 S9 probe remain outstanding, and are recorded as caveats.
 
 ## Previous release: 0.4.9
 
-**Decision (2026-11-27): cut `v0.4.9` in this checkout.** The annotated tag
-points at the release commit; pushing the branch and tag, and creating the GitHub
-Release, remain the publisher's step. Until that happens, `v0.4.8` is still the
-newest *published* release and the updater still offers 0.4.8.
+**Decision (2026-11-27): cut and publish `v0.4.9`.** The annotated tag
+points at the release commit; the branch, tag and GitHub Release were published
+on 2026-11-27. Before that, `v0.4.8` was the newest *published* release and the
+updater offered 0.4.8.
 
 The version was held untagged from 2026-11-23 to 2026-11-27. The reason was
 `updater.check`: it offers an update only when the installed version is *lower*
@@ -95,8 +95,8 @@ in-game half of the 0.4.9 slices; the tag was cut when the owner asked for it.
 
 What the tag means:
 
-- `v0.4.9` now exists. A machine that self-updates is expected to move from 0.4.8
-  to 0.4.9 on its next check once the release is published.
+- `v0.4.9` now exists and is published. A machine that self-updates moves from
+  0.4.8 to 0.4.9 on its next check.
 - A machine may still **run 0.4.9 code and report `0.4.8`** if it was stamped
   during the hold. The stamp is not evidence of what is installed; a behaviour
   the old build cannot produce is. See [`canonical.md`](canonical.md) §1.

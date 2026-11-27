@@ -49,15 +49,13 @@ everything.
 **Single source of truth for identity is `src/lib/tc/version.lua`.** No other file
 may declare a version as fact; they may only quote it.
 
-**Built ≠ published.** 0.4.10 was built on 2026-11-27 and tagged `v0.4.10` on the
-same day. The tag is local until it is pushed; pushing it and creating the GitHub
-Release remain the publisher's step. Until then `v0.4.9` is still the newest
-published release and "0.4.10 is released" means "the tag exists", not "GitHub
-serves it".
+**Built and published.** 0.4.10 was built and tagged `v0.4.10` on 2026-11-27 and
+published as a GitHub Release the same day. `v0.4.10` is the newest published
+release, so a machine below 0.4.10 sees Compass on its next check.
 
 **0.4.9 is the previous release.** It was built on 2026-11-16, tagged `v0.4.9`
 on 2026-11-27 and published. A machine below 0.4.9 updates normally on its next
-check; a machine below 0.4.10 sees Compass once its release is published.
+check.
 
 **Changelog:** 22 entries, 0.3.21 → 0.4.10, newest last
 (`src/lib/tc/changelog.lua`). 0.4.3 and 0.4.6 have no entry: they were cut under
@@ -589,8 +587,8 @@ release commit is tagged `v0.4.10`. The flash-card work still sits uncommitted
 in the working tree.
 
 **0.4.10 Compass** adds the Settings → DNS page and the `slave` role name while
-keeping `line` as a compatibility alias. `v0.4.10` is the current local tag; it
-is published as the current GitHub Release after the tag is pushed.
+keeping `line` as a compatibility alias. `v0.4.10` is the current tag and GitHub
+Release.
 
 The files that were unpublished when this audit started now live in specific
 commits:

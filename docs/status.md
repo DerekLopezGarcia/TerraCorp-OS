@@ -139,7 +139,7 @@ discovery.
 
 ## What exists today
 
-- **0.4.10 "Compass" is tagged**: Settings → DNS, the `slave` role name with
+- **0.4.10 "Compass" is published**: Settings → DNS, the `slave` role name with
   `line` kept as a compatibility alias, live DNS apply and rollback. 0.4.9
   remains the previous release: the slave node (installer, `role = "line"` then,
   status publisher, status page), `tc.master` with the registry as the DNS, the

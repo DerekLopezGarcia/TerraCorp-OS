@@ -1223,7 +1223,7 @@ and still refused for `fs.read`. Both fail when the change is reverted.
 `npm run check` and the manifest passing at that commit. The
 full table, including `test:docs`, `sim`, `sim:oc` and `test:link`, is in
 [0.4.9 build gate checks](#049-build-gate-checks). The release tree is tagged
-`v0.4.9`; `v0.4.8` remains the newest published release until the tag is pushed.
+`v0.4.9` and `v0.4.10`; both are published, and `v0.4.10` is the newest release.
 
 ## F0 exit checklist
 
